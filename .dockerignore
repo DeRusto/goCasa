@@ -1,0 +1,5 @@
+.git
+.claude
+.env
+*.db*
+data/

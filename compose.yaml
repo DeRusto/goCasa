@@ -1,0 +1,20 @@
+services:
+  gocasa:
+    build: .
+    image: gocasa:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - gocasa-data:/data
+      # Optional Fallback folder for the screensaver:
+      # - ./photos:/data/photos:ro
+    healthcheck:
+      test: ["CMD", "/gocasa", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+
+volumes:
+  gocasa-data:

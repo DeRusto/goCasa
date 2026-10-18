@@ -1,0 +1,24 @@
+package web
+
+templ layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
+
+templ Home() {
+	@layout("GoCasa") {
+		<main>
+			<h1>GoCasa</h1>
+			<p>Your family dashboard is running.</p>
+		</main>
+	}
+}
