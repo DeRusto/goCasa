@@ -47,6 +47,7 @@ type App struct {
 	Upstreams Upstreams
 	Log       *slog.Logger
 	Scheduler *Scheduler
+	Bus       *Bus
 	handler   http.Handler
 }
 
@@ -81,6 +82,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		Now:       o.Now,
 		Upstreams: o.Upstreams,
 		Log:       o.Logger,
+		Bus:       newBus(),
 	}
 	a.Scheduler = &Scheduler{now: o.Now, log: o.Logger}
 	if err := a.startBackups(ctx); err != nil {
@@ -98,6 +100,7 @@ func (a *App) Close() error { return a.DB.Close() }
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.healthz)
+	mux.HandleFunc("GET /events/stream", a.eventStream)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		web.Home().Render(r.Context(), w)
 	})

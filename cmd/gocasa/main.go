@@ -110,6 +110,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv.RegisterOnShutdown(a.Bus.Close) // SSE streams never finish on their own
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	log.Info("gocasa listening", "addr", cfg.Addr, "base_url", cfg.BaseURL.String())

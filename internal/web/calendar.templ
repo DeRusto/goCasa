@@ -137,51 +137,86 @@ templ Calendar(p CalendarPage) {
 					<button>Filter</button>
 				</fieldset>
 			</form>
-			if p.View == "month" {
-				<table>
-					<thead>
-						<tr>
-							for _, d := range p.Days[:7] {
-								<th>{ d.Date.Format("Mon") }</th>
-							}
-						</tr>
-					</thead>
-					<tbody>
-						for w := 0; w < len(p.Days); w += 7 {
+			<div id="live">
+				if p.View == "month" {
+					<table>
+						<thead>
 							<tr>
-								for _, d := range p.Days[w : w+7] {
-									<td style="vertical-align:top">
-										@calendarDay(d, d.Date.Format("2"))
-									</td>
+								for _, d := range p.Days[:7] {
+									<th>{ d.Date.Format("Mon") }</th>
 								}
 							</tr>
-						}
-					</tbody>
-				</table>
-			} else {
-				for _, d := range p.Days {
-					@calendarDay(d, d.Date.Format("Monday 2 January"))
+						</thead>
+						<tbody>
+							for w := 0; w < len(p.Days); w += 7 {
+								<tr>
+									for _, d := range p.Days[w : w+7] {
+										<td style="vertical-align:top">
+											@calendarDay(d, d.Date.Format("2"))
+										</td>
+									}
+								</tr>
+							}
+						</tbody>
+					</table>
+				} else {
+					for _, d := range p.Days {
+						@calendarDay(d, d.Date.Format("Monday 2 January"))
+					}
+					if len(p.Days) == 0 {
+						<p>Nothing on the calendar for these days.</p>
+					}
 				}
-				if len(p.Days) == 0 {
-					<p>Nothing on the calendar for these days.</p>
-				}
-			}
-			<h2>Calendars</h2>
-			<ul>
-				for _, c := range p.Calendars {
-					<li>
-						@swatches([]string{c.Color})
-						{ c.Name }
-					</li>
-				}
-			</ul>
+				<h2>Calendars</h2>
+				<ul>
+					for _, c := range p.Calendars {
+						<li>
+							@swatches([]string{c.Color})
+							{ c.Name }
+						</li>
+					}
+				</ul>
+			</div>
 			<form method="post" action="/calendar/calendars">
 				<label>Name <input name="name" required maxlength="50"/></label>
 				<label>Colour <input type="color" name="color" value="#a855f7"/></label>
 				<button>Add calendar</button>
 			</form>
 		</main>
+		@liveUpdates()
 	}
+}
+
+// liveUpdates refetches this page and swaps in its #live region whenever
+// anything changes, and on every (re)connect, catching up on missed changes.
+// shortcut: native EventSource, not htmx's SSE extension; switch once htmx is vendored.
+templ liveUpdates() {
+	<script>
+	(() => {
+		const es = new EventSource("/events/stream");
+		let inflight, retry;
+		const refresh = async () => {
+			clearTimeout(retry);
+			inflight?.abort(); // a slower older fetch must not land after a newer one
+			const ctl = inflight = new AbortController();
+			try {
+				const r = await fetch(location.href, { signal: ctl.signal });
+				if (!r.ok) throw r.status;
+				const next = new DOMParser().parseFromString(await r.text(), "text/html").getElementById("live");
+				if (next) document.getElementById("live").replaceWith(next);
+			} catch {
+				// A failed fetch would leave the page stale until the next change; an aborted one was superseded.
+				if (!ctl.signal.aborted) retry = setTimeout(refresh, 5000);
+			}
+		};
+		es.onmessage = refresh;
+		es.onopen = refresh;
+		es.onerror = () => {
+			// The browser gives up on an error response (e.g. a proxy's 502 mid-restart): reload, which retries.
+			if (es.readyState === EventSource.CLOSED) setTimeout(() => location.reload(), 5000);
+		};
+	})();
+	</script>
 }
 
 // EventPage is the event dialog: create, edit or delete a single event.
