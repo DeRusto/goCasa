@@ -48,6 +48,10 @@ _Avoid_: Exception, override, detached occurrence
 Ending a Series just before a chosen Occurrence and starting a new, independent Series from it.
 _Avoid_: Fork, branch, truncate
 
+**Edit scope**:
+Which Occurrences of a Series a change or deletion applies to: *This event*, *This and following*, or *All events*.
+_Avoid_: Mode, range, recurrence option
+
 **Google account**:
 One Google login an Admin has connected to GoCasa. Its calendars sync into GoCasa; connecting another login adds another Google account.
 _Avoid_: Integration, connection, Google sync
