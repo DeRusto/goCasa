@@ -98,3 +98,9 @@ _Avoid_: Purchase, claim
 **Adjustment**:
 Points an Admin adds or removes by hand, with a reason. The only way a balance can go below zero.
 _Avoid_: Bonus, penalty, correction
+
+### Shopping
+
+**Mirrored list**:
+A shopping list that lives in Mealie and that GoCasa shows and changes. When Mealie is unavailable, it cannot be changed.
+_Avoid_: Synced list, linked list, Mealie list
