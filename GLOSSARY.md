@@ -61,3 +61,40 @@ _Avoid_: Fixed, strict
 **Repeat from completion**:
 A Recurring to-do whose next due date is counted from the day it was completed.
 _Avoid_: Floating, relaxed
+
+### Chores
+
+**Chore**:
+A job that comes back on a schedule and earns points for whoever does it. Each round is done or lapses; it is never owed afterwards, unlike a to-do.
+_Avoid_: Task, job, recurring to-do
+
+**Round**:
+One period of a Chore (a day, a week) in which it can be done once per Member.
+_Avoid_: Occurrence, instance
+
+**Each chore**:
+A Chore that every assigned Member does separately, each earning its points.
+
+**Anyone chore**:
+A Chore that the first assigned Member to do it completes for the Round.
+_Avoid_: Shared chore
+
+**Late**:
+A Round that ended undone but can still be claimed, until the next Round ends.
+_Avoid_: Overdue
+
+**Missed**:
+A Round that can no longer be claimed. It leaves the chore board.
+_Avoid_: Expired, skipped
+
+**Reward**:
+Something a Member can spend points on, with a fixed points cost.
+_Avoid_: Prize, treat, store item
+
+**Redemption**:
+A Member's request to spend points on a Reward. Nothing is spent until an Admin approves it.
+_Avoid_: Purchase, claim
+
+**Adjustment**:
+Points an Admin adds or removes by hand, with a reason. The only way a balance can go below zero.
+_Avoid_: Bonus, penalty, correction
