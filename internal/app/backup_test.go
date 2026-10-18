@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -82,20 +83,28 @@ func TestPreMigrationBackupIsKeptOutOfPruning(t *testing.T) {
 	h.App.Close()
 	orig := db.Migrations
 	t.Cleanup(func() { db.Migrations = orig })
-	baseline, err := fs.ReadFile(orig, "0001_baseline.sql")
+	// The real migrations, plus one more after them.
+	files, err := fs.Glob(orig, "*.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Migrations = fstest.MapFS{
-		"0001_baseline.sql": {Data: baseline},
-		"0002_test.sql":     {Data: []byte("CREATE TABLE upgraded (x INTEGER);")},
+	mfs := fstest.MapFS{}
+	for _, f := range files {
+		b, err := fs.ReadFile(orig, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mfs[f] = &fstest.MapFile{Data: b}
 	}
+	mfs[fmt.Sprintf("%04d_test.sql", len(files)+1)] = &fstest.MapFile{Data: []byte("CREATE TABLE upgraded (x INTEGER);")}
+	db.Migrations = mfs
+	pre := fmt.Sprintf("app-20260315-pre-v%d.db", len(files))
 	a, err := app.New(context.Background(), app.Options{Config: h.App.Config, Logger: h.App.Log, Now: h.Clock.Now})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	if got := backups(t, a); !slices.Contains(got, "app-20260315-pre-v1.db") {
+	if got := backups(t, a); !slices.Contains(got, pre) {
 		t.Fatalf("no pre-migration backup: %v", got)
 	}
 
@@ -104,7 +113,7 @@ func TestPreMigrationBackupIsKeptOutOfPruning(t *testing.T) {
 		h.Clock.Advance(24 * time.Hour)
 		h.RunDue()
 	}
-	if got := backups(t, a); len(got) != 15 || !slices.Contains(got, "app-20260315-pre-v1.db") {
+	if got := backups(t, a); len(got) != 15 || !slices.Contains(got, pre) {
 		t.Fatalf("backups = %v, want 14 dailies plus the pre-migration one", got)
 	}
 }

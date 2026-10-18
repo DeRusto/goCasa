@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -32,6 +33,7 @@ type Harness struct {
 	App    *app.App
 	Server *httptest.Server
 	Clock  *Clock
+	Client *http.Client // one browser: its own cookies, follows redirects
 }
 
 // Option adjusts the app's options before it is built, e.g. to point an
@@ -71,7 +73,16 @@ func New(t testing.TB, opts ...Option) *Harness {
 	}
 	srv := httptest.NewServer(a.Handler())
 	t.Cleanup(func() { srv.Close(); a.Close() })
-	return &Harness{App: a, Server: srv, Clock: clock}
+	h := &Harness{App: a, Server: srv, Clock: clock}
+	return h.Device()
+}
+
+// Device returns the same app seen from another browser, with an empty cookie jar.
+func (h *Harness) Device() *Harness {
+	jar, _ := cookiejar.New(nil)
+	d := *h
+	d.Client = &http.Client{Jar: jar}
+	return &d
 }
 
 // RunDue runs the scheduler's due work now, at the fake clock's time.
@@ -80,10 +91,31 @@ func (h *Harness) RunDue() { h.App.Scheduler.RunDue(context.Background()) }
 // Get fetches path and returns the status and body.
 func (h *Harness) Get(t testing.TB, path string) (int, string) {
 	t.Helper()
-	res, err := http.Get(h.Server.URL + path)
+	res, err := h.Client.Get(h.Server.URL + path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return read(t, res)
+}
+
+// Post submits form to path as a same-origin browser would.
+func (h *Harness) Post(t testing.TB, path string, form url.Values) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, h.Server.URL+path, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := h.Client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return read(t, res)
+}
+
+func read(t testing.TB, res *http.Response) (int, string) {
+	t.Helper()
 	defer res.Body.Close()
 	b, err := io.ReadAll(res.Body)
 	if err != nil {
