@@ -80,7 +80,7 @@ func TestCreateEditDeleteTimedEvent(t *testing.T) {
 	}
 }
 
-func TestAllDayEventsCoverTheirDatesInclusive(t *testing.T) {
+func TestAllDayEventsAreStoredExclusiveAndShownInclusive(t *testing.T) {
 	h := household(t)
 	addEvent(t, h, allDay("Camping", "2026-03-14", "2026-03-16"))
 	var date, end string
@@ -93,10 +93,6 @@ func TestAllDayEventsCoverTheirDatesInclusive(t *testing.T) {
 		if got := strings.Contains(day(t, page, d), "Camping"); got != want {
 			t.Errorf("%s shows Camping = %v, want %v", d, got, want)
 		}
-	}
-	_, page = h.Get(t, "/calendar?view=day&date=2026-03-14") // the previous week
-	if !strings.Contains(day(t, page, "2026-03-14"), "All day") {
-		t.Error("first day missing")
 	}
 	if code, body := h.Get(t, "/calendar/event/1"); code != http.StatusOK || !strings.Contains(body, `name="end_date" value="2026-03-16"`) {
 		t.Fatalf("edit form shows the wrong last day: %q", body)
@@ -146,37 +142,15 @@ func TestTimesUseTheEventsZone(t *testing.T) {
 	}
 }
 
-func TestMemberFilterAlwaysShowsHouseholdEventsAndColoursFollowMembers(t *testing.T) {
+// The filter and colour rules are tested on eventsIn; this checks the page passes ?users on and keeps it.
+func TestMemberFilterReachesThePageAndItsLinks(t *testing.T) {
 	h := household(t)
 	addEvent(t, h, timed("Dinner", "2026-03-15T18:00", "2026-03-15T19:00", "UTC"))        // Household
 	addEvent(t, h, timed("Football", "2026-03-15T10:00", "2026-03-15T11:00", "UTC", "2")) // Bob
 	addEvent(t, h, timed("Piano", "2026-03-15T12:00", "2026-03-15T13:00", "UTC", "3"))    // Carol
-	addEvent(t, h, timed("Zoo", "2026-03-15T14:00", "2026-03-15T15:00", "UTC", "2", "3")) // both
 
-	_, page := h.Get(t, "/calendar?view=day&date=2026-03-15")
-	d := day(t, page, "2026-03-15")
-	for _, title := range []string{"Dinner", "Football", "Piano", "Zoo"} {
-		if !strings.Contains(d, title) {
-			t.Errorf("unfiltered day lacks %s", title)
-		}
-	}
-	item := func(d, title string) string {
-		i := strings.Index(d, title)
-		return d[strings.LastIndex(d[:i], "<li>"):i]
-	}
-	if s := item(d, "Dinner"); !strings.Contains(s, "#a855f7") {
-		t.Errorf("Household event not in the calendar colour: %q", s)
-	}
-	if s := item(d, "Football"); !strings.Contains(s, "#22c55e") || strings.Contains(s, "#a855f7") {
-		t.Errorf("Bob's event not in Bob's colour: %q", s)
-	}
-	if s := item(d, "Zoo"); !strings.Contains(s, "#22c55e") || !strings.Contains(s, "#ef4444") {
-		t.Errorf("shared event lacks a Member's colour: %q", s)
-	}
-
-	_, page = h.Get(t, "/calendar?view=day&date=2026-03-15&users=2")
-	d = day(t, page, "2026-03-15")
-	if !strings.Contains(d, "Dinner") || !strings.Contains(d, "Football") || !strings.Contains(d, "Zoo") || strings.Contains(d, "Piano") {
+	_, page := h.Get(t, "/calendar?view=day&date=2026-03-15&users=2")
+	if d := day(t, page, "2026-03-15"); !strings.Contains(d, "Football") || !strings.Contains(d, "#22c55e") || strings.Contains(d, "Piano") {
 		t.Errorf("users=2 day = %q", d)
 	}
 	_, page = h.Get(t, "/calendar?view=day&date=2026-03-15&users=2,3")
@@ -415,15 +389,6 @@ func TestSeriesWhoseFirstDayIsNotAnOccurrence(t *testing.T) {
 	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
 	if strings.Contains(day(t, page, "2026-03-15"), "Gym") {
 		t.Error("DTSTART shows though BYDAY leaves it out")
-	}
-}
-
-func TestOccurrenceMovedBeforeItsSeriesStillShows(t *testing.T) {
-	h := household(t)
-	addEvent(t, h, repeating(timed("Choir", "2026-12-07T19:00", "2026-12-07T20:00", "UTC"), "weekly"))
-	h.Post(t, occurrence(1, time.Date(2026, 12, 7, 19, 0, 0, 0, time.UTC), ""), timed("Choir (early)", "2026-10-20T19:00", "2026-10-20T20:00", "UTC"))
-	if _, page := h.Get(t, "/calendar?view=day&date=2026-10-20"); !strings.Contains(day(t, page, "2026-10-20"), "Choir (early)") {
-		t.Fatal("an Occurrence moved before its Series' start is missing")
 	}
 }
 

@@ -185,6 +185,7 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 		b, _ := json.Marshal(users)
 		filter = string(b)
 	}
+	// shortcut: single events here are every row with no rule or master, cancelled or not; Google sync must leave out its cancelled occurrence rows (spec §7.2).
 	// Single events in the window, plus every Series that starts before its end or has a One-off edit in it, with all its One-off edits.
 	rows, err := a.DB.QueryContext(ctx, `SELECT e.id, e.title, e.all_day, coalesce(e.start_utc, 0), coalesce(e.end_utc, 0),
 			coalesce(e.all_day_date, ''), coalesce(e.all_day_end_date, ''), c.color,
@@ -210,13 +211,17 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 	byID := map[int64]*storedSeries{}
 	for rows.Next() {
 		var e calendarEvent
-		var tzid, ex, rd string
+		var tzid, ex, rd, calendarColor, memberColors string
 		var s series
 		var o oneOff
 		var masterID int64
-		if err := rows.Scan(&e.id, &e.title, &e.allDay, &e.start, &e.end, &e.date, &e.endDate, &e.calendarColor, &e.memberColors, &e.shown,
+		if err := rows.Scan(&e.id, &e.title, &e.allDay, &e.start, &e.end, &e.date, &e.endDate, &calendarColor, &memberColors, &e.shown,
 			&tzid, &s.rule, &ex, &rd, &masterID, &o.original, &o.cancelled); err != nil {
 			return nil, err
+		}
+		e.colors = []string{calendarColor}
+		if memberColors != "" {
+			e.colors = strings.Split(memberColors, ",")
 		}
 		switch {
 		case masterID != 0:

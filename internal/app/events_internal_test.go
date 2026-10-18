@@ -322,3 +322,51 @@ func TestAllEventsTitleEditAcrossTheFallBackHour(t *testing.T) {
 		t.Error("the title change did not apply")
 	}
 }
+
+func TestMemberFilterAlwaysShowsHouseholdEventsAndColoursFollowMembers(t *testing.T) {
+	a := household(t)
+	write(t, a, 0, "", scopeThis, timedAt("Dinner", at(15, 18), 1))      // Household
+	write(t, a, 0, "", scopeThis, timedAt("Football", at(15, 10), 1, 2)) // Bob
+	write(t, a, 0, "", scopeThis, timedAt("Piano", at(15, 12), 1, 3))    // Carol
+	write(t, a, 0, "", scopeThis, timedAt("Zoo", at(15, 14), 1, 2, 3))   // both
+	wantAgenda(t, agenda(t, a, "2026-03-15", "2026-03-15", 2), "03-15 10:00–11:00 Football", "03-15 14:00–15:00 Zoo", "03-15 18:00–19:00 Dinner")
+	wantAgenda(t, agenda(t, a, "2026-03-15", "2026-03-15", 2, 3), "03-15 10:00–11:00 Football", "03-15 12:00–13:00 Piano", "03-15 14:00–15:00 Zoo", "03-15 18:00–19:00 Dinner")
+
+	// Household events take their calendar's colour; others their Members', by name: Abby (3) before Bob (2).
+	if _, err := a.DB.Exec("UPDATE members SET name = 'Abby' WHERE id = 3"); err != nil {
+		t.Fatal(err)
+	}
+	evs, err := a.eventsIn(context.Background(), at(15, 0), at(16, 0), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	colors := map[string]string{}
+	for _, e := range evs {
+		colors[e.title] = strings.Join(e.colors, ",")
+	}
+	want := map[string]string{"Dinner": "#a855f7", "Football": "#22c55e", "Piano": "#ef4444", "Zoo": "#ef4444,#22c55e"}
+	for title, c := range want {
+		if colors[title] != c {
+			t.Errorf("%s colours = %q, want %q", title, colors[title], c)
+		}
+	}
+}
+
+func TestOccurrenceMovedBeforeItsSeriesStillShows(t *testing.T) {
+	a := household(t)
+	first := time.Date(2026, 12, 7, 19, 0, 0, 0, time.UTC)
+	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Choir", first, 1), "FREQ=WEEKLY", nil, nil))
+	write(t, a, id, key(first), scopeThis, timedAt("Choir (early)", time.Date(2026, 10, 20, 19, 0, 0, 0, time.UTC), 1))
+	wantAgenda(t, agenda(t, a, "2026-10-20", "2026-10-20"), "10-20 19:00–20:00 Choir (early)")
+}
+
+func TestAllDayEventsCoverTheirDatesInclusive(t *testing.T) {
+	a := household(t)
+	c := allDayOn("Camping", "2026-03-14")
+	c.endDate = "2026-03-17" // the 14th to the 16th
+	write(t, a, 0, "", scopeThis, c)
+	for _, w := range []struct{ first, last string }{{"2026-03-14", "2026-03-14"}, {"2026-03-16", "2026-03-21"}} {
+		wantAgenda(t, agenda(t, a, w.first, w.last), "03-14 all day Camping")
+	}
+	wantAgenda(t, agenda(t, a, "2026-03-17", "2026-03-21"))
+}
