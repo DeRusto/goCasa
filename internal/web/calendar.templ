@@ -39,6 +39,7 @@ type CalendarPage struct {
 	Calendars         []CalendarInfo
 	Prev, Next, Today string
 	ViewLinks         map[string]string
+	ICS               string // the absolute ICS export URL, for all calendars
 }
 
 // EventForm is the event dialog's fields; ID 0 is a new event.
@@ -195,9 +196,13 @@ templ Calendar(p CalendarPage) {
 						<li>
 							@swatches([]string{c.Color})
 							{ c.Name }
+							<a href={ templ.SafeURL(p.ICS + "?calendars=" + strconv.FormatInt(c.ID, 10)) }>ICS</a>
 						</li>
 					}
 				</ul>
+				if len(p.Calendars) > 0 {
+					<p>Subscribe to every calendar: <a href={ templ.SafeURL(p.ICS) }>{ p.ICS }</a></p>
+				}
 			</div>
 			<form method="post" action="/calendar/calendars">
 				<label>Name <input name="name" required maxlength="50"/></label>
