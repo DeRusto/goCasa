@@ -115,6 +115,14 @@ _Avoid_: Synced list, linked list, Mealie list
 
 ### Screensaver
 
+**Wall display**:
+A device switched into always-on dashboard mode. Only a Wall display goes to the screensaver when idle or uses Night mode and camera wake; any other device just browses.
+_Avoid_: Kiosk, display, screen, tablet
+
+**Night mode**:
+The Household's set hours when a Wall display shows a black screen, or a dim clock, instead of the screensaver.
+_Avoid_: Sleep, do not disturb, off hours
+
 **Fallback folder**:
 A folder of the Household's own images that the screensaver shows only when Immich has no photos to show.
 _Avoid_: Local photos, default images, backup folder

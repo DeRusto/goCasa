@@ -95,7 +95,7 @@ All timestamps stored as UTC epoch seconds **plus**, where relevant, the origina
 | Table | Key columns / notes |
 |---|---|
 | `users` | `id, name, color, avatar_url, pin_hash (nullable, bcrypt), role (admin/member), created_at` |
-| `household_settings` | single row: `household_name, timezone (IANA), week_start (0=Sun), pin_protection_enabled, screensaver_idle_seconds, screensaver_enabled` |
+| `household_settings` | single row: `household_name, timezone (IANA), week_start (0=Sun), pin_protection_enabled, screensaver_idle_seconds (default 300), screensaver_enabled, night_mode (off/black/dim_clock, default off), night_start, night_end` |
 | `user_preferences` | `user_id, key, value` — default view, last filters (replaces localStorage persistence upstream moved to) |
 | `integrations` | `id, type (google_calendar / ical / open_meteo / immich / mealie / tandoor), name, config_json, credentials_enc (nullable, AES-GCM), enabled, sync_interval_seconds, last_sync_at, next_sync_at, last_error, sync_cursor (Google syncToken / iCal ETag)` |
 | `source_calendars` | `id, integration_id, external_id, name, color_override, enabled, read_only` — one integration exposes many calendars |
@@ -152,13 +152,18 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 | `/lists` | Shopping lists + items, check-off, reorder |
 | `/chores` | Chore board, completions, points balances, rewards/redemptions |
 | `/screensaver` | Full-screen photo rotation (Immich), clock + today's agenda overlay; layout is separate/minimal like the fork's screensaver layout |
-| `/settings` | Users (incl. PIN/role), integrations, household settings, screensaver config, PIN lock toggle + "Lock now" |
+| `/settings` | Users (incl. PIN/role), integrations, household settings, screensaver and Night mode config, PIN lock toggle + "Lock now"; **This device** section (stored in the browser): Wall display switch, camera motion-wake opt-in, wake-lock and camera status (e.g. "needs HTTPS") |
 | `/lock` | PIN pad when PIN protection is enabled; session unlock cookie |
 | `/api/*` | JSON endpoints for htmx-adjacent clients and any future CLI; HTML handlers remain primary |
 | `/events/stream` | SSE endpoint; sends `X-Accel-Buffering: no` and a heartbeat every 25 s so reverse proxies neither buffer nor idle-close it; htmx reconnects on drop |
 | `/healthz` | `200` + DB ping — used by Docker/Coolify healthchecks |
 
-**Kiosk behaviour:** calendar and screensaver pages auto-refresh fragments via SSE, dim/idle to screensaver after the configured idle timeout, and survive a server restart by simply reloading (all state server-side).
+**Kiosk behaviour:** pages auto-refresh fragments via SSE and survive a server restart by simply reloading (all state server-side). Idle behaviour applies only to a **Wall display** (a per-browser switch under Settings → This device, Admin PIN needed); other browsers just browse.
+- **Idle:** no touch, pointer or key input for `screensaver_idle_seconds` → screensaver. A Wall display holds a Screen Wake Lock (re-acquired on `visibilitychange`) when the browser allows it. Entering the screensaver ends any Admin unlock.
+- **Wake:** the first touch only wakes (it isn't passed through to the page underneath) and returns to the page and view that was showing.
+- **Night mode** (household setting, off by default) between `night_start` and `night_end`: *Black* releases the wake lock so the device's own power settings may turn the display off, and touch wakes it; *Dim clock* keeps the wake lock and shows a dimmed time and date on black. Touch at night wakes to the dashboard; idle returns to Night mode, not the photo screensaver.
+- **Camera motion-wake:** opt-in per Wall display, off by default; needs HTTPS and the browser's camera permission. Runs only while the screensaver or Dim clock shows, never during Black or active use. Frame differencing in the browser at a fixed sensitivity; frames never leave the device; a small camera icon shows while it runs.
+- Kiosk boot, auto-login and display power schedules are device setup for the operator, not GoCasa's job.
 
 ## 9. Auth and security
 
@@ -236,8 +241,8 @@ Todo columns + recurring todos + reorder/sort/filter; shopping lists local-first
 **Accept:** reorder persists across restart; recurring todo completion spawns the next occurrence exactly once; Mealie round-trip preserves item extras.
 
 ### Phase 4 — Screensaver, weather, PIN
-Immich screensaver + idle behaviour, Open-Meteo header, household + per-user PIN, lock screen.
-**Accept:** idle display rotates photos with clock/agenda; PIN lock blocks settings; weather renders from cached data with the network cable pulled.
+Immich screensaver, Wall display idle/wake, Night mode, camera motion-wake, Open-Meteo header, household + per-user PIN, lock screen.
+**Accept:** an idle Wall display rotates photos with clock/agenda, and a non-Wall-display browser never does; Night mode switches at its hours; motion wakes the screensaver over HTTPS; PIN lock blocks settings; weather renders from cached data with the network cable pulled.
 
 ### Phase 5 — Chores/rewards and polish
 Chores, points, rewards/redemptions; preferences polish; ICS export of a calendar view.
