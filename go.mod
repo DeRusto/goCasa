@@ -4,6 +4,7 @@ go 1.27.2
 
 require (
 	github.com/a-h/templ v0.3.1070
+	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0

@@ -119,6 +119,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 	// shortcut: calendar changes ignore the calendar Lock until Locks land (#40).
 	mux.HandleFunc("GET /calendar", a.getCalendar)
+	mux.HandleFunc("GET /calendar.ics", a.getICS)
 	mux.HandleFunc("POST /calendar/calendars", a.createCalendar)
 	mux.HandleFunc("GET /calendar/event/new", a.newEvent)
 	mux.HandleFunc("POST /calendar/event", a.saveEvent)
