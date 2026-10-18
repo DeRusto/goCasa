@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,9 +102,18 @@ func (a *App) getICS(w http.ResponseWriter, r *http.Request) {
 			e.Props.SetDateTime(ical.PropDateTimeEnd, time.Unix(end, 0).In(zone))
 		}
 		if rule != "" {
+			ev := calendarEvent{allDay: allDay, start: start, end: end, date: date, endDate: endDate}
+			rule, first, offRule, err := icsSeries(ev, rule, zone)
+			if err != nil {
+				a.serverError(w, r, err)
+				return
+			}
 			p := ical.NewProp(ical.PropRecurrenceRule)
 			p.Value = icsRule(rule, zone)
 			e.Props.Set(p)
+			if offRule {
+				e.Props.Add(originalProp(ical.PropExceptionDates, first, zone))
+			}
 			for _, l := range []struct {
 				name, json string
 			}{{ical.PropExceptionDates, ex}, {ical.PropRecurrenceDates, rd}} {
@@ -189,4 +199,49 @@ func icsRule(rule string, zone *time.Location) string {
 		}
 	}
 	return strings.Join(parts, ";")
+}
+
+// icsSeries is a stored rule as a subscriber must get it to make the
+// Occurrences expand does. RFC 5545 counts DTSTART as an Occurrence even when
+// the rule doesn't make it (a Sunday start on Mondays), and some clients
+// don't: offRule then asks for an EXDATE at first, DTSTART's original. COUNT
+// would then mean different things to them, so it becomes an UNTIL at the last
+// Occurrence; as it also does beside an UNTIL, which RFC 5545 forbids and a
+// Split stores.
+func icsSeries(ev calendarEvent, rule string, zone *time.Location) (out string, first int64, offRule bool, err error) {
+	first = ev.start
+	if ev.allDay {
+		d, _ := time.Parse(dateLayout, ev.date)
+		first = d.Unix()
+	}
+	from := time.Unix(first, 0).UTC()
+	to := from.AddDate(horizonYears, 0, 0)
+	occs, err := occurrences(ev, series{rule: rule}, zone, nil, from, to, 1)
+	if err != nil {
+		return rule, first, false, err
+	}
+	offRule = len(occs) == 0 || occs[0].original != first
+	m := countRE.FindStringSubmatch(rule)
+	if m == nil || !offRule && !strings.Contains(rule, "UNTIL=") {
+		return rule, first, offRule, nil
+	}
+	n, _ := strconv.Atoi(m[1])
+	if occs, err = occurrences(ev, series{rule: rule}, zone, nil, from, to, n); err != nil {
+		return rule, first, false, err
+	}
+	last := ev // no Occurrences: an UNTIL at DTSTART, which the EXDATE removes
+	if len(occs) > 0 {
+		last = occs[len(occs)-1]
+	}
+	until := time.Unix(last.start, 0).UTC().Format("20060102T150405Z")
+	if ev.allDay {
+		until = strings.ReplaceAll(last.date, "-", "")
+	}
+	var parts []string
+	for _, p := range strings.Split(rule, ";") {
+		if k, _, _ := strings.Cut(p, "="); k != "COUNT" && k != "UNTIL" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(append(parts, "UNTIL="+until), ";"), first, offRule, nil
 }

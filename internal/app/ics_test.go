@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -89,8 +90,49 @@ func TestICSExport(t *testing.T) {
 		t.Errorf("Bins DTSTART %v DTEND %v, want dates", dtstart, dtend)
 	}
 
-	if all := getICS(t, h, "/calendar.ics"); len(all.Events()) != 4 {
-		t.Errorf("all calendars exported %d events, want 4", len(all.Events()))
+	// A Sunday start on Mondays, and a Split that keeps COUNT beside its new UNTIL.
+	addEvent(t, h, repeating(timed("Gym", "2026-03-15T07:00", "2026-03-15T08:00", "UTC"), "custom", "rrule", "RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=3"))
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T18:00", "2026-03-15T19:00", "UTC"), "custom", "rrule", "RRULE:FREQ=DAILY;COUNT=10"))
+	run := repeating(timed("Run", "2026-03-18T18:00", "2026-03-18T19:00", "UTC"), "daily")
+	run.Set("scope", "following")
+	if code, body := h.Post(t, "/calendar/event/7?occurrence="+strconv.FormatInt(time.Date(2026, 3, 18, 18, 0, 0, 0, time.UTC).Unix(), 10), run); code != http.StatusOK {
+		t.Fatalf("Split = %d %q", code, body)
+	}
+	utc := func(d, hour int) time.Time { return time.Date(2026, 3, d, hour, 0, 0, 0, time.UTC) }
+	for _, e := range getICS(t, h, "/calendar.ics?calendars=1").Events() {
+		title, _ := e.Props.Text(ical.PropSummary)
+		want, ok := map[string][]time.Time{
+			"Gym":  {utc(16, 7), utc(23, 7), utc(30, 7)},
+			"Walk": {utc(15, 18), utc(16, 18), utc(17, 18)},
+		}[title]
+		if !ok {
+			continue
+		}
+		rule := e.Props.Get(ical.PropRecurrenceRule).Value
+		if strings.Contains(rule, "COUNT") {
+			t.Errorf("%s RRULE %q keeps COUNT", title, rule)
+		}
+		set, err := e.RecurrenceSet(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Count DTSTART in, as RFC 5545 does; the EXDATE must take it out again.
+		got := []time.Time{}
+		if start, _ := e.DateTimeStart(nil); !slices.ContainsFunc(set.GetExDate(), start.Equal) {
+			got = append(got, start)
+		}
+		for _, o := range set.Between(utc(1, 0), utc(90, 0), true) {
+			if len(got) == 0 || !o.Equal(got[0]) {
+				got = append(got, o)
+			}
+		}
+		if !slices.EqualFunc(got, want, time.Time.Equal) {
+			t.Errorf("%s (%s) Occurrences = %v, want %v", title, rule, got, want)
+		}
+	}
+
+	if all := getICS(t, h, "/calendar.ics"); len(all.Events()) != 7 {
+		t.Errorf("all calendars exported %d events, want 7", len(all.Events()))
 	}
 	if empty := getICS(t, h, "/calendar.ics?calendars=99"); len(empty.Events()) != 0 {
 		t.Errorf("unknown calendar exported %d events", len(empty.Events()))
