@@ -61,7 +61,7 @@ Reaching GoCasa from outside your home network is out of scope. That is your hom
 
 ```sh
 go test ./...
-go run github.com/a-h/templ/cmd/templ@v0.3.1070 generate   # after editing any .templ file; *_templ.go is committed
+go tool templ generate   # after editing any .templ file; *_templ.go is committed
 go run ./cmd/gocasa      # needs the env vars above, e.g. DATA_DIR=./data
 ```
 
