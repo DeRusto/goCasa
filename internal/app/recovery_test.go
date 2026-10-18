@@ -124,3 +124,19 @@ func TestResetPINFromTheCommandLine(t *testing.T) {
 		}
 	}
 }
+
+func TestResetPINPrefersAnExactID(t *testing.T) {
+	h := apptest.New(t)
+	setup(t, h)
+	h.Post(t, "/settings/members/1", member("2", "#3b82f6", "admin", ""))
+	h.Post(t, "/settings/members", member("1", "#22c55e", "admin", "5678")) // id 2
+	for id, who := range map[int64]string{1: "1", 2: "2"} {
+		pin, err := h.App.ResetPIN(context.Background(), who)
+		if err != nil {
+			t.Fatalf("ResetPIN(%q): %v", who, err)
+		}
+		if code, _ := unlock(t, h.Device(), id, pin); code != http.StatusOK {
+			t.Fatalf("ResetPIN(%q) didn't reset Admin %d", who, id)
+		}
+	}
+}

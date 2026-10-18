@@ -354,8 +354,10 @@ func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, id int
 // random 6-digit PIN and clears any wrong-PIN block. It is `gocasa reset-pin`,
 // for when the last Admin forgets their PIN.
 func (a *App) ResetPIN(ctx context.Context, who string) (string, error) {
+	// An exact id wins over a name, so every Admin can be picked by id.
 	rows, err := a.DB.QueryContext(ctx, `SELECT id FROM members WHERE role = 'admin' AND NOT archived
-		AND (CAST(id AS TEXT) = ?1 OR lower(name) = lower(?1))`, strings.TrimSpace(who))
+		AND (CAST(id AS TEXT) = ?1 OR (lower(name) = lower(?1) AND NOT EXISTS (
+			SELECT 1 FROM members WHERE role = 'admin' AND NOT archived AND CAST(id AS TEXT) = ?1)))`, strings.TrimSpace(who))
 	if err != nil {
 		return "", err
 	}
