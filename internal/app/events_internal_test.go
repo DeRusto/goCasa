@@ -332,6 +332,10 @@ func TestMemberFilterAlwaysShowsHouseholdEventsAndColoursFollowMembers(t *testin
 	wantAgenda(t, agenda(t, a, "2026-03-15", "2026-03-15", 2), "03-15 10:00–11:00 Football", "03-15 14:00–15:00 Zoo", "03-15 18:00–19:00 Dinner")
 	wantAgenda(t, agenda(t, a, "2026-03-15", "2026-03-15", 2, 3), "03-15 10:00–11:00 Football", "03-15 12:00–13:00 Piano", "03-15 14:00–15:00 Zoo", "03-15 18:00–19:00 Dinner")
 
+	// Household events take their calendar's colour; others their Members', by name: Abby (3) before Bob (2).
+	if _, err := a.DB.Exec("UPDATE members SET name = 'Abby' WHERE id = 3"); err != nil {
+		t.Fatal(err)
+	}
 	evs, err := a.eventsIn(context.Background(), at(15, 0), at(16, 0), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -340,8 +344,7 @@ func TestMemberFilterAlwaysShowsHouseholdEventsAndColoursFollowMembers(t *testin
 	for _, e := range evs {
 		colors[e.title] = strings.Join(e.colors, ",")
 	}
-	// Household events take their calendar's colour; others their Members', by name.
-	want := map[string]string{"Dinner": "#a855f7", "Football": "#22c55e", "Piano": "#ef4444", "Zoo": "#22c55e,#ef4444"}
+	want := map[string]string{"Dinner": "#a855f7", "Football": "#22c55e", "Piano": "#ef4444", "Zoo": "#ef4444,#22c55e"}
 	for title, c := range want {
 		if colors[title] != c {
 			t.Errorf("%s colours = %q, want %q", title, colors[title], c)
