@@ -1,1 +1,40 @@
+# Claude Code agent worktrees
 .claude/worktrees/
+
+# Go build output
+/gocasa
+/gocasa.exe
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# templ generated code is committed; only its watch-mode temp files are not
+*_templ.txt
+
+# SQLite databases and journals
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+/data/
+
+# Secrets and local config (config is env-only)
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temp
+*.log
+tmp/
