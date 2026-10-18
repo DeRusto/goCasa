@@ -17,7 +17,7 @@ Feature parity target is the *function* of SkyLite-UX as used by this household,
 - To-do lists with columns, Recurring to-dos, sorting/filtering
 - Shopping lists, local or Mirrored from Mealie
 - Chores, points, Rewards and Redemptions
-- Today page (home): agenda for today and tomorrow, today's Chores, to-dos due today, large weather header
+- Today page (home): agenda for today and tomorrow, today's Chores, to-dos due today or overdue, large weather header
 - Weather: large header on Today, slim pill on every other page
 - Photo screensaver (Immich, with a Fallback folder) on a Wall display, with Night mode and optional camera motion-wake
 - Admin PINs and optional Locks
@@ -102,7 +102,7 @@ All timestamps stored as UTC epoch seconds **plus**, where relevant, the origina
 
 | Table | Key columns / notes |
 |---|---|
-| `members` | `id, name, color, avatar (nullable uploaded picture, else initials on colour; storage open, §14 #9), role (admin/member), pin_hash (bcrypt; required for Admins, not allowed otherwise), pin_failures, pin_blocked_until, archived, created_at`. At least one active Admin always: refuse to archive, delete or demote the last one. Members are people or pets |
+| `members` | `id, name, color, avatar (nullable BLOB: an uploaded picture downscaled to 256 px, stored in the DB so the backup covers it; else initials on colour), role (admin/member), pin_hash (bcrypt; required for Admins, not allowed otherwise), pin_failures, pin_blocked_until, archived, created_at`. At least one active Admin always: refuse to archive, delete or demote the last one. Members are people or pets |
 | `household_settings` | single row: `household_name, timezone (IANA), week_start (0=Sun), clock_24h, units (metric/imperial), weather_lat, weather_lon, default_view (default 'today'), lock_calendar, lock_chores, lock_todos (all default false), screensaver_enabled, screensaver_idle_seconds (default 300), seconds_per_photo (default 30), fallback_folder_enabled, night_mode (off/black/dim_clock, default off), night_start, night_end`. `default_view` applies to devices that haven't set their own |
 | `integrations` | `id, type (local / google_calendar / ical / open_meteo / immich / mealie), name, config_json, credentials_enc (nullable, AES-GCM), account_sub (Google OpenID `sub`, nullable), status (ok / reconnect_needed), enabled, sync_interval_seconds, last_sync_at, last_success_at, consecutive_failures, next_sync_at, last_error, sync_cursor (Google syncToken / iCal ETag)`. One Google account = one integration; one Mealie integration per instance |
 | `source_calendars` | `id, integration_id, external_id, name, color, enabled, read_only` — one integration exposes many calendars |
@@ -169,7 +169,7 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 | Route | Purpose |
 |---|---|
 | `/` | Redirect to this device's Default view (stored in the browser), else the Household `default_view`. Any main page (Today, calendar view + Member filter, To-dos, Lists, Chores) can be made the device default via "Set as default view on this device" in its view menu (no Lock); a calendar default always opens on today. `?date=`/`?users=` links never change it |
-| `/today` | **Today** page, for everyone (no Member filter). Large header: clock, date, current conditions, today's high/low, 5-day forecast. Agenda for today and tomorrow (today's past events greyed); today's Chores (tap to complete by avatar); to-dos due today. No shopping lists. Default `default_view` for a new Household |
+| `/today` | **Today** page, for everyone (no Member filter). Large header: clock, date, current conditions, today's high/low, 5-day forecast. Agenda for today and tomorrow (today's past events greyed); today's Chores (tap to complete by avatar); to-dos due today plus overdue ones, marked overdue. No shopping lists. Default `default_view` for a new Household |
 | `/calendar?view=month\|week\|day\|agenda&date=YYYY-MM-DD&users=1,2` | Main calendar; `date`/`users` deep links are shareable (preserves the fork's behaviour). Household events show whatever the filter. Stale-sync notice and "Sync now" (§7.2) |
 | `/calendar/event/new`, `/calendar/event/{id}` | Event dialog (htmx modal): title, calendar, Members, all-day, timezone, recurrence editor (preset patterns + custom RRULE string behind "advanced"); edit-scope picker that greys out scopes that don't apply (§7.4); "Saving…" for Google events |
 | `/todos` | Columns, drag-to-reorder (POST reorder endpoint), Recurring to-dos, sort/filter by due range and status |
@@ -285,7 +285,7 @@ Todo columns + Recurring to-dos + reorder/sort/filter; shopping lists local-firs
 
 ### Phase 4 — Screensaver, weather, Locks
 Immich screensaver + Fallback folder, Wall display idle/wake, Night mode, camera motion-wake, Today page, Open-Meteo header and pill, Admin PINs, Locks, lock screen.
-**Accept:** an idle Wall display rotates photos with clock/agenda, and a non-Wall-display browser never does; Fallback folder shows only when Immich has nothing; Night mode switches at its hours; motion wakes the screensaver over HTTPS; Settings needs an Admin PIN; each Lock off and on; the 5-minute idle relock; 5 wrong PINs block that Admin for 5 minutes; Today shows today/tomorrow, today's Chores and due to-dos; weather renders from cached data with the network cable pulled.
+**Accept:** an idle Wall display rotates photos with clock/agenda, and a non-Wall-display browser never does; Fallback folder shows only when Immich has nothing; Night mode switches at its hours; motion wakes the screensaver over HTTPS; Settings needs an Admin PIN; each Lock off and on; the 5-minute idle relock; 5 wrong PINs block that Admin for 5 minutes; Today shows today/tomorrow, today's Chores, and due and overdue to-dos; weather renders from cached data with the network cable pulled.
 
 ### Phase 5 — Chores/rewards and polish
 Chores (Each/Anyone, Rounds, Late/Missed), points, Rewards, Redemptions, Adjustments; preferences polish; ICS export of a calendar view.
@@ -319,7 +319,6 @@ Unit tests cover expansion/timezone logic (pure functions, golden files). HTTP h
 | 6 | Immich `filter` exclusions were read from source | Check once against a live server in Phase 4 |
 | 7 | Project name | **Resolved 2026-10-18: GoCasa** (binary/repo `gocasa`) |
 | 8 | SkyLite fork PR #80 | **Resolved:** the fork stays as reference only; housekeeping is out of scope |
-| 9 | **Open:** avatar storage vs backup | Avatars must be covered by the backup, but the backup is a DB-only `VACUUM INTO`. Either store avatars in the DB (a BLOB column) or extend the backup to `/data/avatars` |
 
 ## 15. License
 
