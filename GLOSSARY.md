@@ -15,8 +15,12 @@ Anyone or anything in the Household that events and chores can belong to; a pers
 _Avoid_: User, person, account, profile
 
 **Admin**:
-A Member allowed to change Settings: integrations, Members and household settings.
+A Member allowed to change Settings: integrations, Members and household settings. Only Admins have a PIN, and an Admin's PIN unlocks everything.
 _Avoid_: Owner, parent, superuser
+
+**Lock**:
+An optional household rule that makes one kind of action (changing the calendar, completing chores, completing to-dos) need an Admin's PIN. Viewing is never locked.
+_Avoid_: PIN protection, household PIN
 
 **Archived Member**:
 A Member who has left the Household. Hidden from filters, pickers and chore boards, but still credited with their past events, completions and points.
