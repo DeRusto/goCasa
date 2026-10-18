@@ -112,7 +112,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}}
+	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}, ICS: a.icsURL()}
 	for _, id := range users {
 		p.Users[id] = true
 	}
