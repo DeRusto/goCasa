@@ -30,6 +30,21 @@ func dayAt(day time.Time, i int) time.Time {
 	return time.Date(day.Year(), day.Month(), day.Day()+i, 0, 0, 0, 0, day.Location())
 }
 
+// parseLocal reads a datetime-local value in zone. An ambiguous fall-back time
+// takes its first offset (spec §7.1); Go alone may pick either.
+func parseLocal(v string, zone *time.Location) (time.Time, error) {
+	t, err := time.ParseInLocation(localLayout, v, zone)
+	if err != nil {
+		return t, err
+	}
+	for _, d := range []time.Duration{2 * time.Hour, time.Hour, 30 * time.Minute} { // largest first: the earliest match
+		if e := t.Add(-d); e.Format(localLayout) == t.Format(localLayout) {
+			return e, nil
+		}
+	}
+	return t, nil
+}
+
 // parseIDs reads Member ids given as "1,2" and/or repeated values.
 func parseIDs(vs []string) []int64 {
 	var ids []int64
@@ -278,13 +293,12 @@ func (a *App) parseEventForm(r *http.Request) (web.EventForm, eventRow, string) 
 	if err != nil || f.TZ == "" || f.TZ == "Local" {
 		return f, e, "Pick a time zone, like Europe/London."
 	}
-	t0, err0 := time.ParseInLocation(localLayout, f.Start, zone)
-	t1, err1 := time.ParseInLocation(localLayout, f.End, zone)
+	t0, err0 := parseLocal(f.Start, zone)
+	t1, err1 := parseLocal(f.End, zone)
 	if err0 != nil || err1 != nil || !t1.After(t0) {
 		return f, e, "Pick a start and an end after it."
 	}
 	// Go moves a time in a spring-forward gap; refuse it rather than save another time.
-	// An ambiguous fall-back time takes the first offset (spec §7.1), as Go does.
 	if t0.Format(localLayout) != f.Start || t1.Format(localLayout) != f.End {
 		return f, e, "That time doesn't exist in " + f.TZ + ": the clocks change then."
 	}

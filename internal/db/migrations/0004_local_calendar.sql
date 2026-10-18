@@ -29,9 +29,12 @@ CREATE TABLE events (
 	all_day_date     TEXT, -- YYYY-MM-DD, first day
 	all_day_end_date TEXT, -- YYYY-MM-DD, the day after the last
 	updated_at       INTEGER NOT NULL,
+	-- IS NOT NULL on each required field: a CHECK that comes out NULL passes.
 	CHECK (CASE WHEN all_day
-		THEN start_utc IS NULL AND end_utc IS NULL AND start_tzid IS NULL AND all_day_date < all_day_end_date
-		ELSE all_day_date IS NULL AND all_day_end_date IS NULL AND start_tzid IS NOT NULL AND start_utc < end_utc END)
+		THEN start_utc IS NULL AND end_utc IS NULL AND start_tzid IS NULL
+			AND all_day_date IS NOT NULL AND all_day_end_date IS NOT NULL AND all_day_date < all_day_end_date
+		ELSE all_day_date IS NULL AND all_day_end_date IS NULL AND start_tzid IS NOT NULL
+			AND start_utc IS NOT NULL AND end_utc IS NOT NULL AND start_utc < end_utc END)
 );
 CREATE INDEX events_time ON events (start_utc, end_utc);
 CREATE INDEX events_dates ON events (all_day_date, all_day_end_date);

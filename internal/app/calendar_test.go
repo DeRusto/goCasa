@@ -240,11 +240,32 @@ func TestDSTGapIsRefusedAndOverlapTakesTheFirstOffset(t *testing.T) {
 	if code, _ := h.Post(t, "/calendar/event", timed("Gap", "2026-03-08T02:30", "2026-03-08T03:30", "America/Los_Angeles")); code != http.StatusBadRequest {
 		t.Fatalf("time in the gap = %d, want 400", code)
 	}
-	addEvent(t, h, timed("Overlap", "2026-11-01T01:30", "2026-11-01T03:00", "America/Los_Angeles"))
-	var start int64
-	h.App.DB.QueryRow("SELECT start_utc FROM events").Scan(&start)
-	if want := time.Date(2026, 11, 1, 8, 30, 0, 0, time.UTC).Unix(); start != want { // 01:30 PDT
-		t.Fatalf("overlap start = %v, want 08:30 UTC", time.Unix(start, 0).UTC())
+	// London falls back 02:00→01:00 on 25 October 2026, and Go alone picks the later 01:30 there.
+	for i, c := range []struct {
+		tz, start, end string
+		want           time.Time
+	}{
+		{"America/Los_Angeles", "2026-11-01T01:30", "2026-11-01T03:00", time.Date(2026, 11, 1, 8, 30, 0, 0, time.UTC)}, // 01:30 PDT
+		{"Europe/London", "2026-10-25T01:30", "2026-10-25T03:00", time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC)},      // 01:30 BST
+	} {
+		addEvent(t, h, timed("Overlap", c.start, c.end, c.tz))
+		var start int64
+		h.App.DB.QueryRow("SELECT start_utc FROM events WHERE id = ?", i+1).Scan(&start)
+		if start != c.want.Unix() {
+			t.Errorf("%s overlap start = %v, want %v", c.tz, time.Unix(start, 0).UTC(), c.want)
+		}
+	}
+}
+
+func TestIncompleteEventRowsAreRefused(t *testing.T) {
+	h := household(t)
+	for _, q := range []string{
+		"INSERT INTO events (calendar_id, title, all_day, updated_at) VALUES (1, 'x', 1, 0)",
+		"INSERT INTO events (calendar_id, title, all_day, start_tzid, updated_at) VALUES (1, 'x', 0, 'UTC', 0)",
+	} {
+		if _, err := h.App.DB.Exec(q); err == nil {
+			t.Errorf("accepted %s", q)
+		}
 	}
 }
 
