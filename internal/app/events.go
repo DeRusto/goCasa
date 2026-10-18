@@ -319,7 +319,7 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			}
 			c.rrule, c.exdates, c.rdates = storedRule(s)
 		}
-		retimed := c.allDay != was.allDay || c.start != was.start || c.end != was.end || c.tzid != was.tzid || c.date != was.date || c.endDate != was.endDate
+		retimed := c.allDay != was.allDay || shownTimes(c) != shownTimes(was)
 		switch sc {
 		case scopeThis:
 			if c.rerule {
@@ -561,6 +561,20 @@ func (a *App) activeMemberIDs(ctx context.Context) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// shownTimes is c's dates, or its zone and wall times, as the dialog shows
+// them. Unlike the instants, they don't change when an end in a fall-back
+// hour reads back as its first offset.
+func shownTimes(c eventChange) string {
+	if c.allDay {
+		return c.date.(string) + " " + c.endDate.(string)
+	}
+	zone, err := time.LoadLocation(c.tzid.(string))
+	if err != nil {
+		return fmt.Sprint(c.tzid, c.start, c.end)
+	}
+	return c.tzid.(string) + " " + time.Unix(c.start.(int64), 0).In(zone).Format(localLayout) + " " + time.Unix(c.end.(int64), 0).In(zone).Format(localLayout)
 }
 
 // storedRule is s's rule, EXDATEs and RDATEs as eventChange holds them.

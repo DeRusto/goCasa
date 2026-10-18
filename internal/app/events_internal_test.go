@@ -305,3 +305,20 @@ func TestWritesOnlyGoToLocalCalendars(t *testing.T) {
 		t.Errorf("unknown calendar: %v", err)
 	}
 }
+
+func TestAllEventsTitleEditAcrossTheFallBackHour(t *testing.T) {
+	a := household(t)
+	z := zone(t, "America/New_York")
+	start, _ := parseLocal("2026-10-31T00:30", z)
+	c := timedAt("Walk", start, 2)
+	c.tzid = "America/New_York"
+	id := write(t, a, 0, "", scopeThis, repeat(c, "FREQ=DAILY", nil, nil))
+	// On 1 November it ends at the second 01:30 (EST); the dialog's 01:30 reads back as the first (EDT).
+	t0, _ := parseLocal("2026-11-01T00:30", z)
+	t1, _ := parseLocal("2026-11-01T01:30", z)
+	c = eventChange{calendarID: 1, title: "Run", start: t0.Unix(), end: t1.Unix(), tzid: "America/New_York", exdates: "[]", rdates: "[]"}
+	write(t, a, id, key(t0), scopeAll, c)
+	if n := count(t, a, "SELECT count(*) FROM events WHERE id = ? AND title = 'Run'", id); n != 1 {
+		t.Error("the title change did not apply")
+	}
+}
