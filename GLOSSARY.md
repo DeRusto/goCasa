@@ -112,3 +112,9 @@ _Avoid_: Bonus, penalty, correction
 **Mirrored list**:
 A shopping list that lives in Mealie and that GoCasa shows and changes. When Mealie is unavailable, it cannot be changed.
 _Avoid_: Synced list, linked list, Mealie list
+
+### Screensaver
+
+**Fallback folder**:
+A folder of the Household's own images that the screensaver shows only when Immich has no photos to show.
+_Avoid_: Local photos, default images, backup folder
