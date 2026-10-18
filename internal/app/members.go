@@ -231,17 +231,24 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	// One statement, so two devices can't each demote one of the last two Admins.
+	// One guarded statement, so another device's change between the read above
+	// and this write can't demote the last Admin or leave an Admin without a PIN.
 	res, err := a.DB.ExecContext(r.Context(), `UPDATE members SET name = ?1, color = ?2, role = ?3,
 			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END
-		WHERE id = ?5 AND (?3 = 'admin' OR role != 'admin' OR (SELECT count(*) FROM members WHERE role = 'admin') > 1)`,
+		WHERE id = ?5
+			AND (?3 = 'admin' OR role != 'admin' OR (SELECT count(*) FROM members WHERE role = 'admin') > 1)
+			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)`,
 		f.name, f.color, f.role, f.pinHash, id)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		a.settingsPage(w, r, http.StatusConflict, errLastAdmin)
+		msg := errLastAdmin
+		if f.role == "admin" && f.pinHash == nil {
+			msg = f.name + " is no longer an Admin; making them one needs a PIN."
+		}
+		a.settingsPage(w, r, http.StatusConflict, msg)
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)

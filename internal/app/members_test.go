@@ -179,3 +179,18 @@ func TestCrossSiteFormsAreRefused(t *testing.T) {
 		t.Fatalf("cross-site setup = %d", res.StatusCode)
 	}
 }
+
+func TestDeletedAdminsUnlockDoesNotPassToANewAdmin(t *testing.T) {
+	h := apptest.New(t)
+	setup(t, h)
+	h.Post(t, "/settings/members", member("Bob", "#22c55e", "admin", "5678")) // id 2
+	bobs := h.Device()
+	unlock(t, bobs, 2, "5678")
+	h.Post(t, "/settings/members/2/delete", nil)
+	h.Post(t, "/settings/members", member("Cy", "#22c55e", "admin", "2468"))
+	var reused bool
+	h.App.DB.QueryRow("SELECT EXISTS (SELECT 1 FROM members WHERE id = 2)").Scan(&reused)
+	if _, body := bobs.Get(t, "/settings"); reused || !strings.Contains(body, lockPage) {
+		t.Fatalf("id reused = %v; deleted Admin's device still unlocked", reused)
+	}
+}
