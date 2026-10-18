@@ -29,7 +29,8 @@ func unlockedAdmin(ctx context.Context) int64 {
 // withUnlock reads the device's unlock cookie: "<admin id>.<last active unix>.<mac>".
 // A valid one counts as activity and is re-issued with the current time, so
 // the unlock lasts until unlockIdle passes with no request from that browser.
-// The Member must still be an Admin, so a demoted or deleted Admin is locked out.
+// The Member must still be an active Admin, so a demoted, archived or deleted
+// Admin is locked out.
 func (a *App) withUnlock(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id := a.checkUnlock(r); id != 0 {
@@ -59,7 +60,7 @@ func (a *App) checkUnlock(r *http.Request) int64 {
 		return 0
 	}
 	var isAdmin bool
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT role = 'admin' FROM members WHERE id = ?", id).Scan(&isAdmin); err != nil || !isAdmin {
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT role = 'admin' AND NOT archived FROM members WHERE id = ?", id).Scan(&isAdmin); err != nil || !isAdmin {
 		return 0
 	}
 	return id

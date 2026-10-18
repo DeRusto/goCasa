@@ -109,6 +109,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/members", a.requireUnlock(a.createMember))
 	mux.HandleFunc("POST /settings/members/{id}", a.requireUnlock(a.updateMember))
 	mux.HandleFunc("POST /settings/members/{id}/delete", a.requireUnlock(a.deleteMember))
+	mux.HandleFunc("POST /settings/members/{id}/avatar", a.requireUnlock(a.uploadAvatar))
+	mux.HandleFunc("POST /settings/members/{id}/avatar/delete", a.requireUnlock(a.deleteAvatar))
+	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
+	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
+	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 
 	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
 	csrf := http.NewCrossOriginProtection()
