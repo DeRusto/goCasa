@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- PROTOTYPE, throw away. Three home-screen variants for "What does the home screen show,
+     and how do the agenda and weather header look?" (DeRusto/goCasa#22). Switch with ?variant=A|B|C
+     or the bottom bar / arrow keys. Fake data, no persistence. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home screen prototype</title>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e4e1da;
+          --mom:#d9534f; --dad:#3b7dd8; --sam:#2e9e5b; --ava:#9b59b6; --rex:#e0a020; --house:#7a7a7a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.35 system-ui, sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; }
+  .muted { color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .av { display:inline-grid; place-items:center; width:34px; height:34px; border-radius:50%; color:#fff; font-weight:700; font-size:14px; }
+  .ev { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .ev:last-child { border-bottom:0; }
+  .ev .t { width:84px; flex:none; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .bar { width:4px; border-radius:2px; flex:none; }
+  .chore { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; background:#faf9f6; margin-bottom:6px; }
+  .chore.done { opacity:.45; text-decoration:line-through; }
+  .chore.late { outline:2px solid #e8a33d; }
+  .pts { margin-left:auto; font-size:13px; color:var(--muted); }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+  .fc { display:flex; gap:14px; }
+  .fc div { text-align:center; font-size:14px; }
+  .fc b { display:block; font-size:22px; }
+  /* switcher, not part of the design */
+  #sw { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#111; color:#fff; border-radius:999px;
+        padding:6px 10px; display:flex; gap:10px; align-items:center; box-shadow:0 6px 20px #0006; font:14px system-ui; z-index:99; }
+  #sw button { background:#333; color:#fff; border:0; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; }
+
+  /* A: Today board */
+  .A { padding:20px; display:grid; gap:16px; grid-template-columns: 1.4fr 1fr; grid-template-rows:auto 1fr; height:100vh; }
+  .A header { grid-column:1/-1; display:flex; align-items:center; gap:28px; }
+  .A .clock { font-size:64px; font-weight:300; font-variant-numeric:tabular-nums; }
+  .A .wx { margin-left:auto; display:flex; gap:24px; align-items:center; }
+  .A .now { font-size:44px; }
+  .A .right { display:grid; gap:16px; align-content:start; }
+
+  /* B: Calendar first, slim header */
+  .B { display:flex; flex-direction:column; height:100vh; }
+  .B header { display:flex; align-items:center; gap:16px; padding:10px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+  .B header .clock { font-size:26px; font-variant-numeric:tabular-nums; }
+  .B .pill { margin-left:auto; background:#eef3fb; border-radius:999px; padding:6px 14px; }
+  .B .week { flex:1; display:grid; grid-template-columns: repeat(7, 1fr); }
+  .B .day { border-right:1px solid var(--line); padding:8px; overflow:hidden; }
+  .B .day.today { background:#fffbea; }
+  .B .day h3 { margin:0 0 8px; font-size:14px; font-weight:600; }
+  .B .chip { font-size:13px; padding:4px 6px; border-radius:6px; margin-bottom:4px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .B .ribbon { display:flex; gap:10px; align-items:center; padding:10px 20px 70px; background:var(--card); border-top:1px solid var(--line); overflow-x:auto; }
+  .B .ribbon .chore { margin:0; white-space:nowrap; }
+
+  /* C: Member columns */
+  .C { padding:20px; height:100vh; display:flex; flex-direction:column; gap:16px; }
+  .C header { display:grid; grid-template-columns:auto 1fr auto; gap:20px; align-items:center; }
+  .C .clock { font-size:52px; font-weight:300; }
+  .C .wxcard { display:flex; gap:20px; align-items:center; }
+  .C .cols { flex:1; display:grid; grid-template-columns: repeat(5, 1fr); gap:12px; }
+  .C .col { display:flex; flex-direction:column; gap:8px; }
+  .C .col .who { display:flex; align-items:center; gap:8px; font-weight:600; }
+  .C .ev { font-size:14px; }
+  .C .ev .t { width:62px; }
+  .C .house { grid-column:1/-1; }
+
+  @media (max-width: 760px) {
+    .A { grid-template-columns:1fr; height:auto; } .A header { flex-wrap:wrap; } .A .wx { margin-left:0; }
+    .B .week { grid-template-columns:1fr; } .C .cols { grid-template-columns:1fr; } .C header { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="sw"><button id="prev">&larr;</button><span id="lbl"></span><button id="next">&rarr;</button></div>
+<script>
+const M = { mom:['Mom','M'], dad:['Dad','D'], sam:['Sam','S'], ava:['Ava','A'], rex:['Rex','R'] };
+const today = [
+  { t:'All day', title:'Ava — school photo day', who:['ava'] },
+  { t:'7:30', title:'Gym', who:['mom'] },
+  { t:'9:00', title:'Bin collection', who:[] },
+  { t:'15:30', title:'Soccer practice', who:['sam'] },
+  { t:'16:00', title:'Vet — booster', who:['rex','dad'] },
+  { t:'18:30', title:'Family dinner at Gran\'s', who:[] },
+];
+const tomorrow = [ { t:'8:00', title:'Dentist', who:['ava','mom'] }, { t:'19:00', title:'Book club', who:['dad'] } ];
+const chores = [
+  { title:'Feed Rex', who:['sam','ava'], kind:'Anyone', pts:5, done:true },
+  { title:'Make bed', who:['sam'], pts:2, done:true },
+  { title:'Make bed', who:['ava'], pts:2 },
+  { title:'Empty dishwasher', who:['sam'], pts:5, late:true },
+  { title:'Tidy room', who:['ava'], pts:5 },
+];
+const wx = { now:'64°', cond:'Partly cloudy', icon:'⛅', hi:'71°', lo:'55°',
+  days:[['Thu','☀️','73°'],['Fri','☀️','75°'],['Sat','🌦','66°'],['Sun','🌧','61°'],['Mon','⛅','68°']] };
+
+const color = w => w.length ? `var(--${w[0]})` : 'var(--house)';
+const av = k => `<span class="av" style="background:var(--${k})">${M[k][1]}</span>`;
+const evRow = e => `<div class="ev"><span class="bar" style="background:${color(e.who)}"></span><span class="t">${e.t}</span><span>${e.title}${e.who.length>1?` <span class="muted">· ${e.who.map(k=>M[k][0]).join(', ')}</span>`:''}</span></div>`;
+const choreRow = c => `<div class="chore ${c.done?'done':''} ${c.late?'late':''}">${c.who.map(av).join('')}<span>${c.title}${c.late?' <span class="muted">(Late)</span>':''}</span><span class="pts">${c.kind==='Anyone'?'Anyone · ':''}${c.pts} pts</span></div>`;
+const fc = () => `<div class="fc">${wx.days.map(d=>`<div>${d[0]}<b>${d[1]}</b>${d[2]}</div>`).join('')}</div>`;
+
+const V = {
+  A: { name:'Today board', html: () => `<div class="A">
+    <header><div><div class="clock">14:05</div><div class="muted">Wednesday 14 October</div></div>
+      <div class="wx"><div><span class="now">${wx.icon} ${wx.now}</span><div class="muted">${wx.cond} · H ${wx.hi} L ${wx.lo}</div></div>${fc()}</div></header>
+    <section class="card"><h2>Today</h2>${today.map(evRow).join('')}<h2 style="margin-top:20px">Tomorrow</h2>${tomorrow.map(evRow).join('')}</section>
+    <div class="right"><section class="card"><h2>Today's chores</h2>${chores.map(choreRow).join('')}</section>
+      <section class="card"><h2>To-dos due today</h2><div class="ev"><span class="t">Today</span>Renew car registration</div><div class="ev"><span class="t">Today</span>RSVP to Lily's party</div></section></div>
+  </div>` },
+  B: { name:'Calendar first', html: () => {
+    const days = ['Sun 11','Mon 12','Tue 13','Wed 14','Thu 15','Fri 16','Sat 17'];
+    const fill = { 'Wed 14':today, 'Thu 15':tomorrow, 'Mon 12':[{t:'9:00',title:'Work trip',who:['dad']}], 'Sat 17':[{t:'10:00',title:'Swim lessons',who:['sam','ava']}] };
+    return `<div class="B"><header><span class="clock">14:05</span><span class="muted">Wed 14 Oct</span><span class="muted">· Week ▾ · Everyone ▾</span>
+      <span class="pill">${wx.icon} ${wx.now} · H ${wx.hi} L ${wx.lo} · Sat 🌦</span></header>
+      <div class="week">${days.map(d=>`<div class="day ${d==='Wed 14'?'today':''}"><h3>${d}</h3>${(fill[d]||[]).map(e=>`<div class="chip" style="background:${color(e.who)}">${e.t==='All day'?'':e.t+' '}${e.title}</div>`).join('')}</div>`).join('')}</div>
+      <div class="ribbon"><b class="muted">Chores</b>${chores.map(choreRow).join('')}</div></div>`; } },
+  C: { name:'Member columns', html: () => {
+    const people = ['mom','dad','sam','ava','rex'];
+    return `<div class="C"><header><div class="clock">14:05</div><div class="muted" style="font-size:20px">Wednesday 14 October</div>
+      <div class="card wxcard"><div style="font-size:36px">${wx.icon} ${wx.now}</div><div class="muted">${wx.cond}<br>H ${wx.hi} L ${wx.lo}</div>${fc()}</div></header>
+      <section class="card house"><h2>Everyone</h2>${today.filter(e=>!e.who.length).map(evRow).join('')}</section>
+      <div class="cols">${people.map(p=>`<section class="card col"><div class="who">${av(p)} ${M[p][0]}</div>
+        ${today.filter(e=>e.who.includes(p)).map(evRow).join('') || '<span class="muted">Nothing today</span>'}
+        ${chores.filter(c=>c.who.includes(p)).map(c=>choreRow({...c, who:[]})).join('')}</section>`).join('')}</div></div>`; } },
+};
+const keys = Object.keys(V);
+function render() {
+  const v = new URLSearchParams(location.search).get('variant'); const k = keys.includes(v) ? v : 'A';
+  document.getElementById('app').innerHTML = V[k].html();
+  document.getElementById('lbl').textContent = `${k} (${V[k].name})`;
+  return k;
+}
+function go(d) { const i = (keys.indexOf(render()) + d + keys.length) % keys.length;
+  const u = new URL(location); u.searchParams.set('variant', keys[i]); history.replaceState(null,'',u); render(); }
+document.getElementById('prev').onclick = () => go(-1);
+document.getElementById('next').onclick = () => go(1);
+addEventListener('keydown', e => { if (e.target.closest('input,textarea,[contenteditable]')) return;
+  if (e.key==='ArrowLeft') go(-1); if (e.key==='ArrowRight') go(1); });
+render();
+</script>
+</body>
+</html>
