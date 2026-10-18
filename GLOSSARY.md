@@ -48,6 +48,14 @@ _Avoid_: Exception, override, detached occurrence
 Ending a Series just before a chosen Occurrence and starting a new, independent Series from it.
 _Avoid_: Fork, branch, truncate
 
+**Google account**:
+One Google login an Admin has connected to GoCasa. Its calendars sync into GoCasa; connecting another login adds another Google account.
+_Avoid_: Integration, connection, Google sync
+
+**Reconnect needed**:
+The state of a Google account whose access Google has withdrawn. It stops syncing, keeps showing its last known events, and only an Admin reconnecting the same login fixes it.
+_Avoid_: Expired, disconnected, auth error
+
 ### To-dos
 
 **Recurring to-do**:
