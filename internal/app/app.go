@@ -101,7 +101,21 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		web.Home().Render(r.Context(), w)
 	})
-	return mux
+	mux.HandleFunc("GET /settings", a.getSettings)
+	mux.HandleFunc("POST /setup", a.postSetup)
+	mux.HandleFunc("GET /lock", a.getLock)
+	mux.HandleFunc("POST /lock", a.postLock)
+	mux.HandleFunc("POST /lock/now", a.postLockNow)
+	mux.HandleFunc("POST /settings/members", a.requireUnlock(a.createMember))
+	mux.HandleFunc("POST /settings/members/{id}", a.requireUnlock(a.updateMember))
+	mux.HandleFunc("POST /settings/members/{id}/delete", a.requireUnlock(a.deleteMember))
+
+	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
+	csrf := http.NewCrossOriginProtection()
+	if err := csrf.AddTrustedOrigin(a.Config.BaseURL.Scheme + "://" + a.Config.BaseURL.Host); err != nil {
+		panic(err) // BASE_URL is validated by config.Load
+	}
+	return csrf.Handler(a.withUnlock(mux))
 }
 
 func (a *App) healthz(w http.ResponseWriter, r *http.Request) {

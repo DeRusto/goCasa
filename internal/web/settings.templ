@@ -1,0 +1,138 @@
+package web
+
+import (
+	"strconv"
+	"strings"
+)
+
+// Member is a Household Member as the pages show it.
+type Member struct {
+	ID    int64
+	Name  string
+	Color string // #rrggbb
+	Role  string // "admin" or "member"
+}
+
+// Initials are the first letters of the first two words of name.
+func Initials(name string) string {
+	var b strings.Builder
+	for i, w := range strings.Fields(name) {
+		if i == 2 {
+			break
+		}
+		b.WriteString(strings.ToUpper(string([]rune(w)[:1])))
+	}
+	return b.String()
+}
+
+templ avatar(m Member) {
+	<span class="avatar" style={ "display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
+}
+
+templ formError(msg string) {
+	if msg != "" {
+		<p role="alert">{ msg }</p>
+	}
+}
+
+templ pinInput(label string) {
+	<label>
+		{ label }
+		<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="off"/>
+	</label>
+}
+
+// Setup is the first-run page that creates the first Admin.
+templ Setup(errMsg string) {
+	@layout("Welcome to GoCasa") {
+		<main>
+			<h1>Welcome to GoCasa</h1>
+			<p>Who looks after Settings? Add the first Admin and their PIN.</p>
+			@formError(errMsg)
+			<form method="post" action="/setup">
+				<label>Name <input name="name" required maxlength="50"/></label>
+				<label>Colour <input type="color" name="color" value="#3b82f6"/></label>
+				@pinInput("PIN (4–8 digits)")
+				<button>Create Admin</button>
+			</form>
+		</main>
+	}
+}
+
+// Lock is the Admin PIN pad: pick your avatar, enter your PIN.
+templ Lock(admins []Member, errMsg string) {
+	@layout("Unlock Settings") {
+		<main>
+			<h1>Enter your PIN</h1>
+			@formError(errMsg)
+			<form method="post" action="/lock">
+				<fieldset>
+					<legend>Who are you?</legend>
+					for i, m := range admins {
+						<label>
+							<input type="radio" name="member_id" value={ strconv.FormatInt(m.ID, 10) } required checked?={ i == 0 }/>
+							@avatar(m)
+							{ m.Name }
+						</label>
+					}
+				</fieldset>
+				@pinInput("PIN")
+				<button>Unlock</button>
+			</form>
+		</main>
+	}
+}
+
+templ memberFields(m Member) {
+	<label>Name <input name="name" value={ m.Name } required maxlength="50"/></label>
+	<label>Colour <input type="color" name="color" value={ m.Color }/></label>
+	<label>
+		Role
+		<select name="role">
+			<option value="member" selected?={ m.Role != "admin" }>Member</option>
+			<option value="admin" selected?={ m.Role == "admin" }>Admin</option>
+		</select>
+	</label>
+}
+
+// Settings is the unlocked Settings page.
+templ Settings(members []Member, errMsg string) {
+	@layout("Settings") {
+		<main>
+			<h1>Settings</h1>
+			<form method="post" action="/lock/now"><button>Lock now</button></form>
+			@formError(errMsg)
+			<h2>Members</h2>
+			<p>People or pets. Only Admins have a PIN, and they need one.</p>
+			for _, m := range members {
+				<section>
+					<h3>
+						@avatar(m)
+						{ m.Name }
+						if m.Role == "admin" {
+							(Admin)
+						}
+					</h3>
+					<form method="post" action={ templ.SafeURL("/settings/members/" + strconv.FormatInt(m.ID, 10)) }>
+						@memberFields(m)
+						if m.Role == "admin" {
+							@pinInput("New PIN (blank keeps it)")
+						} else {
+							@pinInput("PIN (only when making them an Admin)")
+						}
+						<button>Save</button>
+					</form>
+					<form method="post" action={ templ.SafeURL("/settings/members/" + strconv.FormatInt(m.ID, 10) + "/delete") }>
+						<button>Delete { m.Name }</button>
+					</form>
+				</section>
+			}
+			<h2>Add a Member</h2>
+			<form method="post" action="/settings/members">
+				@memberFields(Member{Color: "#22c55e", Role: "member"})
+				@pinInput("PIN (Admins only)")
+				<button>Add</button>
+			</form>
+		</main>
+	}
+}
