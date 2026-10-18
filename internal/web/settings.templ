@@ -15,6 +15,15 @@ type Member struct {
 	HasAvatar bool // else initials on colour
 }
 
+// Feed is an iCal feed as Settings shows it.
+type Feed struct {
+	ID          int64
+	Name, Color string
+	LastSuccess string // when it last synced, or "never"
+	Failures    int    // syncs failed in a row
+	LastError   string
+}
+
 // Initials are the first letters of the first two words of name.
 func Initials(name string) string {
 	var b strings.Builder
@@ -106,7 +115,7 @@ templ memberFields(m Member) {
 }
 
 // Settings is the unlocked Settings page.
-templ Settings(members []Member, errMsg string) {
+templ Settings(members []Member, feeds []Feed, errMsg string) {
 	@layout("Settings") {
 		<main>
 			<h1>Settings</h1>
@@ -175,6 +184,29 @@ templ Settings(members []Member, errMsg string) {
 					</section>
 				}
 			}
+			<h2>Calendar feeds</h2>
+			<p>Read-only iCal or webcal calendars, such as a school's or a sports team's. Their events can't be changed in GoCasa.</p>
+			for _, f := range feeds {
+				<section>
+					<h3>
+						<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color }></span>
+						{ f.Name }
+					</h3>
+					<p>Last synced: { f.LastSuccess }</p>
+					if f.Failures > 0 {
+						<p role="alert">Sync failing ({ strconv.Itoa(f.Failures) } in a row): { f.LastError }</p>
+					}
+					<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
+						<button>Remove { f.Name }</button>
+					</form>
+				</section>
+			}
+			<form method="post" action="/settings/feeds">
+				<label>Name <input name="name" required maxlength="50"/></label>
+				<label>Address <input name="url" type="text" inputmode="url" required placeholder="webcal://…"/></label>
+				<label>Colour <input type="color" name="color" value="#f59e0b"/></label>
+				<button>Add feed</button>
+			</form>
 		</main>
 	}
 }

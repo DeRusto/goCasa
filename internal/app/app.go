@@ -89,6 +89,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		d.Close()
 		return nil, fmt.Errorf("startup backup: %w", err)
 	}
+	a.Scheduler.Add("integrations", func(time.Time) bool { return true }, a.syncDue)
 	a.handler = a.routes()
 	return a, nil
 }
@@ -115,6 +116,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/members/{id}/avatar", a.requireUnlock(a.uploadAvatar))
 	mux.HandleFunc("POST /settings/members/{id}/avatar/delete", a.requireUnlock(a.deleteAvatar))
 	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
+	mux.HandleFunc("POST /settings/feeds", a.requireUnlock(a.addFeed))
+	mux.HandleFunc("POST /settings/feeds/{id}/delete", a.requireUnlock(a.removeFeed))
 	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 	// shortcut: calendar changes ignore the calendar Lock until Locks land (#40).
