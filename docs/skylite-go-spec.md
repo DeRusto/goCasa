@@ -20,7 +20,7 @@ Feature parity target is the *function* of SkyLite-UX as used by this household,
 - Weather header
 - Photo screensaver (Immich first, Google Photos later if feasible)
 - PIN protection and per-user PINs/roles (fork feature)
-- Household settings and per-user preferences
+- Household settings and per-device preferences (theme, default view); no per-Member preferences
 
 ## 2. Non-goals (v1)
 
@@ -30,6 +30,7 @@ Feature parity target is the *function* of SkyLite-UX as used by this household,
 - Real-time collaborative editing with conflict resolution — last-write-wins, broadcast afterwards
 - Email/SMS reminders — in-app display only in v1
 - Plugin system — integrations are compiled in behind a common Go interface
+- Translation — English only; dates and times follow the household's 12/24-hour and week-start settings
 
 ## 3. Design principles
 
@@ -95,8 +96,7 @@ All timestamps stored as UTC epoch seconds **plus**, where relevant, the origina
 | Table | Key columns / notes |
 |---|---|
 | `users` | `id, name, color, avatar_url, pin_hash (nullable, bcrypt), role (admin/member), created_at` |
-| `household_settings` | single row: `household_name, timezone (IANA), week_start (0=Sun), pin_protection_enabled, screensaver_idle_seconds (default 300), screensaver_enabled, night_mode (off/black/dim_clock, default off), night_start, night_end` |
-| `user_preferences` | `user_id, key, value` — default view, last filters (replaces localStorage persistence upstream moved to) |
+| `household_settings` | single row: `household_name, timezone (IANA), week_start (0=Sun), pin_protection_enabled, screensaver_idle_seconds (default 300), screensaver_enabled, night_mode (off/black/dim_clock, default off), night_start, night_end, clock_24h, units (metric/imperial), default_view` — `default_view` applies to devices that haven't set their own |
 | `integrations` | `id, type (google_calendar / ical / open_meteo / immich / mealie / tandoor), name, config_json, credentials_enc (nullable, AES-GCM), enabled, sync_interval_seconds, last_sync_at, next_sync_at, last_error, sync_cursor (Google syncToken / iCal ETag)` |
 | `source_calendars` | `id, integration_id, external_id, name, color_override, enabled, read_only` — one integration exposes many calendars |
 | `events` | `id, calendar_id (source_calendars or local), external_id (nullable), title, description, location, start_utc, end_utc, start_tzid, all_day, all_day_date, rrule (nullable text), exdates_json, rdates_json, recurring_master_id (nullable), status, etag/version, updated_at` |
@@ -145,14 +145,14 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 
 | Route | Purpose |
 |---|---|
-| `/` | Redirect to default view (calendar month, or per-user preference) |
+| `/` | Redirect to this device's default view (stored in the browser), else the household `default_view`. Any main page (calendar view + Member filter, To-dos, Lists, Chores) can be made the device default via "Set as default view on this device" in its view menu (no Lock); a calendar default always opens on today. `?date=`/`?users=` links never change it |
 | `/calendar?view=month\|week\|day\|agenda&date=YYYY-MM-DD&users=1,2` | Main calendar; `date`/`users` deep links are shareable (preserves the fork's `?date=` / `?users=` behaviour) |
 | `/calendar/event/new`, `/calendar/event/{id}` | Event dialog (htmx modal): title, calendar, members, all-day, timezone, recurrence editor (preset patterns + custom RRULE string behind "advanced") |
 | `/todos` | Columns, drag-to-reorder (POST reorder endpoint), recurring to-dos, sort/filter by due range and status |
 | `/lists` | Shopping lists + items, check-off, reorder |
 | `/chores` | Chore board, completions, points balances, rewards/redemptions |
 | `/screensaver` | Full-screen photo rotation (Immich), clock + today's agenda overlay; layout is separate/minimal like the fork's screensaver layout |
-| `/settings` | Users (incl. PIN/role), integrations, household settings, screensaver and Night mode config, PIN lock toggle + "Lock now"; **This device** section (stored in the browser): Wall display switch, camera motion-wake opt-in, wake-lock and camera status (e.g. "needs HTTPS") |
+| `/settings` | Users (incl. PIN/role), integrations, household settings, screensaver and Night mode config, PIN lock toggle + "Lock now"; **This device** section (stored in the browser): Wall display switch, camera motion-wake opt-in, theme (Light/Dark/Auto, default Auto), current default view + "Clear", wake-lock and camera status (e.g. "needs HTTPS") |
 | `/lock` | PIN pad when PIN protection is enabled; session unlock cookie |
 | `/api/*` | JSON endpoints for htmx-adjacent clients and any future CLI; HTML handlers remain primary |
 | `/events/stream` | SSE endpoint; sends `X-Accel-Buffering: no` and a heartbeat every 25 s so reverse proxies neither buffer nor idle-close it; htmx reconnects on drop |
@@ -160,7 +160,7 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 
 **Kiosk behaviour:** pages auto-refresh fragments via SSE and survive a server restart by simply reloading (all state server-side). Idle behaviour applies only to a **Wall display** (a per-browser switch under Settings → This device, Admin PIN needed); other browsers just browse.
 - **Idle:** no touch, pointer or key input for `screensaver_idle_seconds` → screensaver. A Wall display holds a Screen Wake Lock (re-acquired on `visibilitychange`) when the browser allows it. Entering the screensaver ends any Admin unlock.
-- **Wake:** the first touch only wakes (it isn't passed through to the page underneath) and returns to the page and view that was showing.
+- **Wake:** the first touch only wakes (it isn't passed through to the page underneath) and returns to the device's default view at today.
 - **Night mode** (household setting, off by default) between `night_start` and `night_end`: *Black* releases the wake lock so the device's own power settings may turn the display off, and touch wakes it; *Dim clock* keeps the wake lock and shows a dimmed time and date on black. Touch at night wakes to the dashboard; idle returns to Night mode, not the photo screensaver.
 - **Camera motion-wake:** opt-in per Wall display, off by default; needs HTTPS and the browser's camera permission. Runs only while the screensaver or Dim clock shows, never during Black or active use. Frame differencing in the browser at a fixed sensitivity; frames never leave the device; a small camera icon shows while it runs.
 - Kiosk boot, auto-login and display power schedules are device setup for the operator, not GoCasa's job.
@@ -228,7 +228,7 @@ Binary serves `/healthz` + one templ page; SQLite opens, migrations run; Docker 
 **Accept:** fresh `docker compose up` → page loads; kill + restore from backup → same page.
 
 ### Phase 1 — Local calendar core
-Users, household settings, local calendars, event CRUD (incl. recurrence + exceptions), month/week/day/agenda views, per-user filters + `?date=`/`?users=` links, SSE live reload.
+Users, household settings, local calendars, event CRUD (incl. recurrence + exceptions), month/week/day/agenda views, Member filters, per-device default view + `?date=`/`?users=` links, SSE live reload.
 **Accept:** two browsers open; create/edit/delete (incl. "this occurrence only") in one, the other updates without refresh; DST-boundary and all-day cases in §13 pass.
 
 ### Phase 2 — Sync: iCal, then Google

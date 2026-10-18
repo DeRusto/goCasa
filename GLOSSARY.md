@@ -119,6 +119,10 @@ _Avoid_: Synced list, linked list, Mealie list
 A device switched into always-on dashboard mode. Only a Wall display goes to the screensaver when idle or uses Night mode and camera wake; any other device just browses.
 _Avoid_: Kiosk, display, screen, tablet
 
+**Default view**:
+The page a device opens on and a Wall display returns to when it wakes. Each device can set its own; otherwise it uses the Household's.
+_Avoid_: Home page, start page, landing view
+
 **Night mode**:
 The Household's set hours when a Wall display shows a black screen, or a dim clock, instead of the screensaver.
 _Avoid_: Sleep, do not disturb, off hours
