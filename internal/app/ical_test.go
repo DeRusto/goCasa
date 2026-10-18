@@ -67,6 +67,10 @@ var (
 		"RRULE:FREQ=DAILY;COUNT=4", "EXDATE;TZID=America/Los_Angeles:20260317T100000")
 	recessMoved = vevent("UID:recess@school", "RECURRENCE-ID;TZID=America/Los_Angeles:20260318T100000", "SUMMARY:Recess (late)",
 		"DTSTART;TZID=America/Los_Angeles:20260318T110000", "DTEND;TZID=America/Los_Angeles:20260318T113000")
+	extra = vevent("UID:extra@school", "SUMMARY:Extra practice", "DTSTART:20260316T200000Z", "DTEND:20260316T210000Z", "RDATE:20260320T200000Z")
+	// Seconds on a UTC Series: its overrides still match their Occurrences.
+	choir     = vevent("UID:choir@school", "SUMMARY:Choir", "DTSTART:20260316T120030Z", "DTEND:20260316T130030Z", "RRULE:FREQ=DAILY;COUNT=3")
+	choirOff  = vevent("UID:choir@school", "RECURRENCE-ID:20260317T120030Z", "STATUS:CANCELLED", "DTSTART:20260317T120030Z", "DTEND:20260317T130030Z")
 	recessOff = vevent("UID:recess@school", "RECURRENCE-ID;TZID=America/Los_Angeles:20260319T100000", "STATUS:CANCELLED", "SUMMARY:Recess",
 		"DTSTART;TZID=America/Los_Angeles:20260319T100000", "DTEND;TZID=America/Los_Angeles:20260319T103000")
 )
@@ -143,21 +147,34 @@ func TestFeedImportUpdateAndSoftDelete(t *testing.T) {
 	if !strings.Contains(agendaPage(t, h), "Book fair") {
 		t.Fatal("the fair didn't come back")
 	}
+
+	// A copy it can't read keeps the last good one.
+	f.set(vcal(swim, strings.ReplaceAll(fair, "DTSTART;VALUE=DATE:20260317", "DTSTART;VALUE=DATE:2026-03-17")), `"v4"`)
+	h.Clock.Advance(15 * time.Minute)
+	h.RunDue()
+	if !strings.Contains(agendaPage(t, h), "Book fair") {
+		t.Fatal("an unreadable copy deleted the fair")
+	}
 }
 
 func TestFeedSeries(t *testing.T) {
 	h := household(t)
-	addFeed(t, h, "School", newFeed(t, vcal(recessOff, recess, recessMoved)).URL) // overrides before their Series
+	addFeed(t, h, "School", newFeed(t, vcal(recessOff, recess, recessMoved, extra, choirOff, choir)).URL) // overrides before their Series
 	page := agendaPage(t, h)
-	for date, want := range map[string]string{"2026-03-16": "17:00–17:30 Recess", "2026-03-18": "18:00–18:30 Recess (late)"} {
+	for date, want := range map[string]string{"2026-03-16": "17:00–17:30 Recess", "2026-03-18": "18:00–18:30 Recess (late)",
+		"2026-03-20": "20:00–21:00 Extra practice"} {
 		if d := day(t, page, date); !strings.Contains(d, want) {
 			t.Fatalf("%s = %q, want %q", date, d, want)
 		}
 	}
-	for _, date := range []string{"2026-03-17", "2026-03-19"} { // the EXDATE and the cancelled Occurrence
+	// The EXDATE, the cancelled Recess and the cancelled Choir leave nothing on these days.
+	for _, date := range []string{"2026-03-17", "2026-03-19"} {
 		if strings.Contains(page, `data-date="`+date+`"`) {
 			t.Fatalf("%s shows:\n%s", date, page)
 		}
+	}
+	if d := day(t, page, "2026-03-18"); !strings.Contains(d, "Choir") {
+		t.Fatalf("2026-03-18 = %q", d)
 	}
 }
 

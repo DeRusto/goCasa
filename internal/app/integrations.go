@@ -57,8 +57,9 @@ func (a *App) syncDue(ctx context.Context, now time.Time) error {
 		return err
 	}
 	for _, id := range ids {
-		if err := a.syncIntegration(ctx, id); err != nil {
-			return err
+		// One that can't be recorded (e.g. removed meanwhile) mustn't hold up the rest.
+		if err := a.syncIntegration(ctx, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			a.Log.Error("recording integration sync failed", "integration", id, "err", err)
 		}
 	}
 	return nil
@@ -189,7 +190,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err = a.inTx(r.Context(), func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(r.Context(), "INSERT INTO integrations (type, name, credentials_enc, next_sync_at) VALUES ('ical', ?, ?, ?) RETURNING id",
-			name, enc, a.Now().Unix()).Scan(&id); err != nil {
+			name, enc, a.Now().Add(syncTimeout).Unix()).Scan(&id); err != nil { // not due until the sync below has had its time
 			return err
 		}
 		_, err := tx.ExecContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color, read_only) VALUES (?, ?, ?, 1)", id, name, color)

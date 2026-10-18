@@ -78,13 +78,15 @@ func (icalFeed) Sync(ctx context.Context, a *App, in integrationRow) error {
 		return fmt.Errorf("that isn't an iCal feed: %w", err)
 	}
 	next, _ := json.Marshal(feedCursor{ETag: res.Header.Get("ETag"), LastModified: res.Header.Get("Last-Modified")})
-	return a.storeFeed(ctx, in.id, parseFeed(cal, a.Config.Location), string(next))
+	evs, kept := parseFeed(cal, a.Config.Location)
+	return a.storeFeed(ctx, in.id, evs, kept, string(next))
 }
 
 // storeFeed makes integration id's calendar match evs, and saves its next
 // cursor, in one transaction: rows are upserted by UID, RECURRENCE-ID
-// overrides rebuilt, and events gone from the feed cancelled.
-func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, cursor string) error {
+// overrides rebuilt, and events gone from the feed cancelled; those with UIDs
+// in kept stay as they were.
+func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, kept []string, cursor string) error {
 	var cal int64
 	err := a.inTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT id FROM source_calendars WHERE integration_id = ?", id).Scan(&cal); err != nil {
@@ -95,7 +97,7 @@ func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, cursor s
 		}
 		now := a.Now().Unix()
 		series := map[string]int64{} // UID to its master row
-		seen := []string{}
+		seen := append([]string{}, kept...)
 		written := 0
 		write := func(key, master, original any, e feedEvent) error { // an override has no key
 			status := "confirmed"
@@ -166,17 +168,17 @@ func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, cursor s
 	return err
 }
 
-// parseFeed is cal's VEVENTs in their stored form. One with no UID or start,
-// which can't be kept in step, is left out. home reads floating times.
-func parseFeed(cal *ical.Calendar, home *time.Location) []feedEvent {
-	var out []feedEvent
+// parseFeed is cal's VEVENTs in their stored form, and the UIDs of those it
+// can't read, whose last good copy is kept. home reads floating times.
+func parseFeed(cal *ical.Calendar, home *time.Location) (evs []feedEvent, kept []string) {
 	for _, ev := range cal.Events() {
-		e, ok := parseVEvent(ev, home)
-		if ok {
-			out = append(out, e)
+		if e, ok := parseVEvent(ev, home); ok {
+			evs = append(evs, e)
+		} else if e.uid != "" {
+			kept = append(kept, e.uid)
 		}
 	}
-	return out
+	return evs, kept
 }
 
 func parseVEvent(ev ical.Event, home *time.Location) (feedEvent, bool) {
@@ -230,14 +232,21 @@ func parseVEvent(ev ical.Event, home *time.Location) (feedEvent, bool) {
 		if z == nil && !c.allDay || z != nil && c.allDay {
 			return e, false
 		}
-	} else if p := ev.Props.Get(ical.PropRecurrenceRule); p != nil {
-		if opt, err := rrule.StrToROption(p.Value); err == nil {
-			if _, err := rrule.NewRRule(*opt); err == nil {
-				c.rrule = p.Value
-				ex, _ := json.Marshal(feedDates(ev.Props.Values(ical.PropExceptionDates), zone, home))
-				rd, _ := json.Marshal(feedDates(ev.Props.Values(ical.PropRecurrenceDates), zone, home))
-				c.exdates, c.rdates = string(ex), string(rd)
+	} else {
+		if p := ev.Props.Get(ical.PropRecurrenceRule); p != nil {
+			if opt, err := rrule.StrToROption(p.Value); err == nil {
+				if _, err := rrule.NewRRule(*opt); err == nil {
+					c.rrule = p.Value
+				}
 			}
+		}
+		if c.rrule == nil && ev.Props.Get(ical.PropRecurrenceDates) != nil {
+			c.rrule = "FREQ=DAILY;COUNT=1" // RDATEs alone: DTSTART once, plus them
+		}
+		if c.rrule != nil {
+			ex, _ := json.Marshal(feedDates(ev.Props.Values(ical.PropExceptionDates), zone, home))
+			rd, _ := json.Marshal(feedDates(ev.Props.Values(ical.PropRecurrenceDates), zone, home))
+			c.exdates, c.rdates = string(ex), string(rd)
 		}
 	}
 	e.c = c
@@ -256,7 +265,7 @@ func feedTime(p *ical.Prop, home *time.Location) (time.Time, *time.Location, err
 	}
 	if strings.HasSuffix(v, "Z") {
 		t, err := time.Parse("20060102T150405Z", v)
-		return t, time.UTC, err
+		return t.Truncate(time.Minute), time.UTC, err // minutes, as expand keys Occurrences
 	}
 	zone := home
 	if tzid := p.Params.Get(ical.PropTimezoneID); tzid != "" && tzid != "Local" {
