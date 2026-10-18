@@ -114,6 +114,14 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
 	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
+	// shortcut: calendar changes ignore the calendar Lock until Locks land (#40).
+	mux.HandleFunc("GET /calendar", a.getCalendar)
+	mux.HandleFunc("POST /calendar/calendars", a.createCalendar)
+	mux.HandleFunc("GET /calendar/event/new", a.newEvent)
+	mux.HandleFunc("POST /calendar/event", a.saveEvent)
+	mux.HandleFunc("GET /calendar/event/{id}", a.getEvent)
+	mux.HandleFunc("POST /calendar/event/{id}", a.saveEvent)
+	mux.HandleFunc("POST /calendar/event/{id}/delete", a.deleteEvent)
 
 	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
 	csrf := http.NewCrossOriginProtection()

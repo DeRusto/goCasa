@@ -1,0 +1,246 @@
+package web
+
+import (
+	"strconv"
+	"time"
+)
+
+// CalendarInfo is a local calendar as the pages show it.
+type CalendarInfo struct {
+	ID    int64
+	Name  string
+	Color string
+}
+
+// CalendarEvent is one event as one day shows it.
+type CalendarEvent struct {
+	ID     int64
+	Title  string
+	Time   string   // "09:00–10:00", "22:00–…" or "All day"
+	Colors []string // its Members', else its calendar's
+}
+
+type CalendarDay struct {
+	Date   time.Time
+	Today  bool
+	Faded  bool // outside the month a month view shows
+	Events []CalendarEvent
+}
+
+type CalendarPage struct {
+	View              string // month, week, day or agenda
+	Date              time.Time
+	Days              []CalendarDay // agenda: only days with events
+	Users             map[int64]bool
+	Members           []Member
+	Calendars         []CalendarInfo
+	Prev, Next, Today string
+	ViewLinks         map[string]string
+}
+
+// EventForm is the event dialog's fields; ID 0 is a new event.
+type EventForm struct {
+	ID                           int64
+	CalendarID                   int64
+	Title, Location, Description string
+	AllDay                       bool
+	Start, End, TZ               string // timed, in TZ
+	StartDate, EndDate           string // all-day, last day inclusive
+	Members                      map[int64]bool
+}
+
+func id(n int64) string { return strconv.FormatInt(n, 10) }
+
+func calendarTitle(p CalendarPage) string {
+	switch p.View {
+	case "day":
+		return p.Date.Format("Monday 2 January 2006")
+	case "week":
+		return "Week of " + p.Days[0].Date.Format("2 January 2006")
+	case "agenda":
+		return "From " + p.Date.Format("2 January 2006")
+	}
+	return p.Date.Format("January 2006")
+}
+
+func eventURL(eventID int64, action string) templ.SafeURL {
+	if eventID == 0 {
+		return "/calendar/event"
+	}
+	return templ.SafeURL("/calendar/event/" + id(eventID) + action)
+}
+
+func newEventURL(d time.Time) templ.SafeURL {
+	return templ.SafeURL("/calendar/event/new?date=" + d.Format("2006-01-02"))
+}
+
+templ swatches(colors []string) {
+	for _, c := range colors {
+		<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + c }></span>
+	}
+}
+
+templ calendarDay(d CalendarDay, heading string) {
+	<section data-date={ d.Date.Format("2006-01-02") } style={ templ.KV("opacity:.5", d.Faded) }>
+		<h3>
+			if d.Today {
+				<strong>{ heading }</strong>
+			} else {
+				{ heading }
+			}
+		</h3>
+		<ul>
+			for _, e := range d.Events {
+				<li>
+					@swatches(e.Colors)
+					<a href={ templ.SafeURL("/calendar/event/" + id(e.ID)) }>{ e.Time } { e.Title }</a>
+				</li>
+			}
+		</ul>
+		<a href={ newEventURL(d.Date) } aria-label={ "New event on " + d.Date.Format("2 January") }>+</a>
+	</section>
+}
+
+// Calendar is the main calendar page in one of its four views.
+templ Calendar(p CalendarPage) {
+	@layout("Calendar") {
+		<main>
+			<h1>{ calendarTitle(p) }</h1>
+			<nav>
+				<a href={ templ.SafeURL(p.Prev) }>Previous</a>
+				<a href={ templ.SafeURL(p.Today) }>Today</a>
+				<a href={ templ.SafeURL(p.Next) }>Next</a>
+				|
+				for _, v := range []string{"month", "week", "day", "agenda"} {
+					<a
+						href={ templ.SafeURL(p.ViewLinks[v]) }
+						if v == p.View {
+							aria-current="page"
+						}
+					>{ v }</a>
+				}
+				|
+				<a href={ newEventURL(p.Date) }>New event</a>
+			</nav>
+			<form method="get" action="/calendar">
+				<input type="hidden" name="view" value={ p.View }/>
+				<input type="hidden" name="date" value={ p.Date.Format("2006-01-02") }/>
+				<fieldset>
+					<legend>Show Members (Household events always show)</legend>
+					for _, m := range p.Members {
+						<label>
+							<input type="checkbox" name="users" value={ id(m.ID) } checked?={ p.Users[m.ID] }/>
+							@avatar(m)
+							{ m.Name }
+						</label>
+					}
+					<button>Filter</button>
+				</fieldset>
+			</form>
+			if p.View == "month" {
+				<table>
+					<thead>
+						<tr>
+							for _, d := range p.Days[:7] {
+								<th>{ d.Date.Format("Mon") }</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for w := 0; w < len(p.Days); w += 7 {
+							<tr>
+								for _, d := range p.Days[w : w+7] {
+									<td style="vertical-align:top">
+										@calendarDay(d, d.Date.Format("2"))
+									</td>
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			} else {
+				for _, d := range p.Days {
+					@calendarDay(d, d.Date.Format("Monday 2 January"))
+				}
+				if len(p.Days) == 0 {
+					<p>Nothing on the calendar for these days.</p>
+				}
+			}
+			<h2>Calendars</h2>
+			<ul>
+				for _, c := range p.Calendars {
+					<li>
+						@swatches([]string{c.Color})
+						{ c.Name }
+					</li>
+				}
+			</ul>
+			<form method="post" action="/calendar/calendars">
+				<label>Name <input name="name" required maxlength="50"/></label>
+				<label>Colour <input type="color" name="color" value="#a855f7"/></label>
+				<button>Add calendar</button>
+			</form>
+		</main>
+	}
+}
+
+// EventPage is the event dialog: create, edit or delete a single event.
+templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg string) {
+	@layout("Event") {
+		<main>
+			<h1>
+				if f.ID == 0 {
+					New event
+				} else {
+					Edit event
+				}
+			</h1>
+			<p><a href="/calendar">Back to the calendar</a></p>
+			@formError(errMsg)
+			if len(cals) == 0 {
+				<p>Add a calendar on the calendar page first.</p>
+			}
+			<form method="post" action={ eventURL(f.ID, "") }>
+				<label>Title <input name="title" value={ f.Title } required maxlength="200"/></label>
+				<label>
+					Calendar
+					<select name="calendar_id" required>
+						for _, c := range cals {
+							<option value={ id(c.ID) } selected?={ c.ID == f.CalendarID }>{ c.Name }</option>
+						}
+					</select>
+				</label>
+				<fieldset>
+					<legend>Members (none: a Household event)</legend>
+					for _, m := range members {
+						<label>
+							<input type="checkbox" name="members" value={ id(m.ID) } checked?={ f.Members[m.ID] }/>
+							@avatar(m)
+							{ m.Name }
+						</label>
+					}
+				</fieldset>
+				<label><input type="checkbox" name="all_day" checked?={ f.AllDay }/> All day</label>
+				<fieldset>
+					<legend>Timed</legend>
+					<label>Starts <input type="datetime-local" name="start" value={ f.Start }/></label>
+					<label>Ends <input type="datetime-local" name="end" value={ f.End }/></label>
+					<label>Time zone <input name="tz" value={ f.TZ }/></label>
+				</fieldset>
+				<fieldset>
+					<legend>All day</legend>
+					<label>First day <input type="date" name="start_date" value={ f.StartDate }/></label>
+					<label>Last day <input type="date" name="end_date" value={ f.EndDate }/></label>
+				</fieldset>
+				<label>Location <input name="location" value={ f.Location } maxlength="200"/></label>
+				<label>Description <textarea name="description" maxlength="5000">{ f.Description }</textarea></label>
+				<button>Save</button>
+			</form>
+			if f.ID != 0 {
+				<form method="post" action={ eventURL(f.ID, "/delete") }>
+					<button>Delete event</button>
+				</form>
+			}
+		</main>
+	}
+}
