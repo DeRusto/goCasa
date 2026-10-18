@@ -194,16 +194,20 @@ templ liveUpdates() {
 	<script>
 	(() => {
 		const es = new EventSource("/events/stream");
-		let inflight;
+		let inflight, retry;
 		const refresh = async () => {
+			clearTimeout(retry);
 			inflight?.abort(); // a slower older fetch must not land after a newer one
 			const ctl = inflight = new AbortController();
 			try {
 				const r = await fetch(location.href, { signal: ctl.signal });
-				if (!r.ok) return;
+				if (!r.ok) throw r.status;
 				const next = new DOMParser().parseFromString(await r.text(), "text/html").getElementById("live");
 				if (next) document.getElementById("live").replaceWith(next);
-			} catch {}
+			} catch {
+				// A failed fetch would leave the page stale until the next change; an aborted one was superseded.
+				if (!ctl.signal.aborted) retry = setTimeout(refresh, 5000);
+			}
 		};
 		es.onmessage = refresh;
 		es.onopen = refresh;

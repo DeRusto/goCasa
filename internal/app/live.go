@@ -10,6 +10,9 @@ import (
 // heartbeat keeps reverse proxies from idle-closing a quiet stream.
 var heartbeat = 25 * time.Second
 
+// writeTimeout is how long one stream write may wait on a client that stopped reading.
+const writeTimeout = 5 * time.Second
+
 // Change is what the bus carries: something of entity id was created, updated or deleted.
 type Change struct {
 	Type   string `json:"type"`
@@ -87,8 +90,13 @@ func (a *App) eventStream(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-cache")
 	h.Set("X-Accel-Buffering", "no")
 	rc := http.NewResponseController(w)
-	w.Write([]byte(": hello\n\n"))
-	if rc.Flush() != nil {
+	// send gives up on a client that stopped reading, so its handler can't block shutdown.
+	send := func(msg []byte) bool {
+		rc.SetWriteDeadline(time.Now().Add(writeTimeout))
+		_, err := w.Write(msg)
+		return err == nil && rc.Flush() == nil
+	}
+	if !send([]byte(": hello\n\n")) {
 		return
 	}
 	tick := time.NewTicker(heartbeat)
@@ -107,7 +115,7 @@ func (a *App) eventStream(w http.ResponseWriter, r *http.Request) {
 			b, _ := json.Marshal(c)
 			msg = append(append([]byte("data: "), b...), "\n\n"...)
 		}
-		if _, err := w.Write(msg); err != nil || rc.Flush() != nil {
+		if !send(msg) {
 			return
 		}
 	}
