@@ -86,6 +86,10 @@ func TestExpandTimedSeries(t *testing.T) {
 		{"dst-fall", "America/Los_Angeles", "2026-10-25T09:00", "2026-10-25T10:00", series{rule: "FREQ=WEEKLY"}, "2026-10-25", "2026-11-14"},
 		{"gap-0230", "America/Los_Angeles", "2026-03-06T02:30", "2026-03-06T03:00", series{rule: "FREQ=DAILY"}, "2026-03-06", "2026-03-10"},
 		{"overlap-0130", "America/Los_Angeles", "2026-10-30T01:30", "2026-10-30T02:00", series{rule: "FREQ=DAILY"}, "2026-10-30", "2026-11-02"},
+		// RFC 5545: a nonexistent time isn't counted, so 8 March doesn't use up a COUNT slot.
+		{"count-gap", "America/Los_Angeles", "2026-03-06T02:30", "2026-03-06T03:00", series{rule: "FREQ=DAILY;COUNT=3"}, "2026-03-06", "2026-03-12"},
+		// 09:15Z on 1 November is the second 01:15 there; the first 01:30 (08:30Z) is before it.
+		{"until-fallback", "America/Los_Angeles", "2026-10-30T01:30", "2026-10-30T02:00", series{rule: "FREQ=DAILY;UNTIL=20261101T091500Z"}, "2026-10-30", "2026-11-03"},
 		{"yearly", "Europe/London", "2026-07-04T15:00", "2026-07-04T17:00", series{rule: "FREQ=YEARLY"}, "2026-01-01", "2028-12-31"},
 		{"before-window", "UTC", "2020-01-01T23:00", "2020-01-02T01:00", series{rule: "FREQ=DAILY"}, "2026-03-15", "2026-03-15"},
 	} {
@@ -143,5 +147,19 @@ func TestExpandStopsAtTheCap(t *testing.T) {
 		if err != nil || len(evs) != c.want {
 			t.Errorf("%s: %d occurrences, %v; want %d", c.rule, len(evs), err, c.want)
 		}
+	}
+}
+
+func TestExpandCapCountsOneOffEdits(t *testing.T) {
+	m, z := timedMaster(t, "UTC", "2026-01-01T09:00", "2026-01-01T10:00")
+	var edits []oneOff
+	for i := range maxOccurrences + 1 {
+		t0 := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC).AddDate(0, 0, i)
+		edits = append(edits, oneOff{original: t0.Unix(), ev: calendarEvent{title: "Edited", start: t0.Add(time.Hour).Unix(), end: t0.Add(2 * time.Hour).Unix()}})
+	}
+	from, to := window("2026-01-01", "2029-12-31")
+	evs, err := expand(m, series{rule: "FREQ=DAILY"}, z, edits, from, to)
+	if err != nil || len(evs) != maxOccurrences {
+		t.Fatalf("%d occurrences, %v; want %d", len(evs), err, maxOccurrences)
 	}
 }

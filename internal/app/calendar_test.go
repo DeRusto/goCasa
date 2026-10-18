@@ -342,7 +342,7 @@ func TestCustomRule(t *testing.T) {
 	if _, body := h.Get(t, "/calendar/event/1"); !strings.Contains(body, "FREQ=MONTHLY;BYDAY=2TU") || !strings.Contains(body, "EXDATE:20260414T190000") {
 		t.Errorf("dialog loses the custom rule: %q", body)
 	}
-	for _, rule := range []string{"RRULE:FREQ=FORTNIGHTLY", "RRULE:FREQ=HOURLY", "RRULE:FREQ=DAILY\nEXDATE:tomorrow", "SOMETHING:ELSE"} {
+	for _, rule := range []string{"RRULE:FREQ=FORTNIGHTLY", "RRULE:FREQ=HOURLY", "RRULE:FREQ=DAILY;BYHOUR=9,17", "RRULE:FREQ=DAILY\nEXDATE:tomorrow", "SOMETHING:ELSE"} {
 		if code, _ := h.Post(t, "/calendar/event", repeating(timed("x", "2026-03-10T19:00", "2026-03-10T20:00", "UTC"), "custom", "rrule", rule)); code != http.StatusBadRequest {
 			t.Errorf("rule %q = %d, want 400", rule, code)
 		}
@@ -415,5 +415,23 @@ func TestSeriesWhoseFirstDayIsNotAnOccurrence(t *testing.T) {
 	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
 	if strings.Contains(day(t, page, "2026-03-15"), "Gym") {
 		t.Error("DTSTART shows though BYDAY leaves it out")
+	}
+}
+
+func TestOccurrenceMovedBeforeItsSeriesStillShows(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Choir", "2026-12-07T19:00", "2026-12-07T20:00", "UTC"), "weekly"))
+	h.Post(t, occurrence(1, time.Date(2026, 12, 7, 19, 0, 0, 0, time.UTC), ""), timed("Choir (early)", "2026-10-20T19:00", "2026-10-20T20:00", "UTC"))
+	if _, page := h.Get(t, "/calendar?view=day&date=2026-10-20"); !strings.Contains(day(t, page, "2026-10-20"), "Choir (early)") {
+		t.Fatal("an Occurrence moved before its Series' start is missing")
+	}
+}
+
+func TestFormErrorKeepsTheRepeat(t *testing.T) {
+	h := household(t)
+	f := repeating(timed("", "2026-03-10T19:00", "2026-03-10T20:00", "UTC"), "custom", "rrule", "RRULE:FREQ=MONTHLY;BYDAY=2TU")
+	code, body := h.Post(t, "/calendar/event", f)
+	if code != http.StatusBadRequest || !strings.Contains(body, "FREQ=MONTHLY;BYDAY=2TU") || !strings.Contains(body, `<option value="custom" selected`) {
+		t.Fatalf("title error = %d, lost the repeat", code)
 	}
 }

@@ -1,8 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/teambition/rrule-go"
@@ -69,53 +71,79 @@ func expand(master calendarEvent, s series, zone *time.Location, oneOffs []oneOf
 		return nil, err
 	}
 	opt.Dtstart = dtstart
+	// COUNT and a UTC UNTIL apply once each Occurrence is in its zone: a skipped
+	// gap time isn't counted (RFC 5545), and UNTIL compares real instants.
+	count, untilAt := opt.Count, time.Time{}
+	opt.Count = 0
 	if untilUTC.MatchString(s.rule) && zone != nil {
-		opt.Until = floating(opt.Until.In(zone))
+		untilAt, opt.Until = opt.Until, time.Time{}
 	}
 	r, err := rrule.NewRRule(*opt)
 	if err != nil {
 		return nil, err
 	}
-	var set rrule.Set
-	set.RRule(r)
+	exdates := map[time.Time]bool{}
 	for _, d := range s.exdates {
 		if t, err := time.Parse(layout, d); err == nil {
-			set.ExDate(t)
-		}
-	}
-	for _, d := range s.rdates {
-		if t, err := time.Parse(layout, d); err == nil {
-			set.RDate(t)
+			exdates[t] = true
 		}
 	}
 
+	// place is the Occurrence at floating time f, or false in a spring-forward gap (spec §7.1).
+	place := func(f time.Time) (calendarEvent, bool) {
+		o := master
+		if master.allDay {
+			o.date, o.endDate, o.original = f.Format(dateLayout), f.Add(dur).Format(dateLayout), f.Unix()
+			return o, true
+		}
+		t, err := parseLocal(f.Format(localLayout), zone)
+		if err != nil || t.Format(localLayout) != f.Format(localLayout) {
+			return o, false
+		}
+		o.start, o.end, o.original = t.Unix(), t.Add(dur).Unix(), t.Unix()
+		return o, true
+	}
 	var out []calendarEvent
-	edited := map[int64]bool{}
+	seen := map[int64]bool{} // originals already edited or added
 	for _, o := range oneOffs {
-		edited[o.original] = true
+		seen[o.original] = true
 		if !o.cancelled && overlaps(o.ev, from, to) {
 			e := o.ev
 			e.id, e.original = master.id, o.original
 			out = append(out, e)
 		}
 	}
-	// shortcut: iterates from DTSTART on every render (~36k steps for a century-old daily Series); start nearer the window if renders get slow.
-	horizon := dtstart.AddDate(horizonYears, 0, 0)
-	next := set.Iterator()
-	for f, ok := next(); ok && f.Before(stop) && f.Before(horizon) && len(out) < maxOccurrences; f, ok = next() {
-		o := master
-		if master.allDay {
-			o.date, o.endDate, o.original = f.Format(dateLayout), f.Add(dur).Format(dateLayout), f.Unix()
-		} else {
-			t, err := parseLocal(f.Format(localLayout), zone)
-			if err != nil || t.Format(localLayout) != f.Format(localLayout) {
-				continue // in a spring-forward gap: skipped (spec §7.1)
-			}
-			o.start, o.end, o.original = t.Unix(), t.Add(dur).Unix(), t.Unix()
-		}
-		if !edited[o.original] && overlaps(o, from, to) {
+	add := func(f time.Time) {
+		if o, ok := place(f); ok && !exdates[f] && !seen[o.original] && overlaps(o, from, to) {
+			seen[o.original] = true
 			out = append(out, o)
 		}
 	}
-	return out, nil
+	// shortcut: iterates from DTSTART on every render (~36k steps for a century-old daily Series); start nearer the window if renders get slow.
+	horizon := dtstart.AddDate(horizonYears, 0, 0)
+	next, n := r.Iterator(), 0
+	for f, ok := next(); ok && f.Before(stop) && f.Before(horizon) && len(out) < maxOccurrences; f, ok = next() {
+		o, ok := place(f)
+		if !ok {
+			continue
+		}
+		if n++; count > 0 && n > count || !untilAt.IsZero() && o.start > untilAt.Unix() {
+			break
+		}
+		add(f) // an EXDATE still uses up its COUNT slot
+	}
+	for _, d := range s.rdates {
+		if t, err := time.Parse(layout, d); err == nil {
+			add(t)
+		}
+	}
+	key := func(e calendarEvent) int64 {
+		if e.allDay {
+			d, _ := time.Parse(dateLayout, e.date)
+			return d.Unix()
+		}
+		return e.start
+	}
+	slices.SortStableFunc(out, func(x, y calendarEvent) int { return cmp.Compare(key(x), key(y)) })
+	return out[:min(len(out), maxOccurrences)], nil
 }

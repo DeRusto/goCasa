@@ -114,7 +114,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(users)
 		filter = string(b)
 	}
-	// Single events in the window, plus every Series that starts before its end with all its One-off edits.
+	// Single events in the window, plus every Series that starts before its end or has a One-off edit in it, with all its One-off edits.
 	rows, err := a.DB.QueryContext(r.Context(), `SELECT e.id, e.title, e.all_day, coalesce(e.start_utc, 0), coalesce(e.end_utc, 0),
 			coalesce(e.all_day_date, ''), coalesce(e.all_day_end_date, ''), c.color,
 			coalesce((SELECT group_concat(m.color, ',' ORDER BY m.name, m.id) FROM event_members em JOIN members m ON m.id = em.member_id WHERE em.event_id = e.id), ''),
@@ -126,6 +126,8 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		WHERE e.rrule IS NULL AND e.recurring_master_id IS NULL
 				AND (NOT e.all_day AND e.start_utc < ?2 AND e.end_utc > ?1 OR e.all_day AND e.all_day_date < ?4 AND e.all_day_end_date > ?3)
 			OR coalesce(e.recurring_master_id, e.id) IN (SELECT id FROM events WHERE rrule IS NOT NULL AND coalesce(start_utc < ?2, all_day_date < ?4))
+			OR coalesce(e.recurring_master_id, e.id) IN (SELECT recurring_master_id FROM events WHERE recurring_master_id IS NOT NULL
+				AND (NOT all_day AND start_utc < ?2 AND end_utc > ?1 OR all_day AND all_day_date < ?4 AND all_day_end_date > ?3))
 		ORDER BY e.recurring_master_id IS NOT NULL`, // masters before their edits
 		first.Unix(), end.Unix(), first.Format(dateLayout), end.Format(dateLayout), filter)
 	if err != nil {
@@ -379,7 +381,7 @@ func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdate
 	if err != nil || rule == "" {
 		return "", nil, nil, "That repeat rule isn't one GoCasa understands."
 	}
-	if opt.Freq > rrule.DAILY {
+	if opt.Freq > rrule.DAILY || len(opt.Byhour)+len(opt.Byminute)+len(opt.Bysecond) > 0 {
 		return "", nil, nil, "A Series repeats at most daily."
 	}
 	return rule, exdates, rdates, ""
@@ -430,6 +432,11 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 	for _, id := range e.members {
 		f.Members[id] = true
 	}
+	// Read the repeat first so any error page still shows it.
+	rule, ex, rd, repeatMsg := "", []string(nil), []string(nil), ""
+	if withRepeat {
+		rule, ex, rd, repeatMsg = parseRepeat(&f, r)
+	}
 	switch {
 	case f.Title == "" || len([]rune(f.Title)) > 200:
 		return f, e, "A title is 1 to 200 characters."
@@ -438,16 +445,13 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 	case len([]rune(f.Description)) > 5000:
 		return f, e, "A description is at most 5000 characters."
 	}
-	if withRepeat {
-		rule, ex, rd, msg := parseRepeat(&f, r)
-		if msg != "" {
-			return f, e, msg
-		}
-		if rule != "" {
-			b1, _ := json.Marshal(append([]string{}, ex...))
-			b2, _ := json.Marshal(append([]string{}, rd...))
-			e.rrule, e.exdates, e.rdates = rule, string(b1), string(b2)
-		}
+	if repeatMsg != "" {
+		return f, e, repeatMsg
+	}
+	if rule != "" {
+		b1, _ := json.Marshal(append([]string{}, ex...))
+		b2, _ := json.Marshal(append([]string{}, rd...))
+		e.rrule, e.exdates, e.rdates = rule, string(b1), string(b2)
 	}
 	if f.AllDay {
 		d0, err0 := time.Parse(dateLayout, f.StartDate)
@@ -720,11 +724,17 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		err = tx.QueryRowContext(r.Context(), `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 				rrule, exdates_json, rdates_json, recurring_master_id, original_start_utc, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			-- A concurrent first edit of the same Occurrence may have made its row since occurrenceAt looked.
+			ON CONFLICT (recurring_master_id, original_start_utc) DO UPDATE SET title = excluded.title, location = excluded.location,
+				description = excluded.description, all_day = excluded.all_day, start_utc = excluded.start_utc, end_utc = excluded.end_utc,
+				start_tzid = excluded.start_tzid, all_day_date = excluded.all_day_date, all_day_end_date = excluded.all_day_end_date,
+				status = 'confirmed', updated_at = excluded.updated_at
+			RETURNING id`,
 			e.calendarID, e.title, e.location, e.description, e.allDay, e.start, e.end, e.tzid, e.date, e.endDate,
 			e.rrule, e.exdates, e.rdates, editOf, original, now).Scan(&row)
 		if err == nil && editOf != nil { // archived Members aren't in the picker: keep the Series'
-			_, err = tx.ExecContext(r.Context(), "INSERT INTO event_members (event_id, member_id) SELECT ?, member_id FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE archived)", row, id)
+			_, err = tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO event_members (event_id, member_id) SELECT ?, member_id FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE archived)", row, id)
 		}
 	} else {
 		err = tx.QueryRowContext(r.Context(), `UPDATE events SET calendar_id = ?, title = ?, location = ?, description = ?, all_day = ?,
@@ -791,7 +801,8 @@ func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 			}
 			_, err = a.DB.ExecContext(r.Context(), `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 					recurring_master_id, original_start_utc, status, updated_at)
-				SELECT calendar_id, title, location, description, all_day, ?, ?, start_tzid, ?, ?, id, ?, 'cancelled', ? FROM events WHERE id = ?`,
+				SELECT calendar_id, title, location, description, all_day, ?, ?, start_tzid, ?, ?, id, ?, 'cancelled', ? FROM events WHERE id = ?
+				ON CONFLICT (recurring_master_id, original_start_utc) DO UPDATE SET status = 'cancelled', updated_at = excluded.updated_at`,
 				start, end, date, endDate, occ.original, a.Now().Unix(), id)
 		}
 	}
