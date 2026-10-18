@@ -84,11 +84,10 @@ type calendarEvent struct {
 	original      int64 // an Occurrence's key (see expand); 0 for a single event
 	title         string
 	allDay        bool
-	start, end    int64  // timed
-	date, endDate string // all-day
-	calendarColor string
-	memberColors  string
-	shown         bool // passes the Member filter
+	start, end    int64    // timed
+	date, endDate string   // all-day
+	colors        []string // its Members' colours, else its calendar's
+	shown         bool     // passes the Member filter; eventsIn returns only these
 }
 
 func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
@@ -122,10 +121,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		ds := d0.Format(dateLayout)
 		day := web.CalendarDay{Date: d0, Today: d0.Equal(today), Faded: view == "month" && d0.Month() != date.Month()}
 		for _, e := range evs {
-			ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: []string{e.calendarColor}}
-			if e.memberColors != "" {
-				ev.Colors = strings.Split(e.memberColors, ",")
-			}
+			ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors}
 			if e.allDay {
 				if e.date > ds || e.endDate <= ds {
 					continue
