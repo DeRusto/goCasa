@@ -17,7 +17,8 @@ Feature parity target is the *function* of SkyLite-UX as used by this household,
 - To-do lists with columns, recurring to-dos, sorting/filtering
 - Shopping lists
 - Chores and rewards (fork feature)
-- Weather header
+- Today page (home): agenda for today and tomorrow, today's Chores, to-dos due today, large weather header
+- Weather: large header on Today, slim pill on every other page
 - Photo screensaver (Immich first, Google Photos later if feasible)
 - PIN protection and per-user PINs/roles (fork feature)
 - Household settings and per-device preferences (theme, default view); no per-Member preferences
@@ -145,7 +146,8 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 
 | Route | Purpose |
 |---|---|
-| `/` | Redirect to this device's default view (stored in the browser), else the household `default_view`. Any main page (calendar view + Member filter, To-dos, Lists, Chores) can be made the device default via "Set as default view on this device" in its view menu (no Lock); a calendar default always opens on today. `?date=`/`?users=` links never change it |
+| `/` | Redirect to this device's default view (stored in the browser), else the household `default_view`. Any main page (Today, calendar view + Member filter, To-dos, Lists, Chores) can be made the device default via "Set as default view on this device" in its view menu (no Lock); a calendar default always opens on today. `?date=`/`?users=` links never change it |
+| `/today` | **Today** page, for everyone (no Member filter). Large header: clock, date, current conditions, today's high/low, 5-day forecast. Agenda for today and tomorrow (today's past events greyed); today's Chores (tap to complete by avatar); to-dos due today. No shopping lists. Default `default_view` for a new household |
 | `/calendar?view=month\|week\|day\|agenda&date=YYYY-MM-DD&users=1,2` | Main calendar; `date`/`users` deep links are shareable (preserves the fork's `?date=` / `?users=` behaviour) |
 | `/calendar/event/new`, `/calendar/event/{id}` | Event dialog (htmx modal): title, calendar, members, all-day, timezone, recurrence editor (preset patterns + custom RRULE string behind "advanced") |
 | `/todos` | Columns, drag-to-reorder (POST reorder endpoint), recurring to-dos, sort/filter by due range and status |
@@ -180,7 +182,7 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 |---|---|
 | Google Calendar | §7.2 — sync in Phase 2a, write-back Phase 2b |
 | iCal/webcal | §7.3, read-only |
-| Open-Meteo | Current conditions + daily forecast for the header; lat/lon in household settings; no API key needed |
+| Open-Meteo | Current conditions + daily forecast; lat/lon and units in household settings; no API key needed. Today shows current conditions, today's high/low and 5 days ahead; every other page shows a slim pill (current temperature + today's high/low) |
 | Immich | API-key auth; album and/or people selection; app proxies thumbnails/originals for the screensaver so no Immich credentials reach the browser |
 | Mealie / Tandoor | Shopping-list mirror: pull list, push checked state/add-item. Raw extra fields preserved for round-trip fidelity (the fork's merge flagged this exact risk — test against a real instance before calling it done) |
 | Google Photos | **Deferred.** No stable general API path equivalent to Immich's; revisit only if a supported route appears. Screensaver ships Immich-only. |
@@ -241,8 +243,8 @@ Todo columns + recurring todos + reorder/sort/filter; shopping lists local-first
 **Accept:** reorder persists across restart; recurring todo completion spawns the next occurrence exactly once; Mealie round-trip preserves item extras.
 
 ### Phase 4 — Screensaver, weather, PIN
-Immich screensaver, Wall display idle/wake, Night mode, camera motion-wake, Open-Meteo header, household + per-user PIN, lock screen.
-**Accept:** an idle Wall display rotates photos with clock/agenda, and a non-Wall-display browser never does; Night mode switches at its hours; motion wakes the screensaver over HTTPS; PIN lock blocks settings; weather renders from cached data with the network cable pulled.
+Immich screensaver, Wall display idle/wake, Night mode, camera motion-wake, Today page, Open-Meteo header and pill, household + per-user PIN, lock screen.
+**Accept:** an idle Wall display rotates photos with clock/agenda, and a non-Wall-display browser never does; Night mode switches at its hours; motion wakes the screensaver over HTTPS; PIN lock blocks settings; Today shows today/tomorrow, today's Chores and due to-dos; weather renders from cached data with the network cable pulled.
 
 ### Phase 5 — Chores/rewards and polish
 Chores, points, rewards/redemptions; preferences polish; ICS export of a calendar view.

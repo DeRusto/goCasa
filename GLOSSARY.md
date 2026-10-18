@@ -113,15 +113,21 @@ _Avoid_: Bonus, penalty, correction
 A shopping list that lives in Mealie and that GoCasa shows and changes. When Mealie is unavailable, it cannot be changed.
 _Avoid_: Synced list, linked list, Mealie list
 
+### Dashboard
+
+**Today**:
+The at-a-glance page for the whole Household: today's and tomorrow's events, today's Chores, to-dos due today and the weather.
+_Avoid_: Home, dashboard, overview
+
+**Default view**:
+The page a device opens on and a Wall display returns to when it wakes. Each device can set its own; otherwise it uses the Household's.
+_Avoid_: Home page, start page, landing view
+
 ### Screensaver
 
 **Wall display**:
 A device switched into always-on dashboard mode. Only a Wall display goes to the screensaver when idle or uses Night mode and camera wake; any other device just browses.
 _Avoid_: Kiosk, display, screen, tablet
-
-**Default view**:
-The page a device opens on and a Wall display returns to when it wakes. Each device can set its own; otherwise it uses the Household's.
-_Avoid_: Home page, start page, landing view
 
 **Night mode**:
 The Household's set hours when a Wall display shows a black screen, or a dim clock, instead of the screensaver.
