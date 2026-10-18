@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,7 +49,9 @@ type EventForm struct {
 	Start, End, TZ               string // timed, in TZ
 	StartDate, EndDate           string // all-day, last day inclusive
 	Members                      map[int64]bool
-	Occurrence                   int64 // set: a This event edit of Series ID's Occurrence
+	Occurrence                   int64  // set: an edit of Series ID's Occurrence
+	Scope                        string // an Occurrence's edit scope: this, following or all
+	Reset                        int    // One-off edits a This and following edit resets, once confirmed
 	Repeat                       string // "", daily, weekly, monthly, yearly or custom
 	Interval                     string
 	ByDay                        map[string]bool // weekly: MO…SU
@@ -240,15 +243,10 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 			<h1>
 				if f.ID == 0 {
 					New event
-				} else if f.Occurrence != 0 {
-					Edit this event
 				} else {
 					Edit event
 				}
 			</h1>
-			if f.Occurrence != 0 {
-				<p>This event: changes apply to this Occurrence only. The Series repeats <code>{ f.Custom }</code>.</p>
-			}
 			<p><a href="/calendar">Back to the calendar</a></p>
 			@formError(errMsg)
 			if len(cals) == 0 {
@@ -288,40 +286,76 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 					<label>First day <input type="date" name="start_date" value={ f.StartDate }/></label>
 					<label>Last day <input type="date" name="end_date" value={ f.EndDate }/></label>
 				</fieldset>
-				if f.Occurrence == 0 {
-					<fieldset>
-						<legend>Repeats</legend>
-						<select name="repeat">
-							for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}, {"custom", "Custom (advanced)"}} {
-								<option value={ o[0] } selected?={ o[0] == f.Repeat }>{ o[1] }</option>
-							}
-						</select>
-						<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1"/></label>
-						<span>On (weekly)</span>
-						for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
-							<label><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
+				<fieldset>
+					<legend>Repeats</legend>
+					<select name="repeat">
+						for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}, {"custom", "Custom (advanced)"}} {
+							<option value={ o[0] } selected?={ o[0] == f.Repeat }>{ o[1] }</option>
 						}
-						<details open?={ f.Repeat == "custom" }>
-							<summary>Advanced</summary>
-							<label>RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
-						</details>
-					</fieldset>
-				}
+					</select>
+					<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1"/></label>
+					<span>On (weekly)</span>
+					for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+						<label><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
+					}
+					<details open?={ f.Repeat == "custom" }>
+						<summary>Advanced</summary>
+						<label>RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
+					</details>
+				</fieldset>
 				<label>Location <input name="location" value={ f.Location } maxlength="200"/></label>
 				<label>Description <textarea name="description" maxlength="5000">{ f.Description }</textarea></label>
+				if f.Occurrence != 0 {
+					<fieldset>
+						<legend>Change</legend>
+						for _, s := range scopes {
+							<label><input type="radio" name="scope" value={ s[0] } checked?={ s[0] == f.Scope }/> { s[1] }</label>
+						}
+						<p>All events changes the title, location, description and Members only. Time and repeat changes use This event or This and following, which starts a new Series here.</p>
+					</fieldset>
+					if f.Reset > 0 {
+						<input type="hidden" name="reset" value={ strconv.Itoa(f.Reset) }/>
+					}
+					@scopePicker()
+				}
 				<button>Save</button>
 			</form>
 			if f.ID != 0 {
 				<form method="post" action={ eventURL(f, "/delete") }>
-					<button>
-						if f.Occurrence != 0 {
-							Delete this event
-						} else {
-							Delete event
+					if f.Occurrence != 0 {
+						for _, s := range scopes {
+							<button name="scope" value={ s[0] }>Delete { strings.ToLower(s[1]) }</button>
 						}
-					</button>
+					} else {
+						<button>Delete event</button>
+					}
 				</form>
 			}
 		</main>
 	}
+}
+
+var scopes = [][2]string{{"this", "This event"}, {"following", "This and following events"}, {"all", "All events"}}
+
+// scopePicker greys out the scopes an edit can't use: This event once the
+// repeat changes, All events once the time or repeat does (spec §7.4).
+templ scopePicker() {
+	<script>
+	(() => {
+		const form = document.currentScript.closest("form");
+		const changed = names => [...form.elements].some(el => names.includes(el.name) && (
+			el.type === "checkbox" ? el.checked !== el.defaultChecked :
+			el.tagName === "SELECT" ? [...el.options].some(o => o.selected !== o.defaultSelected) :
+			el.value !== el.defaultValue));
+		form.addEventListener("input", () => {
+			const rule = changed(["repeat", "interval", "byday", "rrule"]);
+			const time = rule || changed(["all_day", "start", "end", "tz", "start_date", "end_date"]);
+			for (const [scope, off] of [["this", rule], ["all", time]]) {
+				const el = form.querySelector(`[name=scope][value=${scope}]`);
+				el.disabled = off;
+				if (off && el.checked) form.querySelector("[name=scope][value=following]").checked = true;
+			}
+		});
+	})();
+	</script>
 }

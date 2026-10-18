@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -615,6 +616,28 @@ func (a *App) eventForm(ctx context.Context, id int64) (web.EventForm, error) {
 	return f, rows.Err()
 }
 
+// occurrenceForm is the dialog for Occurrence key of Series ss: its One-off
+// edit if it has one, else the Series' own fields at its time.
+func (a *App) occurrenceForm(ctx context.Context, ss storedSeries, key string) (f web.EventForm, occ calendarEvent, editID int64, ok bool, err error) {
+	if occ, editID, ok, err = a.occurrenceAt(ctx, ss, key); err != nil || !ok {
+		return f, occ, editID, ok, err
+	}
+	if f, err = a.eventForm(ctx, cmp.Or(editID, ss.ev.id)); err != nil {
+		return f, occ, editID, ok, err
+	}
+	if editID == 0 {
+		if occ.allDay {
+			last, _ := time.Parse(dateLayout, occ.endDate)
+			f.StartDate, f.EndDate = occ.date, last.AddDate(0, 0, -1).Format(dateLayout)
+		} else {
+			t0, t1 := time.Unix(occ.start, 0).In(ss.zone), time.Unix(occ.end, 0).In(ss.zone)
+			f.Start, f.End, f.StartDate, f.EndDate = t0.Format(localLayout), t1.Format(localLayout), t0.Format(dateLayout), t0.Format(dateLayout)
+		}
+	}
+	f.ID, f.Occurrence, f.Repeat, f.Custom, f.Scope = ss.ev.id, occ.original, "custom", ruleText(ss.s), "this"
+	return f, occ, editID, true, nil
+}
+
 func (a *App) getEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	ss, err := a.loadEvent(r.Context(), id)
@@ -625,16 +648,13 @@ func (a *App) getEvent(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	var f web.EventForm
+	ok := true
 	if ss.s.rule == "" {
-		f, err := a.eventForm(r.Context(), id)
-		if err != nil {
-			a.serverError(w, r, err)
-			return
-		}
-		a.eventPage(w, r, http.StatusOK, f, "")
-		return
+		f, err = a.eventForm(r.Context(), id)
+	} else {
+		f, _, _, ok, err = a.occurrenceForm(r.Context(), ss, r.URL.Query().Get("occurrence"))
 	}
-	occ, editID, ok, err := a.occurrenceAt(r.Context(), ss, r.URL.Query().Get("occurrence"))
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -642,27 +662,31 @@ func (a *App) getEvent(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	f, err := a.eventForm(r.Context(), cmp.Or(editID, id))
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	if editID == 0 { // the Series' own fields at this Occurrence's time
-		if occ.allDay {
-			last, _ := time.Parse(dateLayout, occ.endDate)
-			f.StartDate, f.EndDate = occ.date, last.AddDate(0, 0, -1).Format(dateLayout)
-		} else {
-			t0, t1 := time.Unix(occ.start, 0).In(ss.zone), time.Unix(occ.end, 0).In(ss.zone)
-			f.Start, f.End, f.StartDate, f.EndDate = t0.Format(localLayout), t1.Format(localLayout), t0.Format(dateLayout), t0.Format(dateLayout)
-		}
-	}
-	f.ID, f.Occurrence, f.Custom = id, occ.original, ruleText(ss.s)
 	a.eventPage(w, r, http.StatusOK, f, "")
 }
 
+// allEdit is an All events edit: the text fields it changes (nil if not), whether
+// it changes the Members, and the edited Occurrence's One-off edit row (0 if none).
+type allEdit struct {
+	title, location, description any
+	members                      bool
+	editID                       int64
+}
+
+// storedRule is s's rule, EXDATEs and RDATEs as eventRow holds them.
+func storedRule(s series) (rule any, exdates, rdates string) {
+	ex, _ := json.Marshal(append([]string{}, s.exdates...))
+	rd, _ := json.Marshal(append([]string{}, s.rdates...))
+	return s.rule, string(ex), string(rd)
+}
+
 // saveEvent creates (id 0) or updates a single event and its Members. On a
-// Series it is a This event edit: it creates or updates that Occurrence's One-off edit row.
-// shortcut: a Series' rule can't be changed and the whole Series can't be deleted; #32 adds the other edit scopes.
+// Series it edits an Occurrence in the scope the form picks (spec §7.4):
+//   - "this" (the default) creates or updates its One-off edit row;
+//   - "following" Splits the Series there, or from its first Occurrence edits it
+//     all, resetting later One-off edits once the form confirms their count;
+//   - "all" changes title, location, description and Members only, on the Series
+//     and on each One-off edit that hadn't changed that field.
 func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if r.PathValue("id") != "" && id <= 0 {
@@ -680,12 +704,19 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	f, e, msg := a.parseEventForm(r, ss.s.rule == "")
+	r.ParseForm()
+	// On a Series the dialog posts its rule back as custom text: unchanged, it is left as stored.
+	sameRule := ss.s.rule != "" && (!r.PostForm.Has("repeat") ||
+		r.PostFormValue("repeat") == "custom" && strings.TrimSpace(strings.ReplaceAll(r.PostFormValue("rrule"), "\r\n", "\n")) == ruleText(ss.s))
+	f, e, msg := a.parseEventForm(r, !sameRule)
 	f.ID = id
+	status := http.StatusBadRequest
 	row := id                // the row to update; 0 inserts
 	var editOf, original any // set for a This event edit: its Series and Occurrence
+	var split, resetFrom any // set for This and following: the Occurrence a Split starts at; the first original whose One-off edits go
+	var all *allEdit         // set for All events
 	if ss.s.rule != "" {
-		occ, editID, ok, err := a.occurrenceAt(r.Context(), ss, r.URL.Query().Get("occurrence"))
+		shown, occ, editID, ok, err := a.occurrenceForm(r.Context(), ss, r.URL.Query().Get("occurrence"))
 		if err != nil {
 			a.serverError(w, r, err)
 			return
@@ -693,8 +724,93 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		row, editOf, original = editID, id, occ.original
-		e.calendarID, f.CalendarID, f.Occurrence, f.Custom = ss.calendarID, ss.calendarID, occ.original, ruleText(ss.s)
+		e.calendarID, f.CalendarID, f.Occurrence, f.Scope = ss.calendarID, ss.calendarID, occ.original, cmp.Or(r.PostFormValue("scope"), "this")
+		rerule := !sameRule
+		if sameRule {
+			e.rrule, e.exdates, e.rdates = storedRule(ss.s)
+			f.Repeat, f.Custom = "custom", ruleText(ss.s)
+		}
+		retimed := f.AllDay != shown.AllDay || f.AllDay && (f.StartDate != shown.StartDate || f.EndDate != shown.EndDate) ||
+			!f.AllDay && (f.Start != shown.Start || f.End != shown.End || f.TZ != shown.TZ)
+		refuse := func(m string) {
+			if msg == "" {
+				msg = m
+			}
+		}
+		switch f.Scope {
+		case "this":
+			if rerule {
+				refuse("A repeat change applies to This and following events.")
+			}
+			row, editOf, original = editID, id, occ.original
+			e.rrule, e.exdates, e.rdates = nil, "[]", "[]"
+		case "all":
+			if rerule || retimed {
+				refuse("All events changes only the title, location, description and Members; change times or repeats with This event or This and following.")
+			}
+			// Only the fields changed in the dialog apply, so opening a One-off edit doesn't spread its own changes.
+			all = &allEdit{editID: editID}
+			for _, c := range []struct {
+				to       *any
+				got, was string
+			}{{&all.title, f.Title, shown.Title}, {&all.location, f.Location, shown.Location}, {&all.description, f.Description, shown.Description}} {
+				if c.got != c.was {
+					*c.to = c.got
+				}
+			}
+			ms, err := a.activeMembers(r)
+			if err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+			for _, m := range ms { // archived Members aren't in the picker
+				all.members = all.members || f.Members[m.ID] != shown.Members[m.ID]
+			}
+		case "following":
+			first, err := a.startsAt(r.Context(), ss, occ.original)
+			var later int
+			if err == nil {
+				err = a.DB.QueryRowContext(r.Context(), "SELECT count(*) FROM events WHERE recurring_master_id = ? AND original_start_utc > ?", id, occ.original).Scan(&later)
+			}
+			if err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+			if later > 0 && r.PostFormValue("reset") != strconv.Itoa(later) && msg == "" {
+				f.Reset, status = later, http.StatusConflict
+				refuse(fmt.Sprintf("This and following resets the %d One-off edits after this event. Save again to go ahead.", later))
+			}
+			resetFrom = occ.original
+			if !first && msg == "" {
+				row, split = 0, occ.original
+				// The new Series takes only the RDATEs from the Split on, and an unchanged COUNT less the Occurrences before it.
+				var rds []string
+				zone := ss.zone
+				if f.AllDay {
+					zone = nil
+				} else if zone, err = time.LoadLocation(f.TZ); err != nil {
+					a.serverError(w, r, err)
+					return
+				}
+				if rule, ok := e.rrule.(string); ok && json.Unmarshal([]byte(e.rdates), &rds) == nil {
+					_, rds = splitRDates(rds, zone, occ.original)
+					b, _ := json.Marshal(append([]string{}, rds...))
+					e.rdates = string(b)
+					if m := countRE.FindStringSubmatch(rule); m != nil && sameRule {
+						to := time.Unix(occ.original, 0).UTC()
+						before, err := expand(ss.ev, series{rule: ss.s.rule}, ss.zone, nil, to.AddDate(-horizonYears, 0, 0), to)
+						if err != nil {
+							a.serverError(w, r, err)
+							return
+						}
+						n, _ := strconv.Atoi(m[1])
+						e.rrule = countRE.ReplaceAllString(rule, "COUNT="+strconv.Itoa(max(n-len(before), 1)))
+					}
+				}
+			}
+		default:
+			refuse("Pick which events to change.")
+		}
 	}
 	if msg == "" {
 		var ok bool
@@ -707,7 +823,7 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if msg != "" {
-		a.eventPage(w, r, http.StatusBadRequest, f, msg)
+		a.eventPage(w, r, status, f, msg)
 		return
 	}
 	tx, err := a.DB.BeginTx(r.Context(), nil)
@@ -718,8 +834,52 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 	now := a.Now().Unix()
 	typ := "updated"
-	if row == 0 {
-		if editOf == nil {
+	rows := []int64{row} // the rows whose Members become e.members
+	switch {
+	case split != nil:
+		err = a.endSeriesBefore(r.Context(), tx, ss, split.(int64))
+	case resetFrom != nil:
+		_, err = tx.ExecContext(r.Context(), "DELETE FROM events WHERE recurring_master_id = ? AND original_start_utc >= ?", id, resetFrom)
+	}
+	switch {
+	case err != nil:
+	case all != nil:
+		rows = nil // the rows whose Members follow: none unless they changed
+		if all.members {
+			rows = []int64{id}
+			if all.editID != 0 {
+				rows = append(rows, all.editID)
+			}
+			// One-off edits with the Series' Members follow its new ones.
+			var followers *sql.Rows
+			followers, err = tx.QueryContext(r.Context(), `SELECT id FROM events e WHERE recurring_master_id = ?1
+				AND (SELECT group_concat(member_id, ',' ORDER BY member_id) FROM event_members WHERE event_id = e.id)
+					IS (SELECT group_concat(member_id, ',' ORDER BY member_id) FROM event_members WHERE event_id = ?1)`, id)
+			if err == nil {
+				for followers.Next() {
+					var fid int64
+					if err = followers.Scan(&fid); err != nil {
+						break
+					}
+					rows = append(rows, fid)
+				}
+				followers.Close()
+				err = cmp.Or(err, followers.Err())
+			}
+		}
+		if err == nil { // One-off edits keep the fields they changed
+			_, err = tx.ExecContext(r.Context(), `UPDATE events SET title = CASE WHEN title = m.t THEN coalesce(?1, title) ELSE title END,
+					location = CASE WHEN location = m.l THEN coalesce(?2, location) ELSE location END,
+					description = CASE WHEN description = m.d THEN coalesce(?3, description) ELSE description END, updated_at = ?4
+				FROM (SELECT title AS t, location AS l, description AS d FROM events WHERE id = ?5) AS m
+				WHERE recurring_master_id = ?5`, all.title, all.location, all.description, now, id)
+		}
+		if err == nil { // the Series, and the One-off edit the dialog showed
+			_, err = tx.ExecContext(r.Context(), "UPDATE events SET title = coalesce(?, title), location = coalesce(?, location), description = coalesce(?, description), updated_at = ? WHERE id IN (?, ?)",
+				all.title, all.location, all.description, now, id, all.editID)
+		}
+	case row == 0:
+		if id == 0 {
 			typ = "created"
 		}
 		err = tx.QueryRowContext(r.Context(), `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
@@ -733,10 +893,11 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 			RETURNING id`,
 			e.calendarID, e.title, e.location, e.description, e.allDay, e.start, e.end, e.tzid, e.date, e.endDate,
 			e.rrule, e.exdates, e.rdates, editOf, original, now).Scan(&row)
-		if err == nil && editOf != nil { // archived Members aren't in the picker: keep the Series'
+		rows[0] = row
+		if err == nil && id != 0 { // archived Members aren't in the picker: keep the Series'
 			_, err = tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO event_members (event_id, member_id) SELECT ?, member_id FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE archived)", row, id)
 		}
-	} else {
+	default:
 		err = tx.QueryRowContext(r.Context(), `UPDATE events SET calendar_id = ?, title = ?, location = ?, description = ?, all_day = ?,
 				start_utc = ?, end_utc = ?, start_tzid = ?, all_day_date = ?, all_day_end_date = ?, rrule = ?, exdates_json = ?, rdates_json = ?, updated_at = ?
 			WHERE id = ? AND `+localCalendar+" RETURNING id",
@@ -746,15 +907,17 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	// Archived Members are hidden from the picker, so they stay on the event.
-	if _, err := tx.ExecContext(r.Context(), "DELETE FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", row); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	for _, m := range e.members {
-		if _, err := tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO event_members (event_id, member_id) SELECT ?, id FROM members WHERE id = ? AND NOT archived", row, m); err != nil {
+	for _, row := range rows {
+		// Archived Members are hidden from the picker, so they stay on the event.
+		if _, err := tx.ExecContext(r.Context(), "DELETE FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", row); err != nil {
 			a.serverError(w, r, err)
 			return
+		}
+		for _, m := range e.members {
+			if _, err := tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO event_members (event_id, member_id) SELECT ?, id FROM members WHERE id = ? AND NOT archived", row, m); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -765,8 +928,44 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/calendar?date="+e.firstDay, http.StatusSeeOther)
 }
 
-// deleteEvent deletes a single event; on a Series it is a This event delete,
-// which cancels that Occurrence.
+// startsAt reports whether original o is Series ss' first Occurrence: none
+// comes before it that hasn't been deleted.
+func (a *App) startsAt(ctx context.Context, ss storedSeries, o int64) (bool, error) {
+	rows, err := a.DB.QueryContext(ctx, "SELECT original_start_utc FROM events WHERE recurring_master_id = ? AND status = 'cancelled' AND original_start_utc < ?", ss.ev.id, o)
+	if err != nil {
+		return false, err
+	}
+	var deleted []oneOff
+	for rows.Next() {
+		d := oneOff{cancelled: true}
+		if err := rows.Scan(&d.original); err != nil {
+			rows.Close()
+			return false, err
+		}
+		deleted = append(deleted, d)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	to := time.Unix(o, 0).UTC()
+	occs, err := expand(ss.ev, ss.s, ss.zone, deleted, to.AddDate(-horizonYears, 0, 0), to)
+	return len(occs) == 0, err
+}
+
+// endSeriesBefore ends Series ss just before its Occurrence o and drops its One-off edits from o on.
+func (a *App) endSeriesBefore(ctx context.Context, tx *sql.Tx, ss storedSeries, o int64) error {
+	rule, _, rd := storedRule(endBefore(ss.s, ss.zone, o))
+	if _, err := tx.ExecContext(ctx, "UPDATE events SET rrule = ?, rdates_json = ?, updated_at = ? WHERE id = ?", rule, rd, a.Now().Unix(), ss.ev.id); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "DELETE FROM events WHERE recurring_master_id = ? AND original_start_utc >= ?", ss.ev.id, o)
+	return err
+}
+
+// deleteEvent deletes a single event. On a Series, scope "this" (the default)
+// cancels that Occurrence, "following" ends the Series before it (deleting it
+// if that is its first Occurrence), and "all" deletes the Series.
 func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	ss, err := a.loadEvent(r.Context(), id)
@@ -789,10 +988,28 @@ func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		typ = "updated"
-		if editID != 0 {
+		scope := cmp.Or(r.PostFormValue("scope"), "this")
+		first := scope == "all"
+		if scope == "following" {
+			if first, err = a.startsAt(r.Context(), ss, occ.original); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+		}
+		switch {
+		case scope != "this" && scope != "following" && scope != "all":
+			http.Error(w, "Pick which events to delete.", http.StatusBadRequest)
+			return
+		case first:
+			_, err = a.DB.ExecContext(r.Context(), "DELETE FROM events WHERE id = ?", id)
+		case scope == "following":
+			typ = "updated"
+			err = a.inTx(r.Context(), func(tx *sql.Tx) error { return a.endSeriesBefore(r.Context(), tx, ss, occ.original) })
+		case editID != 0:
+			typ = "updated"
 			_, err = a.DB.ExecContext(r.Context(), "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), editID)
-		} else { // a cancelled row keeps the Occurrence's times so the event CHECKs hold
+		default: // a cancelled row keeps the Occurrence's times so the event CHECKs hold
+			typ = "updated"
 			var start, end, date, endDate any
 			if occ.allDay {
 				date, endDate = occ.date, occ.endDate
@@ -812,4 +1029,17 @@ func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	a.publish(typ, "event", id)
 	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
+}
+
+// inTx runs fn in a transaction, committing if it succeeds.
+func (a *App) inTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := a.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

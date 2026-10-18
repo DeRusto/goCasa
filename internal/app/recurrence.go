@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/teambition/rrule-go"
@@ -28,7 +29,10 @@ type oneOff struct {
 	ev        calendarEvent
 }
 
-var untilUTC = regexp.MustCompile(`UNTIL=\d{8}T\d{6}Z`)
+var (
+	untilUTC = regexp.MustCompile(`UNTIL=\d{8}T\d{6}Z`)
+	countRE  = regexp.MustCompile(`COUNT=(\d+)`)
+)
 
 // floating is t's wall clock as a UTC time. Expanding there keeps 09:00 at 09:00
 // across DST; each result is put back in the event's zone afterwards.
@@ -146,4 +150,35 @@ func expand(master calendarEvent, s series, zone *time.Location, oneOffs []oneOf
 	}
 	slices.SortStableFunc(out, func(x, y calendarEvent) int { return cmp.Compare(key(x), key(y)) })
 	return out[:min(len(out), maxOccurrences)], nil
+}
+
+// endBefore is s ending just before the Occurrence whose original is o: an
+// UNTIL replaces any COUNT or UNTIL, and RDATEs from o on are dropped.
+func endBefore(s series, zone *time.Location, o int64) series {
+	var parts []string
+	for _, p := range strings.Split(s.rule, ";") {
+		if k, _, _ := strings.Cut(p, "="); k != "COUNT" && k != "UNTIL" {
+			parts = append(parts, p)
+		}
+	}
+	// For all-day, originals are UTC midnights, which expand compares UNTIL with directly.
+	out := series{rule: strings.Join(append(parts, "UNTIL="+time.Unix(o-1, 0).UTC().Format("20060102T150405Z")), ";"), exdates: s.exdates}
+	out.rdates, _ = splitRDates(s.rdates, zone, o)
+	return out
+}
+
+// splitRDates is RDATEs ds (in zone, or dates when it is nil) before original o, and from it on.
+func splitRDates(ds []string, zone *time.Location, o int64) (before, from []string) {
+	for _, d := range ds {
+		t, err := time.Parse(dateLayout, d)
+		if zone != nil {
+			t, err = parseLocal(d, zone)
+		}
+		if err == nil && t.Unix() < o {
+			before = append(before, d)
+		} else if err == nil {
+			from = append(from, d)
+		}
+	}
+	return before, from
 }

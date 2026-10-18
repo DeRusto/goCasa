@@ -435,3 +435,184 @@ func TestFormErrorKeepsTheRepeat(t *testing.T) {
 		t.Fatalf("title error = %d, lost the repeat", code)
 	}
 }
+
+func TestThisAndFollowingDeleteEndsTheSeries(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC"), "daily"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+	h.Post(t, occurrence(1, at(19), ""), timed("Late walk", "2026-03-19T18:00", "2026-03-19T19:00", "UTC"))
+	if code, _ := h.Post(t, occurrence(1, at(17), "/delete"), url.Values{"scope": {"following"}}); code != http.StatusOK {
+		t.Fatalf("This and following delete = %d", code)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
+	for d, want := range map[string]bool{"2026-03-15": true, "2026-03-16": true, "2026-03-17": false, "2026-03-19": false, "2026-03-21": false} {
+		if got := strings.Contains(day(t, page, d), "walk") || strings.Contains(day(t, page, d), "Walk"); got != want {
+			t.Errorf("%s shows Walk = %v, want %v", d, got, want)
+		}
+	}
+	// On the first Occurrence it deletes the whole Series.
+	if code, _ := h.Post(t, occurrence(1, at(15), "/delete"), url.Values{"scope": {"following"}}); code != http.StatusOK {
+		t.Fatalf("delete from the first Occurrence = %d", code)
+	}
+	if code, _ := h.Get(t, "/calendar/event/1"); code != http.StatusNotFound {
+		t.Errorf("Series after deleting from its first Occurrence = %d, want 404", code)
+	}
+}
+
+func TestAllEventsDeleteRemovesTheSeries(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(allDay("Bins", "2026-03-15", "2026-03-15"), "weekly"))
+	if code, _ := h.Post(t, "/calendar/event/1/delete?occurrence="+strconv.FormatInt(time.Date(2026, 3, 22, 0, 0, 0, 0, time.UTC).Unix(), 10), url.Values{"scope": {"all"}}); code != http.StatusOK {
+		t.Fatalf("All events delete = %d", code)
+	}
+	if _, page := h.Get(t, "/calendar?view=month&date=2026-03-15"); strings.Contains(page, "Bins") {
+		t.Error("All events delete left Occurrences")
+	}
+}
+
+func TestSplitResetsLaterOneOffEditsAfterAWarning(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC", "2"), "daily"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+	h.Post(t, occurrence(1, at(16), ""), timed("Early walk", "2026-03-16T06:00", "2026-03-16T07:00", "UTC")) // before the Split: kept
+	h.Post(t, occurrence(1, at(18), ""), timed("Late walk", "2026-03-18T18:00", "2026-03-18T19:00", "UTC"))
+	h.Post(t, occurrence(1, at(20), "/delete"), nil)
+
+	if _, body := h.Get(t, occurrence(1, at(17), "")); !strings.Contains(body, `value="following"`) || !strings.Contains(body, `value="all"`) {
+		t.Fatalf("dialog has no scope picker: %q", body)
+	}
+	run := repeating(timed("Run", "2026-03-17T07:00", "2026-03-17T08:00", "UTC", "3"), "daily")
+	run.Set("scope", "following")
+	code, body := h.Post(t, occurrence(1, at(17), ""), run)
+	if code != http.StatusConflict || !strings.Contains(body, "2 One-off edits") {
+		t.Fatalf("Split without the warning = %d %q", code, body)
+	}
+	run.Set("reset", "2")
+	if code, body := h.Post(t, occurrence(1, at(17), ""), run); code != http.StatusOK {
+		t.Fatalf("confirmed Split = %d %q", code, body)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
+	for d, want := range map[string]string{"2026-03-15": "09:00–10:00 Walk", "2026-03-16": "06:00–07:00 Early walk", "2026-03-17": "07:00–08:00 Run", "2026-03-18": "07:00–08:00 Run", "2026-03-20": "07:00–08:00 Run"} {
+		if s := day(t, page, d); !strings.Contains(s, want) || strings.Count(s, "<li>") != 1 {
+			t.Errorf("%s = %q, want only %q", d, s, want)
+		}
+	}
+	// The halves aren't linked: the new Series is its own event and the old one ends.
+	if _, body := h.Get(t, "/calendar/event/1"); !strings.Contains(body, "UNTIL=20260317T085959Z") {
+		t.Errorf("old Series does not end before the Split: %q", body)
+	}
+	if !strings.Contains(page, `href="/calendar/event/5?occurrence=`) {
+		t.Error("the new Series is not its own event")
+	}
+}
+
+func TestSplitOnTheFirstOccurrenceCoversEverything(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(allDay("Bins", "2026-03-15", "2026-03-15"), "weekly"))
+	first := "/calendar/event/1?occurrence=" + strconv.FormatInt(time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC).Unix(), 10)
+	f := repeating(allDay("Recycling", "2026-03-16", "2026-03-16"), "weekly")
+	f.Set("scope", "following")
+	if code, body := h.Post(t, first, f); code != http.StatusOK {
+		t.Fatalf("Split on the first Occurrence = %d %q", code, body)
+	}
+	_, page := h.Get(t, "/calendar?view=month&date=2026-03-15")
+	if strings.Contains(page, "Bins") || !strings.Contains(day(t, page, "2026-03-16"), "Recycling") || !strings.Contains(day(t, page, "2026-03-23"), "Recycling") {
+		t.Errorf("Split on the first Occurrence left the old Series: %q", page)
+	}
+	var n int
+	h.App.DB.QueryRow("SELECT count(*) FROM events").Scan(&n)
+	if n != 1 {
+		t.Errorf("%d event rows, want the one Series", n)
+	}
+}
+
+func TestAllEventsEditKeepsOneOffEditsOwnChanges(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC", "2"), "daily"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+	h.Post(t, occurrence(1, at(16), ""), timed("Long walk", "2026-03-16T09:00", "2026-03-16T10:00", "UTC", "2")) // own title
+	h.Post(t, occurrence(1, at(17), ""), timed("Walk", "2026-03-17T11:00", "2026-03-17T12:00", "UTC", "3"))      // own time and Member
+
+	all := timed("Hike", "2026-03-18T09:00", "2026-03-18T10:00", "UTC", "1")
+	all.Set("scope", "all")
+	if code, body := h.Post(t, occurrence(1, at(18), ""), all); code != http.StatusOK {
+		t.Fatalf("All events edit = %d %q", code, body)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
+	for d, want := range map[string]string{"2026-03-15": "09:00–10:00 Hike", "2026-03-16": "09:00–10:00 Long walk", "2026-03-17": "11:00–12:00 Hike", "2026-03-20": "09:00–10:00 Hike"} {
+		if !strings.Contains(day(t, page, d), want) {
+			t.Errorf("%s = %q, want %q", d, day(t, page, d), want)
+		}
+	}
+	// Ada's filter: the past and the title-only edit follow the new Members; Carol keeps the 17th.
+	_, page = h.Get(t, "/calendar?view=week&date=2026-03-15&users=1")
+	if !strings.Contains(day(t, page, "2026-03-15"), "Hike") || !strings.Contains(day(t, page, "2026-03-16"), "Long walk") || strings.Contains(day(t, page, "2026-03-17"), "Hike") {
+		t.Errorf("Members did not follow All events: %q", page)
+	}
+
+	moved := timed("Hike", "2026-03-18T10:00", "2026-03-18T11:00", "UTC", "1")
+	moved.Set("scope", "all")
+	if code, _ := h.Post(t, occurrence(1, at(18), ""), moved); code != http.StatusBadRequest {
+		t.Errorf("All events time change = %d, want 400", code)
+	}
+	weekly := repeating(timed("Hike", "2026-03-18T09:00", "2026-03-18T10:00", "UTC", "1"), "weekly")
+	if code, _ := h.Post(t, occurrence(1, at(18), ""), weekly); code != http.StatusBadRequest {
+		t.Errorf("This event repeat change = %d, want 400", code)
+	}
+}
+
+func TestAllEventsFromAOneOffEditAppliesOnlyWhatChanged(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC", "2"), "daily"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+	h.Post(t, occurrence(1, at(16), ""), timed("Long walk", "2026-03-16T09:00", "2026-03-16T10:00", "UTC", "3"))
+	f := timed("Long walk", "2026-03-16T09:00", "2026-03-16T10:00", "UTC", "3")
+	f.Set("location", "The park")
+	f.Set("scope", "all")
+	if code, body := h.Post(t, occurrence(1, at(16), ""), f); code != http.StatusOK {
+		t.Fatalf("All events edit = %d %q", code, body)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15&users=2")
+	if !strings.Contains(day(t, page, "2026-03-18"), "09:00–10:00 Walk") || strings.Contains(page, "Long walk") {
+		t.Errorf("the One-off edit's own title and Members spread to the Series: %q", page)
+	}
+	for _, d := range []int{15, 16} {
+		if _, body := h.Get(t, occurrence(1, at(d), "")); !strings.Contains(body, `value="The park"`) {
+			t.Errorf("the %dth lacks the new location", d)
+		}
+	}
+}
+
+func TestSplitKeepsCountAndRDatesOnTheirOwnHalf(t *testing.T) {
+	h := household(t)
+	// Five days from the 15th, plus an extra at 18:00 on the 16th, before the Split.
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC"), "custom", "rrule", "RRULE:FREQ=DAILY;COUNT=5\nRDATE:20260316T180000"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+	f := repeating(timed("Run", "2026-03-17T09:00", "2026-03-17T10:00", "UTC"), "custom", "rrule", "RRULE:FREQ=DAILY;COUNT=5\r\nRDATE:20260316T180000")
+	f.Set("scope", "following")
+	if code, body := h.Post(t, occurrence(1, at(17), ""), f); code != http.StatusOK {
+		t.Fatalf("Split = %d %q", code, body)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
+	if d := day(t, page, "2026-03-16"); strings.Count(d, "<li>") != 2 || strings.Contains(d, "Run") {
+		t.Errorf("16th = %q, want the old half's two Walks", d)
+	}
+	for d, want := range map[string]bool{"2026-03-19": true, "2026-03-20": false} {
+		if got := strings.Contains(day(t, page, d), "Run"); got != want {
+			t.Errorf("%s shows Run = %v, want %v (COUNT counts the whole Series)", d, got, want)
+		}
+	}
+}
+
+func TestDeletedFirstOccurrencesDontCountAsBefore(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC"), "daily"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+	h.Post(t, occurrence(1, at(15), "/delete"), nil)
+	h.Post(t, occurrence(1, at(16), "/delete"), url.Values{"scope": {"following"}})
+	var n int
+	h.App.DB.QueryRow("SELECT count(*) FROM events").Scan(&n)
+	if n != 0 {
+		t.Errorf("%d event rows left, want the Series deleted", n)
+	}
+}

@@ -163,3 +163,19 @@ func TestExpandCapCountsOneOffEdits(t *testing.T) {
 		t.Fatalf("%d occurrences, %v; want %d", len(evs), err, maxOccurrences)
 	}
 }
+
+func TestEndBeforeReplacesCountAndDropsLaterRDates(t *testing.T) {
+	london := zone(t, "Europe/London")
+	o := time.Date(2026, 6, 10, 9, 0, 0, 0, london).Unix() // 08:00 UTC
+	got := endBefore(series{rule: "FREQ=DAILY;COUNT=10;INTERVAL=1", rdates: []string{"2026-06-09T09:00", "2026-06-10T09:00", "2026-06-12T09:00"}}, london, o)
+	if want := "FREQ=DAILY;INTERVAL=1;UNTIL=20260610T075959Z"; got.rule != want {
+		t.Errorf("rule = %q, want %q", got.rule, want)
+	}
+	if len(got.rdates) != 1 || got.rdates[0] != "2026-06-09T09:00" {
+		t.Errorf("rdates = %v, want only the one before the Split", got.rdates)
+	}
+	day := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC).Unix()
+	if got := endBefore(series{rule: "FREQ=WEEKLY;UNTIL=20270101T000000Z", rdates: []string{"2026-06-10"}}, nil, day); got.rule != "FREQ=WEEKLY;UNTIL=20260609T235959Z" || len(got.rdates) != 0 {
+		t.Errorf("all-day = %+v", got)
+	}
+}
