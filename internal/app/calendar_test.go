@@ -3,6 +3,7 @@ package app_test
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -276,5 +277,143 @@ func TestTitleLengthCap(t *testing.T) {
 		if code, _ := h.Post(t, "/calendar/event", timed(title, "2026-03-15T09:00", "2026-03-15T10:00", "UTC")); code != http.StatusBadRequest {
 			t.Errorf("title of %d runes = %d, want 400", len([]rune(title)), code)
 		}
+	}
+}
+
+func repeating(f url.Values, repeat string, extra ...string) url.Values {
+	f.Set("repeat", repeat)
+	for i := 0; i+1 < len(extra); i += 2 {
+		f.Add(extra[i], extra[i+1])
+	}
+	return f
+}
+
+// occurrence is the path of a Series' Occurrence that starts at original.
+func occurrence(id int, original time.Time, action string) string {
+	return "/calendar/event/" + strconv.Itoa(id) + action + "?occurrence=" + strconv.FormatInt(original.Unix(), 10)
+}
+
+func TestPresetSeriesRepeat(t *testing.T) {
+	h := household(t)
+	// Sunday 15 March 2026; weekly on Mondays and Wednesdays, every other week.
+	addEvent(t, h, repeating(timed("Swim", "2026-03-16T07:00", "2026-03-16T08:00", "UTC"), "weekly", "interval", "2", "byday", "MO", "byday", "WE"))
+	addEvent(t, h, repeating(allDay("Bins", "2026-03-15", "2026-03-15"), "daily", "interval", "3"))
+	_, page := h.Get(t, "/calendar?view=month&date=2026-03-15")
+	for d, want := range map[string]bool{"2026-03-16": true, "2026-03-18": true, "2026-03-23": false, "2026-03-30": true, "2026-03-13": false} {
+		if got := strings.Contains(day(t, page, d), "07:00–08:00 Swim"); got != want {
+			t.Errorf("%s shows Swim = %v, want %v", d, got, want)
+		}
+	}
+	for d, want := range map[string]bool{"2026-03-15": true, "2026-03-16": false, "2026-03-18": true, "2026-03-21": true, "2026-03-14": false} {
+		if got := strings.Contains(day(t, page, d), "Bins"); got != want {
+			t.Errorf("%s shows Bins = %v, want %v", d, got, want)
+		}
+	}
+	if !strings.Contains(page, occurrence(1, time.Date(2026, 3, 30, 7, 0, 0, 0, time.UTC), "")) {
+		t.Error("an Occurrence does not link to its own dialog")
+	}
+	for _, f := range []url.Values{
+		repeating(timed("x", "2026-03-16T07:00", "2026-03-16T08:00", "UTC"), "weekly", "interval", "0"),
+		repeating(timed("x", "2026-03-16T07:00", "2026-03-16T08:00", "UTC"), "weekly", "byday", "XX"),
+		repeating(timed("x", "2026-03-16T07:00", "2026-03-16T08:00", "UTC"), "fortnightly"),
+	} {
+		if code, _ := h.Post(t, "/calendar/event", f); code != http.StatusBadRequest {
+			t.Errorf("%v = %d, want 400", f, code)
+		}
+	}
+}
+
+func TestCustomRule(t *testing.T) {
+	h := household(t)
+	// Second Tuesday of each month, not in April, plus an extra on Thursday 19 March.
+	addEvent(t, h, repeating(timed("Book club", "2026-03-10T19:00", "2026-03-10T21:00", "Europe/London"), "custom",
+		"rrule", "RRULE:FREQ=MONTHLY;BYDAY=2TU\nEXDATE:20260414T190000\nRDATE:20260319T190000"))
+	_, page := h.Get(t, "/calendar?view=agenda&date=2026-03-01")
+	_, page2 := h.Get(t, "/calendar?view=agenda&date=2026-03-31")
+	all := page + page2
+	for _, d := range []string{"2026-03-10", "2026-03-19"} {
+		if !strings.Contains(day(t, page, d), "19:00–21:00 Book club") {
+			t.Errorf("%s lacks Book club", d)
+		}
+	}
+	if strings.Contains(all, `data-date="2026-04-14"`) {
+		t.Error("EXDATE still shows")
+	}
+	if _, body := h.Get(t, "/calendar/event/1"); !strings.Contains(body, "FREQ=MONTHLY;BYDAY=2TU") || !strings.Contains(body, "EXDATE:20260414T190000") {
+		t.Errorf("dialog loses the custom rule: %q", body)
+	}
+	for _, rule := range []string{"RRULE:FREQ=FORTNIGHTLY", "RRULE:FREQ=HOURLY", "RRULE:FREQ=DAILY\nEXDATE:tomorrow", "SOMETHING:ELSE"} {
+		if code, _ := h.Post(t, "/calendar/event", repeating(timed("x", "2026-03-10T19:00", "2026-03-10T20:00", "UTC"), "custom", "rrule", rule)); code != http.StatusBadRequest {
+			t.Errorf("rule %q = %d, want 400", rule, code)
+		}
+	}
+}
+
+func TestThisEventEditAndDelete(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC", "2"), "daily"))
+	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
+
+	if code, body := h.Get(t, occurrence(1, at(16), "")); code != http.StatusOK || !strings.Contains(body, `value="2026-03-16T09:00"`) || !strings.Contains(body, "This event") {
+		t.Fatalf("Occurrence dialog = %d %q", code, body)
+	}
+	moved := timed("Long walk", "2026-03-16T11:00", "2026-03-16T13:00", "UTC", "3")
+	if code, body := h.Post(t, occurrence(1, at(16), ""), moved); code != http.StatusOK {
+		t.Fatalf("This event edit = %d %q", code, body)
+	}
+	if code, _ := h.Post(t, occurrence(1, at(17), "/delete"), nil); code != http.StatusOK {
+		t.Fatalf("This event delete = %d", code)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
+	if d := day(t, page, "2026-03-16"); !strings.Contains(d, "11:00–13:00 Long walk") || strings.Contains(d, "Walk<") || strings.Contains(d, "09:00") {
+		t.Errorf("edited Occurrence: %q", d)
+	}
+	if d := day(t, page, "2026-03-17"); strings.Contains(d, "Walk") {
+		t.Errorf("deleted Occurrence still shows: %q", d)
+	}
+	for _, d := range []string{"2026-03-15", "2026-03-18", "2026-03-21"} {
+		if !strings.Contains(day(t, page, d), "09:00–10:00 Walk") {
+			t.Errorf("%s lost its Occurrence", d)
+		}
+	}
+	// Members follow the One-off edit: Carol's filter shows only the edited day.
+	_, page = h.Get(t, "/calendar?view=week&date=2026-03-15&users=3")
+	if !strings.Contains(day(t, page, "2026-03-16"), "Long walk") || strings.Contains(day(t, page, "2026-03-18"), "Walk") {
+		t.Error("Member filter ignores the One-off edit's Members")
+	}
+
+	// Editing it again updates the same One-off edit row.
+	if _, body := h.Get(t, occurrence(1, at(16), "")); !strings.Contains(body, `value="Long walk"`) || !strings.Contains(body, `value="2026-03-16T11:00"`) {
+		t.Fatalf("dialog does not show the One-off edit: %q", body)
+	}
+	h.Post(t, occurrence(1, at(16), ""), timed("Longer walk", "2026-03-16T11:00", "2026-03-16T14:00", "UTC"))
+	var rows int
+	h.App.DB.QueryRow("SELECT count(*) FROM events WHERE recurring_master_id = 1 AND original_start_utc = ?", at(16).Unix()).Scan(&rows)
+	if rows != 1 {
+		t.Fatalf("%d One-off edit rows for one Occurrence, want 1", rows)
+	}
+
+	// A time the Series never has is not an Occurrence; an edit row is not a dialog of its own.
+	if code, _ := h.Get(t, occurrence(1, at(16).Add(time.Hour), "")); code != http.StatusNotFound {
+		t.Errorf("made-up Occurrence = %d, want 404", code)
+	}
+	if code, _ := h.Post(t, occurrence(1, time.Date(2026, 3, 14, 9, 0, 0, 0, time.UTC), "/delete"), nil); code != http.StatusNotFound {
+		t.Errorf("Occurrence before the Series = %d, want 404", code)
+	}
+	if code, _ := h.Get(t, "/calendar/event/2"); code != http.StatusNotFound {
+		t.Errorf("One-off edit row's own dialog = %d, want 404", code)
+	}
+}
+
+func TestSeriesWhoseFirstDayIsNotAnOccurrence(t *testing.T) {
+	h := household(t)
+	// Starts on Sunday 15 March but repeats on Mondays: the first Occurrence is the 16th.
+	addEvent(t, h, repeating(timed("Gym", "2026-03-15T07:00", "2026-03-15T08:00", "UTC"), "weekly", "byday", "MO"))
+	if code, body := h.Get(t, "/calendar/event/1"); code != http.StatusOK || !strings.Contains(body, `value="2026-03-16T07:00"`) {
+		t.Fatalf("Series dialog = %d, want its first Occurrence", code)
+	}
+	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
+	if strings.Contains(day(t, page, "2026-03-15"), "Gym") {
+		t.Error("DTSTART shows though BYDAY leaves it out")
 	}
 }

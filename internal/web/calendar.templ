@@ -14,7 +14,8 @@ type CalendarInfo struct {
 
 // CalendarEvent is one event as one day shows it.
 type CalendarEvent struct {
-	ID     int64
+	ID       int64 // a Series' for its Occurrences
+	Original int64 // an Occurrence's key; 0 for a single event
 	Title  string
 	Time   string   // "09:00–10:00", "22:00–…" or "All day"
 	Colors []string // its Members', else its calendar's
@@ -47,6 +48,19 @@ type EventForm struct {
 	Start, End, TZ               string // timed, in TZ
 	StartDate, EndDate           string // all-day, last day inclusive
 	Members                      map[int64]bool
+	Occurrence                   int64 // set: a This event edit of Series ID's Occurrence
+	Repeat                       string // "", daily, weekly, monthly, yearly or custom
+	Interval                     string
+	ByDay                        map[string]bool // weekly: MO…SU
+	Custom                       string          // RRULE, EXDATE and RDATE lines
+}
+
+// occurrenceQuery is the ?occurrence= an Occurrence's links carry.
+func occurrenceQuery(original int64) string {
+	if original == 0 {
+		return ""
+	}
+	return "?occurrence=" + id(original)
 }
 
 func id(n int64) string { return strconv.FormatInt(n, 10) }
@@ -63,11 +77,11 @@ func calendarTitle(p CalendarPage) string {
 	return p.Date.Format("January 2006")
 }
 
-func eventURL(eventID int64, action string) templ.SafeURL {
-	if eventID == 0 {
+func eventURL(f EventForm, action string) templ.SafeURL {
+	if f.ID == 0 {
 		return "/calendar/event"
 	}
-	return templ.SafeURL("/calendar/event/" + id(eventID) + action)
+	return templ.SafeURL("/calendar/event/" + id(f.ID) + action + occurrenceQuery(f.Occurrence))
 }
 
 func newEventURL(d time.Time) templ.SafeURL {
@@ -93,7 +107,7 @@ templ calendarDay(d CalendarDay, heading string) {
 			for _, e := range d.Events {
 				<li>
 					@swatches(e.Colors)
-					<a href={ templ.SafeURL("/calendar/event/" + id(e.ID)) }>{ e.Time } { e.Title }</a>
+					<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) }>{ e.Time } { e.Title }</a>
 				</li>
 			}
 		</ul>
@@ -226,25 +240,32 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 			<h1>
 				if f.ID == 0 {
 					New event
+				} else if f.Occurrence != 0 {
+					Edit this event
 				} else {
 					Edit event
 				}
 			</h1>
+			if f.Occurrence != 0 {
+				<p>This event: changes apply to this Occurrence only. The Series repeats <code>{ f.Custom }</code>.</p>
+			}
 			<p><a href="/calendar">Back to the calendar</a></p>
 			@formError(errMsg)
 			if len(cals) == 0 {
 				<p>Add a calendar on the calendar page first.</p>
 			}
-			<form method="post" action={ eventURL(f.ID, "") }>
+			<form method="post" action={ eventURL(f, "") }>
 				<label>Title <input name="title" value={ f.Title } required maxlength="200"/></label>
-				<label>
-					Calendar
-					<select name="calendar_id" required>
-						for _, c := range cals {
-							<option value={ id(c.ID) } selected?={ c.ID == f.CalendarID }>{ c.Name }</option>
-						}
-					</select>
-				</label>
+				if f.Occurrence == 0 {
+					<label>
+						Calendar
+						<select name="calendar_id" required>
+							for _, c := range cals {
+								<option value={ id(c.ID) } selected?={ c.ID == f.CalendarID }>{ c.Name }</option>
+							}
+						</select>
+					</label>
+				}
 				<fieldset>
 					<legend>Members (none: a Household event)</legend>
 					for _, m := range members {
@@ -267,13 +288,38 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 					<label>First day <input type="date" name="start_date" value={ f.StartDate }/></label>
 					<label>Last day <input type="date" name="end_date" value={ f.EndDate }/></label>
 				</fieldset>
+				if f.Occurrence == 0 {
+					<fieldset>
+						<legend>Repeats</legend>
+						<select name="repeat">
+							for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}, {"custom", "Custom (advanced)"}} {
+								<option value={ o[0] } selected?={ o[0] == f.Repeat }>{ o[1] }</option>
+							}
+						</select>
+						<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1"/></label>
+						<span>On (weekly)</span>
+						for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+							<label><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
+						}
+						<details open?={ f.Repeat == "custom" }>
+							<summary>Advanced</summary>
+							<label>RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
+						</details>
+					</fieldset>
+				}
 				<label>Location <input name="location" value={ f.Location } maxlength="200"/></label>
 				<label>Description <textarea name="description" maxlength="5000">{ f.Description }</textarea></label>
 				<button>Save</button>
 			</form>
 			if f.ID != 0 {
-				<form method="post" action={ eventURL(f.ID, "/delete") }>
-					<button>Delete event</button>
+				<form method="post" action={ eventURL(f, "/delete") }>
+					<button>
+						if f.Occurrence != 0 {
+							Delete this event
+						} else {
+							Delete event
+						}
+					</button>
 				</form>
 			}
 		</main>
