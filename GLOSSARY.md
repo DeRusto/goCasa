@@ -27,3 +27,33 @@ _Avoid_: Deleted member, inactive user
 **Household event**:
 An event that belongs to no Member, and so shows for everyone whatever the filter.
 _Avoid_: Shared event, family event, unassigned event
+
+**Series**:
+A recurring event: one definition with a repeat rule that produces many Occurrences.
+_Avoid_: Recurring master, recurring event group
+
+**Occurrence**:
+One dated instance of a Series.
+_Avoid_: Instance, recurrence
+
+**One-off edit**:
+A change to, or deletion of, a single Occurrence that leaves the rest of its Series alone.
+_Avoid_: Exception, override, detached occurrence
+
+**Split**:
+Ending a Series just before a chosen Occurrence and starting a new, independent Series from it.
+_Avoid_: Fork, branch, truncate
+
+### To-dos
+
+**Recurring to-do**:
+A to-do that creates its next copy when completed; only one copy is open at a time.
+_Avoid_: To-do series, repeating task, to-do occurrence
+
+**Repeat from schedule**:
+A Recurring to-do whose next due date follows its rule, skipping any dates already missed.
+_Avoid_: Fixed, strict
+
+**Repeat from completion**:
+A Recurring to-do whose next due date is counted from the day it was completed.
+_Avoid_: Floating, relaxed
