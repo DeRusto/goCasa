@@ -53,6 +53,11 @@ func overlaps(e calendarEvent, from, to time.Time) bool {
 // Occurrence's original is its unedited start: the UTC instant, or for all-day
 // the date's UTC midnight.
 func expand(master calendarEvent, s series, zone *time.Location, oneOffs []oneOff, from, to time.Time) ([]calendarEvent, error) {
+	return occurrences(master, s, zone, oneOffs, from, to, maxOccurrences)
+}
+
+// occurrences is expand returning at most limit Occurrences.
+func occurrences(master calendarEvent, s series, zone *time.Location, oneOffs []oneOff, from, to time.Time, limit int) ([]calendarEvent, error) {
 	layout := localLayout
 	var dtstart, stop time.Time
 	var dur time.Duration
@@ -126,7 +131,7 @@ func expand(master calendarEvent, s series, zone *time.Location, oneOffs []oneOf
 	// shortcut: iterates from DTSTART on every render (~36k steps for a century-old daily Series); start nearer the window if renders get slow.
 	horizon := dtstart.AddDate(horizonYears, 0, 0)
 	next, n := r.Iterator(), 0
-	for f, ok := next(); ok && f.Before(stop) && f.Before(horizon) && len(out) < maxOccurrences; f, ok = next() {
+	for f, ok := next(); ok && f.Before(stop) && f.Before(horizon) && len(out) < limit; f, ok = next() {
 		o, ok := place(f)
 		if !ok {
 			continue
@@ -149,22 +154,42 @@ func expand(master calendarEvent, s series, zone *time.Location, oneOffs []oneOf
 		return e.start
 	}
 	slices.SortStableFunc(out, func(x, y calendarEvent) int { return cmp.Compare(key(x), key(y)) })
-	return out[:min(len(out), maxOccurrences)], nil
+	return out[:min(len(out), limit)], nil
 }
 
 // endBefore is s ending just before the Occurrence whose original is o: an
-// UNTIL replaces any COUNT or UNTIL, and RDATEs from o on are dropped.
+// UNTIL just before o, unless its own COUNT or UNTIL ends it sooner, and no
+// RDATEs from o on.
 func endBefore(s series, zone *time.Location, o int64) series {
+	until := time.Unix(o-1, 0).UTC()
 	var parts []string
 	for _, p := range strings.Split(s.rule, ";") {
-		if k, _, _ := strings.Cut(p, "="); k != "COUNT" && k != "UNTIL" {
-			parts = append(parts, p)
+		k, v, _ := strings.Cut(p, "=")
+		if k != "UNTIL" {
+			parts = append(parts, p) // COUNT stays: expand applies it alongside UNTIL
+			continue
+		}
+		if t, ok := untilInstant(v, zone); ok && t.Before(until) {
+			until = t
 		}
 	}
 	// For all-day, originals are UTC midnights, which expand compares UNTIL with directly.
-	out := series{rule: strings.Join(append(parts, "UNTIL="+time.Unix(o-1, 0).UTC().Format("20060102T150405Z")), ";"), exdates: s.exdates}
+	out := series{rule: strings.Join(append(parts, "UNTIL="+until.Format("20060102T150405Z")), ";"), exdates: s.exdates}
 	out.rdates, _ = splitRDates(s.rdates, zone, o)
 	return out
+}
+
+// untilInstant reads an UNTIL value: UTC, a wall time in zone, or a date.
+func untilInstant(v string, zone *time.Location) (time.Time, bool) {
+	if t, err := time.Parse("20060102T150405Z", v); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse("20060102T150405", v); err == nil && zone != nil {
+		t, err = parseLocal(t.Format(localLayout), zone)
+		return t, err == nil
+	}
+	t, err := time.Parse("20060102", v)
+	return t, err == nil
 }
 
 // splitRDates is RDATEs ds (in zone, or dates when it is nil) before original o, and from it on.

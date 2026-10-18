@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -727,8 +728,13 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 		e.calendarID, f.CalendarID, f.Occurrence, f.Scope = ss.calendarID, ss.calendarID, occ.original, cmp.Or(r.PostFormValue("scope"), "this")
 		rerule := !sameRule
 		if sameRule {
-			e.rrule, e.exdates, e.rdates = storedRule(ss.s)
-			f.Repeat, f.Custom = "custom", ruleText(ss.s)
+			s := ss.s
+			if f.AllDay != ss.ev.allDay && (f.AllDay || len(f.Start) == len(localLayout)) { // stored dates are in the old kind's form
+				clock := f.Start[min(len(f.Start), len(dateLayout)+1):] // HH:MM, used only when becoming timed
+				s.exdates, s.rdates = retype(s.exdates, f.AllDay, clock), retype(s.rdates, f.AllDay, clock)
+			}
+			e.rrule, e.exdates, e.rdates = storedRule(s)
+			f.Repeat, f.Custom = "custom", ruleText(s)
 		}
 		retimed := f.AllDay != shown.AllDay || f.AllDay && (f.StartDate != shown.StartDate || f.EndDate != shown.EndDate) ||
 			!f.AllDay && (f.Start != shown.Start || f.End != shown.End || f.TZ != shown.TZ)
@@ -798,7 +804,7 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 					e.rdates = string(b)
 					if m := countRE.FindStringSubmatch(rule); m != nil && sameRule {
 						to := time.Unix(occ.original, 0).UTC()
-						before, err := expand(ss.ev, series{rule: ss.s.rule}, ss.zone, nil, to.AddDate(-horizonYears, 0, 0), to)
+						before, err := occurrences(ss.ev, series{rule: ss.s.rule}, ss.zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
 						if err != nil {
 							a.serverError(w, r, err)
 							return
@@ -903,7 +909,10 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 			WHERE id = ? AND `+localCalendar+" RETURNING id",
 			e.calendarID, e.title, e.location, e.description, e.allDay, e.start, e.end, e.tzid, e.date, e.endDate, e.rrule, e.exdates, e.rdates, now, row).Scan(&row)
 	}
-	if err != nil {
+	if errors.Is(err, errSeriesChanged) {
+		a.eventPage(w, r, http.StatusConflict, f, "This Series changed while you were editing it. Open it again and redo your change.")
+		return
+	} else if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -956,11 +965,32 @@ func (a *App) startsAt(ctx context.Context, ss storedSeries, o int64) (bool, err
 // endSeriesBefore ends Series ss just before its Occurrence o and drops its One-off edits from o on.
 func (a *App) endSeriesBefore(ctx context.Context, tx *sql.Tx, ss storedSeries, o int64) error {
 	rule, _, rd := storedRule(endBefore(ss.s, ss.zone, o))
-	if _, err := tx.ExecContext(ctx, "UPDATE events SET rrule = ?, rdates_json = ?, updated_at = ? WHERE id = ?", rule, rd, a.Now().Unix(), ss.ev.id); err != nil {
+	oldRule, _, oldRD := storedRule(ss.s)
+	// Only if the Series is still as loaded: a concurrent Split must not end it twice and start two new ones.
+	res, err := tx.ExecContext(ctx, "UPDATE events SET rrule = ?, rdates_json = ?, updated_at = ? WHERE id = ? AND rrule IS ? AND rdates_json IS ?",
+		rule, rd, a.Now().Unix(), ss.ev.id, oldRule, oldRD)
+	if err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, "DELETE FROM events WHERE recurring_master_id = ? AND original_start_utc >= ?", ss.ev.id, o)
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errSeriesChanged
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM events WHERE recurring_master_id = ? AND original_start_utc >= ?", ss.ev.id, o)
 	return err
+}
+
+var errSeriesChanged = errors.New("the Series changed since it was loaded")
+
+// retype is stored dates moved to an all-day or timed Series' form; clock is the timed one's HH:MM.
+func retype(ds []string, allDay bool, clock string) []string {
+	out := make([]string, len(ds))
+	for i, d := range ds {
+		out[i] = d[:len(dateLayout)]
+		if !allDay {
+			out[i] += "T" + clock
+		}
+	}
+	return out
 }
 
 // deleteEvent deletes a single event. On a Series, scope "this" (the default)
@@ -1023,7 +1053,10 @@ func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 				start, end, date, endDate, occ.original, a.Now().Unix(), id)
 		}
 	}
-	if err != nil {
+	if errors.Is(err, errSeriesChanged) {
+		http.Error(w, "This Series changed while you were looking at it. Open it again and retry.", http.StatusConflict)
+		return
+	} else if err != nil {
 		a.serverError(w, r, err)
 		return
 	}

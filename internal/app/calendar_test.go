@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -614,5 +615,56 @@ func TestDeletedFirstOccurrencesDontCountAsBefore(t *testing.T) {
 	h.App.DB.QueryRow("SELECT count(*) FROM events").Scan(&n)
 	if n != 0 {
 		t.Errorf("%d event rows left, want the Series deleted", n)
+	}
+}
+
+func TestSplitCountsOccurrencesBeyondTheDisplayCap(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Pill", "2026-01-01T09:00", "2026-01-01T10:00", "UTC"), "custom", "rrule", "RRULE:FREQ=DAILY;COUNT=2000"))
+	split := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC).AddDate(0, 0, 1100) // the 1101st
+	d := split.Format("2006-01-02")
+	f := repeating(timed("Pill", d+"T10:00", d+"T11:00", "UTC"), "custom", "rrule", "RRULE:FREQ=DAILY;COUNT=2000")
+	f.Set("scope", "following")
+	if code, body := h.Post(t, occurrence(1, split, ""), f); code != http.StatusOK {
+		t.Fatalf("Split = %d %q", code, body)
+	}
+	var rule string
+	h.App.DB.QueryRow("SELECT rrule FROM events WHERE id = 2").Scan(&rule)
+	if !strings.Contains(rule, "COUNT=900") {
+		t.Fatalf("new Series rule = %q, want COUNT=900", rule)
+	}
+}
+
+func TestEndingASeriesAtAnRDateKeepsItsEarlierEnd(t *testing.T) {
+	h := household(t)
+	// 1–3 March, plus an extra on the 10th.
+	addEvent(t, h, repeating(timed("Walk", "2026-03-01T09:00", "2026-03-01T10:00", "UTC"), "custom", "rrule", "RRULE:FREQ=DAILY;COUNT=3\nRDATE:20260310T090000"))
+	if code, _ := h.Post(t, occurrence(1, time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC), "/delete"), url.Values{"scope": {"following"}}); code != http.StatusOK {
+		t.Fatalf("This and following delete = %d", code)
+	}
+	_, page := h.Get(t, "/calendar?view=month&date=2026-03-01")
+	for i := 1; i <= 10; i++ {
+		d := fmt.Sprintf("2026-03-%02d", i)
+		if got := strings.Contains(day(t, page, d), "Walk"); got != (i <= 3) {
+			t.Errorf("%s shows Walk = %v, want %v", d, got, i <= 3)
+		}
+	}
+}
+
+func TestSplitToAllDayKeepsExDatesAndRDates(t *testing.T) {
+	h := household(t)
+	// Sundays from the 15th, plus Wednesday the 25th, but not Sunday the 29th.
+	text := "RRULE:FREQ=WEEKLY\nEXDATE:20260329T090000\nRDATE:20260325T090000"
+	addEvent(t, h, repeating(timed("Market", "2026-03-15T09:00", "2026-03-15T10:00", "UTC"), "custom", "rrule", text))
+	f := repeating(allDay("Market", "2026-03-22", "2026-03-22"), "custom", "rrule", text)
+	f.Set("scope", "following")
+	if code, body := h.Post(t, occurrence(1, time.Date(2026, 3, 22, 9, 0, 0, 0, time.UTC), ""), f); code != http.StatusOK {
+		t.Fatalf("Split = %d %q", code, body)
+	}
+	_, page := h.Get(t, "/calendar?view=month&date=2026-03-15")
+	for d, want := range map[string]bool{"2026-03-22": true, "2026-03-25": true, "2026-03-29": false} {
+		if got := strings.Contains(day(t, page, d), "All day Market"); got != want {
+			t.Errorf("%s shows the all-day Market = %v, want %v", d, got, want)
+		}
 	}
 }
