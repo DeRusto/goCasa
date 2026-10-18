@@ -167,6 +167,7 @@ func (a *App) postSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 	a.setUnlock(w, id)
+	a.publish("created", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -252,11 +253,13 @@ func (a *App) createMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "INSERT INTO members (name, color, role, pin_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-		f.name, f.color, f.role, f.pinHash, a.Now().Unix()); err != nil {
+	var id int64
+	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO members (name, color, role, pin_hash, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
+		f.name, f.color, f.role, f.pinHash, a.Now().Unix()).Scan(&id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
+	a.publish("created", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -302,6 +305,7 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusConflict, msg)
 		return
 	}
+	a.publish("updated", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -315,7 +319,7 @@ func (a *App) deleteMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusConflict, "They have history, so they can't be deleted. Archive them instead.")
 		return
 	}
-	a.guardedMemberChange(w, r, id, res, err)
+	a.guardedMemberChange(w, r, "deleted", id, res, err)
 }
 
 // setArchived archives (hides, keeping their history) or restores a Member.
@@ -323,13 +327,13 @@ func (a *App) setArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		res, err := a.DB.ExecContext(r.Context(), "UPDATE members SET archived = ? WHERE id = ? AND (NOT ? OR "+keepsAnAdmin+")", archived, id, archived)
-		a.guardedMemberChange(w, r, id, res, err)
+		a.guardedMemberChange(w, r, "updated", id, res, err)
 	}
 }
 
 // guardedMemberChange finishes a change to Member id that keepsAnAdmin guarded:
 // no row changed means no such Member, or the last active Admin.
-func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, id int64, res sql.Result, err error) {
+func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, typ string, id int64, res sql.Result, err error) {
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -347,6 +351,7 @@ func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, id int
 		a.settingsPage(w, r, http.StatusConflict, errLastAdmin)
 		return
 	}
+	a.publish(typ, "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 

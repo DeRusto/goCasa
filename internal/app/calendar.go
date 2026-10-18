@@ -236,10 +236,12 @@ func (a *App) createCalendar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A calendar needs a name of 1 to 50 characters and a colour.", http.StatusBadRequest)
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color) VALUES ((SELECT id FROM integrations WHERE type = 'local'), ?, ?)", name, color); err != nil {
+	var id int64
+	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color) VALUES ((SELECT id FROM integrations WHERE type = 'local'), ?, ?) RETURNING id", name, color).Scan(&id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
+	a.publish("created", "calendar", id)
 	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
 }
 
@@ -415,7 +417,9 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	now := a.Now().Unix()
+	typ := "updated"
 	if id == 0 {
+		typ = "created"
 		err = tx.QueryRowContext(r.Context(), `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 			e.calendarID, e.title, e.location, e.description, e.allDay, e.start, e.end, e.tzid, e.date, e.endDate, now).Scan(&id)
@@ -448,6 +452,7 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	a.publish(typ, "event", id)
 	http.Redirect(w, r, "/calendar?date="+e.firstDay, http.StatusSeeOther)
 }
 
@@ -462,5 +467,6 @@ func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	a.publish("deleted", "event", id)
 	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
 }
