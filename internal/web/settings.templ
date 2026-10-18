@@ -134,7 +134,7 @@ templ Settings(members []Member, errMsg string) {
 							<button>Save</button>
 						</form>
 						<form method="post" action={ memberURL(m, "/avatar") } enctype="multipart/form-data">
-							<label>Picture <input type="file" name="avatar" accept="image/jpeg,image/png,image/gif" required/></label>
+							<label>Picture <input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required/></label>
 							<button>Upload</button>
 						</form>
 						if m.HasAvatar {

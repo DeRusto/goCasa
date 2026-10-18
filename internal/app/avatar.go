@@ -13,6 +13,8 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+
+	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -144,7 +146,7 @@ func (a *App) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	pic, err := avatarJPEG(f)
 	if err != nil {
-		a.settingsPage(w, r, http.StatusBadRequest, "Use a JPEG, PNG or GIF picture.")
+		a.settingsPage(w, r, http.StatusBadRequest, "Use a JPEG, PNG, GIF or WebP picture.")
 		return
 	}
 	a.setAvatar(w, r, id, pic)

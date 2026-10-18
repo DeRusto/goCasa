@@ -581,7 +581,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\" enctype=\"multipart/form-data\"><label>Picture <input type=\"file\" name=\"avatar\" accept=\"image/jpeg,image/png,image/gif\" required></label> <button>Upload</button></form>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\" enctype=\"multipart/form-data\"><label>Picture <input type=\"file\" name=\"avatar\" accept=\"image/jpeg,image/png,image/gif,image/webp\" required></label> <button>Upload</button></form>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

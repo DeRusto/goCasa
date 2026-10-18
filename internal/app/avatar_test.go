@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -116,5 +117,20 @@ func TestPhoneJPEGAvatarIsTurnedUpright(t *testing.T) {
 	}
 	if r, _, b, _ := got.At(128, 216).RGBA(); b>>8 < 150 || r>>8 > 100 {
 		t.Fatalf("bottom = %v, want blue", got.At(128, 216))
+	}
+}
+
+func TestWebPAvatarUploads(t *testing.T) {
+	h := apptest.New(t)
+	setup(t, h)
+	pic, err := os.ReadFile("testdata/blue-purple-pink.lossy.webp") // from golang.org/x/image/testdata
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := uploadAvatar(t, h, "1", pic); code != http.StatusOK {
+		t.Fatalf("WebP upload = %d", code)
+	}
+	if code, _ := h.Get(t, "/members/1/avatar"); code != http.StatusOK {
+		t.Fatalf("WebP avatar = %d", code)
 	}
 }
