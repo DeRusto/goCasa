@@ -155,15 +155,15 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 | `/settings` | Users (incl. PIN/role), integrations, household settings, screensaver config, PIN lock toggle + "Lock now" |
 | `/lock` | PIN pad when PIN protection is enabled; session unlock cookie |
 | `/api/*` | JSON endpoints for htmx-adjacent clients and any future CLI; HTML handlers remain primary |
-| `/events/stream` | SSE endpoint |
+| `/events/stream` | SSE endpoint; sends `X-Accel-Buffering: no` and a heartbeat every 25 s so reverse proxies neither buffer nor idle-close it; htmx reconnects on drop |
 | `/healthz` | `200` + DB ping — used by Docker/Coolify healthchecks |
 
 **Kiosk behaviour:** calendar and screensaver pages auto-refresh fragments via SSE, dim/idle to screensaver after the configured idle timeout, and survive a server restart by simply reloading (all state server-side).
 
 ## 9. Auth and security
 
-- **Threat model:** trusted home LAN / Pangolin tunnel is the perimeter (same model as the rest of the homelab). The app still ships its own controls; it is not assumed to be LAN-only forever.
-- Optional household PIN protection (fork feature): when enabled, a PIN unlocks a long-lived session cookie (`HttpOnly`, `SameSite=Lax`, `Secure` behind HTTPS). Per-user PINs identify *who* is acting for chores/filter defaults — they are convenience identity, not strong auth, and the UI says so.
+- **Threat model:** the trusted home LAN is the perimeter (same model as the rest of the homelab). Remote access, and gating it, is the operator's own layer (§11). The app still ships its own controls; it is not assumed to be LAN-only forever.
+- Optional household PIN protection (fork feature): when enabled, a PIN unlocks a long-lived session cookie (`HttpOnly`, `SameSite=Lax`, `Secure` when `BASE_URL` is `https`). Per-user PINs identify *who* is acting for chores/filter defaults — they are convenience identity, not strong auth, and the UI says so.
 - Admin role required for Settings mutations (integrations, users, household).
 - OAuth tokens, Immich API key, and Mealie/Tandoor credentials: AES-GCM encrypted at rest; the master key comes from env and is never stored in the DB or repo. Losing the key = reconnect integrations (documented, acceptable).
 - All forms CSRF-token protected; htmx requests carry the token header.
@@ -196,15 +196,22 @@ Config is env-only (12-factor), no config file to drift:
 
 ```
 ADDR=:8080
+BASE_URL=https://casa.example.com   # how clients reach GoCasa; drives Secure cookies, the Google redirect and absolute links
 DATA_DIR=/data
 TZ=America/Los_Angeles            # household default; users keep IANA zones per event
 APP_ENCRYPTION_KEY=<base64 32-byte key>
-GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET= / GOOGLE_REDIRECT_URI=
+GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=              # optional; defaults to ${BASE_URL}/auth/google/callback, override for the localhost / ssh -L route
 SESSION_SECRET=
 ```
 
 - **Docker:** multi-stage build → final image `scratch` (or `distroless/static`) containing only the binary + CA certs + tzdata. `CGO_ENABLED=0`. Image target: < 30 MB.
 - **Compose (dev + Gordon):** one service, one volume (`/data`), `healthcheck` on `/healthz`. Runs under Dockge on Gordon like the rest of the stack; can equally be a Coolify resource later.
+- **HTTPS:** GoCasa serves plain HTTP only; the operator's reverse proxy terminates TLS. GoCasa ignores `X-Forwarded-*` headers and takes its own address from `BASE_URL`.
+  - *Why:* Screen Wake Lock and webcam motion-wake need a secure context, and Google OAuth needs an `https` redirect on a public-suffix domain. Over plain HTTP everything else works; those features stay off and Settings says HTTPS turns them on.
+  - *Recipe:* a name on a domain you own (e.g. `casa.<yourdomain>`), local DNS (router, Pi-hole, AdGuard) pointing it at the host's LAN IP, and a reverse proxy holding a real certificate (e.g. Let's Encrypt via DNS-01). The name needn't resolve publicly: the Google redirect happens in the browser.
+  - *Worked example:* Nginx Proxy Manager proxy host → `http://<host>:8080`, Let's Encrypt DNS-01 cert. No custom config: the SSE endpoint handles buffering and idle timeouts itself (§8).
+  - *Out of scope:* remote (off-LAN) access. That's the homelab's job (tunnel, VPN, authenticating proxy); GoCasa documents none of them.
 - **tzdata is embedded** (`time/tzdata`) so DST rules never depend on the host image.
 - **Backup:** SQLite in WAL mode. Nightly job (host cron or in-app scheduler): `VACUUM INTO '/data/backups/app-YYYYMMDD.db'` then prune to last 14. Restore = stop container, swap file, start. Tested restore is part of Phase 0 acceptance, not an afterthought.
 - **Upgrade:** replace the binary/image; embedded migrations run at startup, in a transaction, with a pre-migration backup copy taken automatically. Rollback = previous image + pre-migration backup.
