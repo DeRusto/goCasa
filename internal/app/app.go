@@ -65,7 +65,13 @@ func New(ctx context.Context, o Options) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	if err := db.Migrate(ctx, d, db.Migrations); err != nil {
+	// Named by schema version so a same-day second upgrade keeps the first
+	// rollback point; never pruned (see dailyBackups).
+	preMigration := func(from int) error {
+		now := o.Now()
+		return backup(ctx, d, backupDir(o.Config.DataDir), backupDay(now, o.Config.Location)+fmt.Sprintf("-pre-v%d.db", from), now)
+	}
+	if err := db.Migrate(ctx, d, db.Migrations, preMigration); err != nil {
 		d.Close()
 		return nil, err
 	}
@@ -77,6 +83,10 @@ func New(ctx context.Context, o Options) (*App, error) {
 		Log:       o.Logger,
 	}
 	a.Scheduler = &Scheduler{now: o.Now, log: o.Logger}
+	if err := a.startBackups(ctx); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("startup backup: %w", err)
+	}
 	a.handler = a.routes()
 	return a, nil
 }

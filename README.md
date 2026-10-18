@@ -12,7 +12,7 @@ docker compose up -d
 
 Open `http://<host>:8080`. `GET /healthz` returns `200 ok` when the app is up and the database answers.
 
-Data lives in the `gocasa-data` volume at `/data` (`app.db`, and later `backups/`, `photo-cache/`, `photos/`). To use a bind mount instead, make the host directory writable by UID 65532, which the container runs as: `sudo chown 65532:65532 ./data`.
+Data lives in the `gocasa-data` volume at `/data` (`app.db`, `backups/`, and later `photo-cache/`, `photos/`). To use a bind mount instead, make the host directory writable by UID 65532, which the container runs as: `sudo chown 65532:65532 ./data`.
 
 ## Configuration
 
@@ -29,9 +29,20 @@ Config comes from environment variables only. There is no config file.
 
 The binary refuses to start if a required value is missing or malformed, and says which one.
 
+## Backups and restore
+
+GoCasa backs up `app.db` with `VACUUM INTO` to `/data/backups/app-YYYYMMDD.db` every day at 03:00 in `TZ`, and keeps the newest 14. If the newest backup is over 24 hours old when GoCasa starts (say it was off at 03:00), it takes one straight away. Neither the time nor the count is configurable. Copy `backups/` off the host if you want backups that survive the disk.
+
+To restore:
+
+1. Stop the container: `docker compose stop`.
+2. In the data volume, move `app.db` aside and delete `app.db-wal` and `app.db-shm` if present: they belong to the old file.
+3. Copy the backup you want to `app.db`, e.g. `cp backups/app-20261018.db app.db`.
+4. Start it: `docker compose start`.
+
 ## Upgrades and migrations
 
-Replace the image and start it. Migrations are embedded in the binary and run at startup in order, one transaction each; the schema version is tracked in SQLite's `PRAGMA user_version`. GoCasa refuses to start on a database written by a newer version: run the newer image again, or restore a backup.
+Replace the image and start it. Migrations are embedded in the binary and run at startup in order, one transaction each; the schema version is tracked in SQLite's `PRAGMA user_version`. Before running any pending migration GoCasa writes `backups/app-YYYYMMDD-pre-vN.db`, where `N` is the schema version it is upgrading from; if that backup fails, it refuses to start rather than migrate unprotected. Pre-migration backups are never pruned; delete old ones yourself. To roll back, run the previous image and restore that file. GoCasa refuses to start on a database written by a newer version: run the newer image again, or restore a backup.
 
 ## HTTPS
 

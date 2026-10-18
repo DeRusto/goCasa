@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,14 +56,14 @@ func TestMigrateAppliesInNumericOrder(t *testing.T) {
 		"0002_b.sql": "CREATE TABLE b (x INTEGER);",
 		"0003_c.sql": "INSERT INTO b VALUES (3);",
 	})
-	if err := Migrate(context.Background(), d, m); err != nil {
+	if err := Migrate(context.Background(), d, m, nil); err != nil {
 		t.Fatal(err)
 	}
 	if v := userVersion(t, d); v != 3 {
 		t.Fatalf("user_version = %d, want 3", v)
 	}
 	// Re-running applies nothing new (0003 would insert a second row).
-	if err := Migrate(context.Background(), d, m); err != nil {
+	if err := Migrate(context.Background(), d, m, nil); err != nil {
 		t.Fatal(err)
 	}
 	var n int
@@ -75,13 +76,13 @@ func TestMigrateAppliesInNumericOrder(t *testing.T) {
 func TestMigrateAppliesOnlyNewMigrations(t *testing.T) {
 	d := openTemp(t)
 	ctx := context.Background()
-	if err := Migrate(ctx, d, files(map[string]string{"0001_a.sql": "CREATE TABLE a (x INTEGER);"})); err != nil {
+	if err := Migrate(ctx, d, files(map[string]string{"0001_a.sql": "CREATE TABLE a (x INTEGER);"}), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := Migrate(ctx, d, files(map[string]string{
 		"0001_a.sql": "CREATE TABLE a (x INTEGER);",
 		"0002_b.sql": "CREATE TABLE b (x INTEGER);",
-	})); err != nil {
+	}), nil); err != nil {
 		t.Fatal(err)
 	}
 	if v := userVersion(t, d); v != 2 {
@@ -94,7 +95,7 @@ func TestFailedMigrationRollsBackItsOwnTransactionOnly(t *testing.T) {
 	err := Migrate(context.Background(), d, files(map[string]string{
 		"0001_a.sql": "CREATE TABLE a (x INTEGER);",
 		"0002_b.sql": "CREATE TABLE b (x INTEGER); INSERT INTO nope VALUES (1);",
-	}))
+	}), nil)
 	if err == nil || !strings.Contains(err.Error(), "0002_b.sql") {
 		t.Fatalf("err = %v, want failure naming 0002_b.sql", err)
 	}
@@ -116,7 +117,7 @@ func TestMigrateRefusesNewerDatabase(t *testing.T) {
 	err := Migrate(context.Background(), d, files(map[string]string{
 		"0001_a.sql": "CREATE TABLE a (x INTEGER);",
 		"0002_b.sql": "CREATE TABLE b (x INTEGER);",
-	}))
+	}), nil)
 	if err == nil || !strings.Contains(err.Error(), "newer than this binary") {
 		t.Fatalf("err = %v, want refusal", err)
 	}
@@ -131,7 +132,7 @@ func TestMigrateAcceptsDatabaseAtExactlyLatest(t *testing.T) {
 	if err := Migrate(context.Background(), d, files(map[string]string{
 		"0001_a.sql": "CREATE TABLE a (x INTEGER);",
 		"0002_b.sql": "CREATE TABLE b (x INTEGER);",
-	})); err != nil {
+	}), nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -143,7 +144,7 @@ func TestMigrateRejectsGapsAndDuplicates(t *testing.T) {
 		"unnumbered": {"init.sql": "SELECT 1;"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := Migrate(context.Background(), openTemp(t), files(m)); err == nil {
+			if err := Migrate(context.Background(), openTemp(t), files(m), nil); err == nil {
 				t.Fatal("want error")
 			}
 		})
@@ -152,10 +153,51 @@ func TestMigrateRejectsGapsAndDuplicates(t *testing.T) {
 
 func TestEmbeddedMigrationsApply(t *testing.T) {
 	d := openTemp(t)
-	if err := Migrate(context.Background(), d, Migrations); err != nil {
+	if err := Migrate(context.Background(), d, Migrations, nil); err != nil {
 		t.Fatal(err)
 	}
 	if userVersion(t, d) < 1 {
 		t.Fatal("no embedded migrations applied")
+	}
+}
+
+func TestBeforeHookRunsOnlyWhenAnExistingDatabaseHasPendingMigrations(t *testing.T) {
+	d := openTemp(t)
+	ctx := context.Background()
+	calls := 0
+	before := func(from int) error {
+		calls++
+		if from != 1 {
+			t.Errorf("before got from=%d, want 1", from)
+		}
+		return nil
+	}
+	one := files(map[string]string{"0001_a.sql": "CREATE TABLE a (x INTEGER);"})
+	two := files(map[string]string{"0001_a.sql": "CREATE TABLE a (x INTEGER);", "0002_b.sql": "CREATE TABLE b (x INTEGER);"})
+
+	if err := Migrate(ctx, d, one, before); err != nil || calls != 0 {
+		t.Fatalf("fresh database: err %v, hook calls %d, want 0 (nothing to protect)", err, calls)
+	}
+	if err := Migrate(ctx, d, two, before); err != nil || calls != 1 {
+		t.Fatalf("pending migration: err %v, hook calls %d, want 1", err, calls)
+	}
+	if err := Migrate(ctx, d, two, before); err != nil || calls != 1 {
+		t.Fatalf("nothing pending: err %v, hook calls %d, want still 1", err, calls)
+	}
+	if v := userVersion(t, d); v != 2 {
+		t.Fatalf("user_version = %d", v)
+	}
+}
+
+func TestFailingBeforeHookStopsMigrations(t *testing.T) {
+	d := openTemp(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, d, files(map[string]string{"0001_a.sql": "SELECT 1;"}), nil); err != nil {
+		t.Fatal(err)
+	}
+	err := Migrate(ctx, d, files(map[string]string{"0001_a.sql": "SELECT 1;", "0002_b.sql": "SELECT 1;"}),
+		func(int) error { return errors.New("disk full") })
+	if err == nil || userVersion(t, d) != 1 {
+		t.Fatalf("err %v, user_version %d: migration ran without its backup", err, userVersion(t, d))
 	}
 }

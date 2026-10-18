@@ -36,8 +36,10 @@ func Open(file string) (*sql.DB, error) {
 
 // Migrate applies every file in migrations named NNNN_*.sql whose number is
 // above PRAGMA user_version, in order, one transaction each. It refuses a DB
-// whose user_version is newer than the highest migration.
-func Migrate(ctx context.Context, d *sql.DB, migrations fs.FS) error {
+// whose user_version is newer than the highest migration. before (if non-nil)
+// runs once, with the current version, ahead of any pending migration on a
+// non-empty database; its error stops them.
+func Migrate(ctx context.Context, d *sql.DB, migrations fs.FS, before func(from int) error) error {
 	files, err := fs.Glob(migrations, "*.sql")
 	if err != nil {
 		return err
@@ -67,6 +69,11 @@ func Migrate(ctx context.Context, d *sql.DB, migrations fs.FS) error {
 	}
 	if current > len(ms) {
 		return fmt.Errorf("database schema version %d is newer than this binary (%d); run a newer GoCasa or restore a backup", current, len(ms))
+	}
+	if before != nil && current > 0 && current < len(ms) {
+		if err := before(current); err != nil {
+			return fmt.Errorf("before migrating: %w", err)
+		}
 	}
 	for _, m := range ms[current:] {
 		body, err := fs.ReadFile(migrations, m.name)
