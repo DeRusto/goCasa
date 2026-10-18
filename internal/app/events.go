@@ -185,7 +185,6 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 		b, _ := json.Marshal(users)
 		filter = string(b)
 	}
-	// shortcut: single events here are every row with no rule or master, cancelled or not; Google sync must leave out its cancelled occurrence rows (spec §7.2).
 	// Single events in the window, plus every Series that starts before its end or has a One-off edit in it, with all its One-off edits.
 	rows, err := a.DB.QueryContext(ctx, `SELECT e.id, e.title, e.all_day, coalesce(e.start_utc, 0), coalesce(e.end_utc, 0),
 			coalesce(e.all_day_date, ''), coalesce(e.all_day_end_date, ''), c.color,
@@ -193,13 +192,14 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 			?5 = '' OR NOT EXISTS (SELECT 1 FROM event_members WHERE event_id = e.id)
 				OR EXISTS (SELECT 1 FROM event_members WHERE event_id = e.id AND member_id IN (SELECT value FROM json_each(?5))),
 			coalesce(e.start_tzid, ''), coalesce(e.rrule, ''), e.exdates_json, e.rdates_json,
-			coalesce(e.recurring_master_id, 0), coalesce(e.original_start_utc, 0), e.status = 'cancelled'
+			coalesce(e.recurring_master_id, 0), coalesce(e.original_start_utc, 0), e.status = 'cancelled', c.read_only
 		FROM events e JOIN source_calendars c ON c.id = e.calendar_id
-		WHERE e.rrule IS NULL AND e.recurring_master_id IS NULL
+		-- A cancelled single event or Series is one gone from its feed; a cancelled One-off edit is a deleted Occurrence.
+		WHERE (e.recurring_master_id IS NOT NULL OR e.status = 'confirmed') AND (e.rrule IS NULL AND e.recurring_master_id IS NULL
 				AND (NOT e.all_day AND e.start_utc < ?2 AND e.end_utc > ?1 OR e.all_day AND e.all_day_date < ?4 AND e.all_day_end_date > ?3)
 			OR coalesce(e.recurring_master_id, e.id) IN (SELECT id FROM events WHERE rrule IS NOT NULL AND coalesce(start_utc < ?2, all_day_date < ?4))
 			OR coalesce(e.recurring_master_id, e.id) IN (SELECT recurring_master_id FROM events WHERE recurring_master_id IS NOT NULL
-				AND (NOT all_day AND start_utc < ?2 AND end_utc > ?1 OR all_day AND all_day_date < ?4 AND all_day_end_date > ?3))
+				AND (NOT all_day AND start_utc < ?2 AND end_utc > ?1 OR all_day AND all_day_date < ?4 AND all_day_end_date > ?3)))
 		ORDER BY e.recurring_master_id IS NOT NULL`, // masters before their edits
 		from.Unix(), to.Unix(), from.Format(dateLayout), to.Format(dateLayout), filter)
 	if err != nil {
@@ -216,7 +216,7 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 		var o oneOff
 		var masterID int64
 		if err := rows.Scan(&e.id, &e.title, &e.allDay, &e.start, &e.end, &e.date, &e.endDate, &calendarColor, &memberColors, &e.shown,
-			&tzid, &s.rule, &ex, &rd, &masterID, &o.original, &o.cancelled); err != nil {
+			&tzid, &s.rule, &ex, &rd, &masterID, &o.original, &o.cancelled, &e.readOnly); err != nil {
 			return nil, err
 		}
 		e.colors = []string{calendarColor}

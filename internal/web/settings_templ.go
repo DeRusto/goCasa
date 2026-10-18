@@ -23,6 +23,15 @@ type Member struct {
 	HasAvatar bool // else initials on colour
 }
 
+// Feed is an iCal feed as Settings shows it.
+type Feed struct {
+	ID          int64
+	Name, Color string
+	LastSuccess string // when it last synced, or "never"
+	Failures    int    // syncs failed in a row
+	LastError   string
+}
+
 // Initials are the first letters of the first two words of name.
 func Initials(name string) string {
 	var b strings.Builder
@@ -64,7 +73,7 @@ func avatar(m Member) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue("/members/" + strconv.FormatInt(m.ID, 10) + "/avatar")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 32, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 41, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 			if templ_7745c5c3_Err != nil {
@@ -82,7 +91,7 @@ func avatar(m Member) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 34, Col: 186}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 43, Col: 186}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -95,7 +104,7 @@ func avatar(m Member) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(Initials(m.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 34, Col: 226}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 43, Col: 226}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -139,7 +148,7 @@ func formError(msg string) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(msg)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 40, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 49, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -182,7 +191,7 @@ func pinInput(label string) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 46, Col: 9}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 55, Col: 9}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -314,7 +323,7 @@ func Lock(admins []Member, errMsg string) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(m.ID, 10))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 79, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 88, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 				if templ_7745c5c3_Err != nil {
@@ -345,7 +354,7 @@ func Lock(admins []Member, errMsg string) templ.Component {
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 81, Col: 15}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 90, Col: 15}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -410,7 +419,7 @@ func memberFields(m Member) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 97, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 106, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {
@@ -423,7 +432,7 @@ func memberFields(m Member) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Color)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 98, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 107, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -458,7 +467,7 @@ func memberFields(m Member) templ.Component {
 }
 
 // Settings is the unlocked Settings page.
-func Settings(members []Member, errMsg string) templ.Component {
+func Settings(members []Member, feeds []Feed, errMsg string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -520,7 +529,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var20 string
 					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 122, Col: 15}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 131, Col: 15}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 					if templ_7745c5c3_Err != nil {
@@ -543,7 +552,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var21 templ.SafeURL
 					templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, ""))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 127, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 136, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 					if templ_7745c5c3_Err != nil {
@@ -575,7 +584,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var22 templ.SafeURL
 					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/avatar"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 136, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 145, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 					if templ_7745c5c3_Err != nil {
@@ -593,7 +602,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 						var templ_7745c5c3_Var23 templ.SafeURL
 						templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/avatar/delete"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 141, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 150, Col: 66}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 						if templ_7745c5c3_Err != nil {
@@ -611,7 +620,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var24 templ.SafeURL
 					templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/archive"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 145, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 154, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 					if templ_7745c5c3_Err != nil {
@@ -624,7 +633,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 146, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 155, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
@@ -637,7 +646,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var26 templ.SafeURL
 					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/delete"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 148, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 157, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 					if templ_7745c5c3_Err != nil {
@@ -650,7 +659,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 149, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 158, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
@@ -695,7 +704,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 167, Col: 15}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 176, Col: 15}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
@@ -708,7 +717,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var29 templ.SafeURL
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/restore"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 169, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 178, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -721,7 +730,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var30 string
 					templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 170, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 179, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 					if templ_7745c5c3_Err != nil {
@@ -734,7 +743,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var31 templ.SafeURL
 					templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/delete"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 172, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 181, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 					if templ_7745c5c3_Err != nil {
@@ -747,7 +756,7 @@ func Settings(members []Member, errMsg string) templ.Component {
 					var templ_7745c5c3_Var32 string
 					templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 173, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 182, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 					if templ_7745c5c3_Err != nil {
@@ -759,7 +768,118 @@ func Settings(members []Member, errMsg string) templ.Component {
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "</main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<h2>Calendar feeds</h2><p>Read-only iCal or webcal calendars, such as a school's or a sports team's. Their events can't be changed in GoCasa.</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, f := range feeds {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "<section><h3><span aria-hidden=\"true\" style=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var33 string
+				templ_7745c5c3_Var33, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 192, Col: 124}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "\"></span> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var34 string
+				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(f.Name)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 193, Col: 14}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</h3><p>Last synced: ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var35 string
+				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(f.LastSuccess)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 195, Col: 36}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if f.Failures > 0 {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<p role=\"alert\">Sync failing (")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var36 string
+					templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(f.Failures))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 197, Col: 62}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, " in a row): ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var37 string
+					templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(f.LastError)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 197, Col: 89}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</p>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<form method=\"post\" action=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var38 templ.SafeURL
+				templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete"))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 199, Col: 109}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "\"><button>Remove ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var39 string
+				templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(f.Name)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 200, Col: 29}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</button></form></section>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<form method=\"post\" action=\"/settings/feeds\"><label>Name <input name=\"name\" required maxlength=\"50\"></label> <label>Address <input name=\"url\" type=\"text\" inputmode=\"url\" required placeholder=\"webcal://…\"></label> <label>Colour <input type=\"color\" name=\"color\" value=\"#f59e0b\"></label> <button>Add feed</button></form></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

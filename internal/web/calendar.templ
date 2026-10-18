@@ -20,6 +20,7 @@ type CalendarEvent struct {
 	Title  string
 	Time   string   // "09:00–10:00", "22:00–…" or "All day"
 	Colors []string // its Members', else its calendar's
+	ReadOnly bool // from a calendar feed: no edit link
 }
 
 type CalendarDay struct {
@@ -111,7 +112,11 @@ templ calendarDay(d CalendarDay, heading string) {
 			for _, e := range d.Events {
 				<li>
 					@swatches(e.Colors)
-					<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) }>{ e.Time } { e.Title }</a>
+					if e.ReadOnly {
+						<span title="From a calendar feed: read-only">{ e.Time } { e.Title }</span>
+					} else {
+						<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) }>{ e.Time } { e.Title }</a>
+					}
 				</li>
 			}
 		</ul>
