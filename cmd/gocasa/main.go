@@ -4,17 +4,20 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 	_ "time/tzdata" // DST rules never depend on the host image
 
 	"github.com/DeRusto/goCasa/internal/app"
 	"github.com/DeRusto/goCasa/internal/config"
+	"github.com/DeRusto/goCasa/internal/db"
 )
 
 func main() {
@@ -22,6 +25,9 @@ func main() {
 	slog.SetDefault(log)
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck())
+	}
+	if len(os.Args) > 1 && os.Args[1] == "reset-pin" {
+		os.Exit(resetPIN(log, os.Args[2:]))
 	}
 	if err := run(log); err != nil {
 		log.Error("gocasa stopped", "err", err)
@@ -51,6 +57,34 @@ func healthcheck() int {
 	if res.StatusCode != http.StatusOK {
 		return 1
 	}
+	return 0
+}
+
+// resetPIN is `gocasa reset-pin <member>`: run inside the container when the
+// last Admin forgets their PIN. It prints a new PIN to change in Settings.
+func resetPIN(log *slog.Logger, args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: gocasa reset-pin <Admin name or id>")
+		return 2
+	}
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		log.Error("reset-pin", "err", err)
+		return 1
+	}
+	// Just the database: no migrations or backups under the running server.
+	d, err := db.Open(filepath.Join(cfg.DataDir, "app.db"))
+	if err != nil {
+		log.Error("reset-pin", "err", err)
+		return 1
+	}
+	defer d.Close()
+	pin, err := (&app.App{DB: d}).ResetPIN(context.Background(), args[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "reset-pin:", err)
+		return 1
+	}
+	fmt.Printf("New PIN for %s: %s\nUnlock Settings with it, then choose your own.\n", args[0], pin)
 	return 0
 }
 

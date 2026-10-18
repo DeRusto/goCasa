@@ -10,7 +10,9 @@ type Member struct {
 	ID    int64
 	Name  string
 	Color string // #rrggbb
-	Role  string // "admin" or "member"
+	Role     string // "admin" or "member"
+	Archived  bool
+	HasAvatar bool // else initials on colour
 }
 
 // Initials are the first letters of the first two words of name.
@@ -26,7 +28,11 @@ func Initials(name string) string {
 }
 
 templ avatar(m Member) {
+	if m.HasAvatar {
+		<img class="avatar" src={ "/members/" + strconv.FormatInt(m.ID, 10) + "/avatar" } alt="" style="width:2.5em;height:2.5em;border-radius:50%;vertical-align:middle"/>
+	} else {
 	<span class="avatar" style={ "display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
+	}
 }
 
 templ formError(msg string) {
@@ -83,6 +89,10 @@ templ Lock(admins []Member, errMsg string) {
 	}
 }
 
+func memberURL(m Member, action string) templ.SafeURL {
+	return templ.SafeURL("/settings/members/" + strconv.FormatInt(m.ID, 10) + action)
+}
+
 templ memberFields(m Member) {
 	<label>Name <input name="name" value={ m.Name } required maxlength="50"/></label>
 	<label>Colour <input type="color" name="color" value={ m.Color }/></label>
@@ -105,27 +115,41 @@ templ Settings(members []Member, errMsg string) {
 			<h2>Members</h2>
 			<p>People or pets. Only Admins have a PIN, and they need one.</p>
 			for _, m := range members {
-				<section>
-					<h3>
-						@avatar(m)
-						{ m.Name }
-						if m.Role == "admin" {
-							(Admin)
+				if !m.Archived {
+					<section>
+						<h3>
+							@avatar(m)
+							{ m.Name }
+							if m.Role == "admin" {
+								(Admin)
+							}
+						</h3>
+						<form method="post" action={ memberURL(m, "") }>
+							@memberFields(m)
+							if m.Role == "admin" {
+								@pinInput("New PIN (blank keeps it)")
+							} else {
+								@pinInput("PIN (only when making them an Admin)")
+							}
+							<button>Save</button>
+						</form>
+						<form method="post" action={ memberURL(m, "/avatar") } enctype="multipart/form-data">
+							<label>Picture <input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required/></label>
+							<button>Upload</button>
+						</form>
+						if m.HasAvatar {
+							<form method="post" action={ memberURL(m, "/avatar/delete") }>
+								<button>Use initials</button>
+							</form>
 						}
-					</h3>
-					<form method="post" action={ templ.SafeURL("/settings/members/" + strconv.FormatInt(m.ID, 10)) }>
-						@memberFields(m)
-						if m.Role == "admin" {
-							@pinInput("New PIN (blank keeps it)")
-						} else {
-							@pinInput("PIN (only when making them an Admin)")
-						}
-						<button>Save</button>
-					</form>
-					<form method="post" action={ templ.SafeURL("/settings/members/" + strconv.FormatInt(m.ID, 10) + "/delete") }>
-						<button>Delete { m.Name }</button>
-					</form>
-				</section>
+						<form method="post" action={ memberURL(m, "/archive") }>
+							<button>Archive { m.Name }</button>
+						</form>
+						<form method="post" action={ memberURL(m, "/delete") }>
+							<button>Delete { m.Name }</button>
+						</form>
+					</section>
+				}
 			}
 			<h2>Add a Member</h2>
 			<form method="post" action="/settings/members">
@@ -133,6 +157,24 @@ templ Settings(members []Member, errMsg string) {
 				@pinInput("PIN (Admins only)")
 				<button>Add</button>
 			</form>
+			<h2>Archived</h2>
+			<p>Members who have left. They keep their history but are hidden everywhere else. Only a Member with no history can be deleted.</p>
+			for _, m := range members {
+				if m.Archived {
+					<section>
+						<h3>
+							@avatar(m)
+							{ m.Name }
+						</h3>
+						<form method="post" action={ memberURL(m, "/restore") }>
+							<button>Restore { m.Name }</button>
+						</form>
+						<form method="post" action={ memberURL(m, "/delete") }>
+							<button>Delete { m.Name }</button>
+						</form>
+					</section>
+				}
+			}
 		</main>
 	}
 }

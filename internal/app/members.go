@@ -1,15 +1,22 @@
 package app
 
 import (
+	"context"
+	"crypto/rand"
 	"database/sql"
 	"errors"
+	"fmt"
+	"math/big"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"golang.org/x/crypto/bcrypt"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/DeRusto/goCasa/internal/web"
 )
@@ -20,6 +27,10 @@ var (
 )
 
 const errLastAdmin = "The Household needs at least one Admin."
+
+// keepsAnAdmin is true for a Member whose demotion, archiving or deletion
+// still leaves the Household an active Admin.
+const keepsAnAdmin = "(role != 'admin' OR archived OR (SELECT count(*) FROM members WHERE role = 'admin' AND NOT archived) > 1)"
 
 // memberForm is a validated Member form: name, colour, role and an optional
 // PIN (bcrypt hash, nil when the PIN field was blank).
@@ -58,9 +69,9 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 }
 
 func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
-	q := "SELECT id, name, color, role FROM members"
+	q := "SELECT id, name, color, role, archived, avatar IS NOT NULL FROM members"
 	if adminsOnly {
-		q += " WHERE role = 'admin'"
+		q += " WHERE role = 'admin' AND NOT archived"
 	}
 	rows, err := a.DB.QueryContext(r.Context(), q+" ORDER BY name, id")
 	if err != nil {
@@ -70,7 +81,7 @@ func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
 	var ms []web.Member
 	for rows.Next() {
 		var m web.Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.Role); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.Role, &m.Archived, &m.HasAvatar); err != nil {
 			return nil, err
 		}
 		ms = append(ms, m)
@@ -174,16 +185,53 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 	a.render(w, r, status, web.Lock(admins, errMsg))
 }
 
+// Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
+const (
+	pinTries = 5
+	pinBlock = 5 * time.Minute
+)
+
+var errPINBlocked = fmt.Sprintf("Too many wrong PINs: that Admin's PIN is blocked for %v minutes.", int(pinBlock.Minutes()))
+
 func (a *App) postLock(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PostFormValue("member_id"), 10, 64)
+	now := a.Now().Unix()
+	// Count the try before the slow bcrypt check, so parallel guesses can't get
+	// past the limit; the try that reaches it starts the block, which ends when
+	// pinBlock passes or the PIN is reset. A crash mid-check counts as a wrong try.
 	var hash []byte
-	err := a.DB.QueryRowContext(r.Context(), "SELECT pin_hash FROM members WHERE id = ? AND role = 'admin'", id).Scan(&hash)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	var nowBlocked bool
+	err := a.DB.QueryRowContext(r.Context(), `UPDATE members SET
+			pin_failures = CASE WHEN pin_failures + 1 >= ?2 THEN 0 ELSE pin_failures + 1 END,
+			pin_blocked_until = CASE WHEN pin_failures + 1 >= ?2 THEN ?3 + ?4 ELSE pin_blocked_until END
+		WHERE id = ?1 AND role = 'admin' AND NOT archived AND coalesce(pin_blocked_until, 0) <= ?3
+		RETURNING pin_hash, coalesce(pin_blocked_until > ?3, 0)`,
+		id, pinTries, now, int64(pinBlock/time.Second)).Scan(&hash, &nowBlocked)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = a.DB.QueryRowContext(r.Context(), "SELECT 1 FROM members WHERE id = ? AND role = 'admin' AND NOT archived", id).Scan(new(int))
+		if err == nil {
+			a.lockPage(w, r, http.StatusTooManyRequests, errPINBlocked)
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			a.lockPage(w, r, http.StatusUnauthorized, "That PIN didn't match. Try again.")
+			return
+		}
+	}
+	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	if err != nil || bcrypt.CompareHashAndPassword(hash, []byte(r.PostFormValue("pin"))) != nil {
+	if bcrypt.CompareHashAndPassword(hash, []byte(r.PostFormValue("pin"))) != nil {
+		if nowBlocked {
+			a.lockPage(w, r, http.StatusTooManyRequests, errPINBlocked)
+			return
+		}
 		a.lockPage(w, r, http.StatusUnauthorized, "That PIN didn't match. Try again.")
+		return
+	}
+	if _, err := a.DB.ExecContext(r.Context(), "UPDATE members SET pin_failures = 0, pin_blocked_until = NULL WHERE id = ?", id); err != nil {
+		a.serverError(w, r, err)
 		return
 	}
 	a.setUnlock(w, id)
@@ -234,9 +282,12 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	// One guarded statement, so another device's change between the read above
 	// and this write can't demote the last Admin or leave an Admin without a PIN.
 	res, err := a.DB.ExecContext(r.Context(), `UPDATE members SET name = ?1, color = ?2, role = ?3,
-			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END
+			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END,
+			-- A new PIN clears a wrong-PIN block: this is how an Admin resets another's.
+			pin_failures = CASE WHEN ?4 IS NULL THEN pin_failures ELSE 0 END,
+			pin_blocked_until = CASE WHEN ?4 IS NULL THEN pin_blocked_until END
 		WHERE id = ?5
-			AND (?3 = 'admin' OR role != 'admin' OR (SELECT count(*) FROM members WHERE role = 'admin') > 1)
+			AND (?3 = 'admin' OR `+keepsAnAdmin+`)
 			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)`,
 		f.name, f.color, f.role, f.pinHash, id)
 	if err != nil {
@@ -254,10 +305,31 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
+// deleteMember hard-deletes a Member with no history: history tables reference
+// members with no ON DELETE action, so the foreign key refuses the rest.
 func (a *App) deleteMember(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	res, err := a.DB.ExecContext(r.Context(), `DELETE FROM members
-		WHERE id = ? AND (role != 'admin' OR (SELECT count(*) FROM members WHERE role = 'admin') > 1)`, id)
+	res, err := a.DB.ExecContext(r.Context(), "DELETE FROM members WHERE id = ? AND "+keepsAnAdmin, id)
+	var serr *sqlite.Error
+	if errors.As(err, &serr) && serr.Code() == sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY {
+		a.settingsPage(w, r, http.StatusConflict, "They have history, so they can't be deleted. Archive them instead.")
+		return
+	}
+	a.guardedMemberChange(w, r, id, res, err)
+}
+
+// setArchived archives (hides, keeping their history) or restores a Member.
+func (a *App) setArchived(archived bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		res, err := a.DB.ExecContext(r.Context(), "UPDATE members SET archived = ? WHERE id = ? AND (NOT ? OR "+keepsAnAdmin+")", archived, id, archived)
+		a.guardedMemberChange(w, r, id, res, err)
+	}
+}
+
+// guardedMemberChange finishes a change to Member id that keepsAnAdmin guarded:
+// no row changed means no such Member, or the last active Admin.
+func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, id int64, res sql.Result, err error) {
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -276,4 +348,44 @@ func (a *App) deleteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// ResetPIN gives the active Admin named who (name, ASCII case ignored, or id) a new
+// random 6-digit PIN and clears any wrong-PIN block. It is `gocasa reset-pin`,
+// for when the last Admin forgets their PIN.
+func (a *App) ResetPIN(ctx context.Context, who string) (string, error) {
+	// An exact id wins over a name, so every Admin can be picked by id.
+	rows, err := a.DB.QueryContext(ctx, `SELECT id FROM members WHERE role = 'admin' AND NOT archived
+		AND (CAST(id AS TEXT) = ?1 OR (lower(name) = lower(?1) AND NOT EXISTS (
+			SELECT 1 FROM members WHERE role = 'admin' AND NOT archived AND CAST(id AS TEXT) = ?1)))`, strings.TrimSpace(who))
+	if err != nil {
+		return "", err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return "", err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(ids) != 1 {
+		return "", fmt.Errorf("%d active Admins match %q; give one Admin's name or id", len(ids), who)
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", err
+	}
+	pin := fmt.Sprintf("%06d", n)
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	_, err = a.DB.ExecContext(ctx, "UPDATE members SET pin_hash = ?, pin_failures = 0, pin_blocked_until = NULL WHERE id = ?", hash, ids[0])
+	return pin, err
 }
