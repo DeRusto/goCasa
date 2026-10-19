@@ -21,6 +21,9 @@ type Household struct {
 	Clock24     bool
 	WeekStart   int // 0 = Sunday
 	IdleSeconds int // a Wall display's screensaver after this long with no input
+	NightMode   string // "off", "black" or "dim_clock"
+	NightStart  int    // hour 0-23
+	NightEnd    int    // hour 0-23
 }
 
 type deviceKey struct{}
@@ -105,6 +108,22 @@ templ householdSection(h Household) {
 			Wall display screensaver after
 			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" required/>
 			seconds idle
+		</label>
+		<label>
+			Night mode (Wall displays)
+			<select name="night_mode">
+				@option("off", "Off", h.NightMode)
+				@option("black", "Black (screen may turn off)", h.NightMode)
+				@option("dim_clock", "Dim clock", h.NightMode)
+			</select>
+		</label>
+		<label>
+			from hour
+			<input type="number" name="night_start" value={ strconv.Itoa(h.NightStart) } min="0" max="23" required/>
+		</label>
+		<label>
+			to hour
+			<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
 		</label>
 		<button>Save household</button>
 	</form>
