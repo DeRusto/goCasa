@@ -17,13 +17,6 @@ func shopper(t *testing.T) *apptest.Harness {
 	return h.Device()
 }
 
-func post(t *testing.T, h *apptest.Harness, path string, f url.Values) {
-	t.Helper()
-	if code, body := h.Post(t, path, f); code != http.StatusOK {
-		t.Fatalf("POST %s = %d %q", path, code, body)
-	}
-}
-
 // items is the item names list id shows, in order.
 func items(t *testing.T, h *apptest.Harness, list string) []string {
 	t.Helper()

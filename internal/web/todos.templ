@@ -1,0 +1,194 @@
+package web
+
+import "strconv"
+
+type Todo struct {
+	ID       int64
+	ColumnID int64
+	Title    string
+	Notes    string
+	Due      string // YYYY-MM-DD or ""
+	Done     bool
+	Overdue  bool
+}
+
+type TodoColumn struct {
+	ID    int64
+	Name  string
+	Todos []Todo
+}
+
+// TodosPage is the to-do board with its filter. Dragging is offered only on
+// the plain board (manual order, open to-dos, no due filter), where a column
+// shows every to-do whose place it would set.
+type TodosPage struct {
+	Columns                     []TodoColumn
+	Status, Due, From, To, Sort string
+	Draggable                   bool
+}
+
+templ TodosBoard(p TodosPage) {
+	@layout("To-dos") {
+		<main>
+			<h1>To-dos</h1>
+			<p><a href="/">Home</a></p>
+			<form method="get" action="/todos">
+				<label>
+					Show
+					<select name="status">
+						@option("open", "Open", p.Status)
+						@option("done", "Completed", p.Status)
+						@option("all", "All", p.Status)
+					</select>
+				</label>
+				<label>
+					Due
+					<select name="due">
+						@option("", "Any time", p.Due)
+						@option("overdue", "Overdue", p.Due)
+						@option("today", "Today or earlier", p.Due)
+						@option("week", "Within 7 days", p.Due)
+						@option("none", "No due date", p.Due)
+					</select>
+				</label>
+				<label>From <input type="date" name="from" value={ p.From }/></label>
+				<label>To <input type="date" name="to" value={ p.To }/></label>
+				<label>
+					Sort
+					<select name="sort">
+						@option("", "My order", p.Sort)
+						@option("due", "Due date", p.Sort)
+					</select>
+				</label>
+				<button>Apply</button>
+			</form>
+			<div id="live">
+				for _, c := range p.Columns {
+					<section data-column={ strconv.FormatInt(c.ID, 10) }>
+						<h2>{ c.Name }</h2>
+						<ul class="todos">
+							for _, t := range c.Todos {
+								<li data-todo={ strconv.FormatInt(t.ID, 10) }>
+									<a href={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>{ t.Title }</a>
+									if t.Due != "" {
+										<span>
+											due { t.Due }
+											if t.Overdue {
+												(overdue)
+											}
+										</span>
+									}
+									if t.Done {
+										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/reopen") }><button>Re-open</button></form>
+									} else {
+										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/complete") }><button>Done</button></form>
+									}
+									if p.Draggable {
+										<span class="handle" aria-label="Drag to reorder">⠿</span>
+									}
+								</li>
+							}
+						</ul>
+						<form method="post" action="/todos">
+							<input type="hidden" name="column_id" value={ strconv.FormatInt(c.ID, 10) }/>
+							<label>New to-do <input name="title" required maxlength="200"/></label>
+							<label>Due <input type="date" name="due_date"/></label>
+							<button>Add</button>
+						</form>
+						<details>
+							<summary>Column</summary>
+							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10)) }>
+								<label>Name <input name="name" required maxlength="50" value={ c.Name }/></label>
+								<button>Rename</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10) + "/delete") } onsubmit="return confirm('Delete this column and all its to-dos?')">
+								<button>Delete column</button>
+							</form>
+						</details>
+					</section>
+				}
+			</div>
+			<form method="post" action="/todo-columns">
+				<label>Column name <input name="name" required maxlength="50"/></label>
+				<button>Add column</button>
+			</form>
+		</main>
+		if p.Draggable {
+			@dragReorder()
+		}
+		@liveUpdates()
+	}
+}
+
+templ option(value, label, selected string) {
+	<option value={ value } selected?={ value == selected }>{ label }</option>
+}
+
+// dragReorder lets a to-do be dragged by its handle within or across columns,
+// with pointer events so it works on touch screens too; on drop it posts the
+// order of each column it changed.
+// shortcut: hand-rolled instead of vendored SortableJS (no network to vendor it); swap in SortableJS for animation and auto-scroll.
+templ dragReorder() {
+	<script>
+	(() => {
+		let item, from;
+		document.addEventListener("pointerdown", e => {
+			const h = e.target.closest(".handle");
+			if (!h) return;
+			e.preventDefault();
+			item = h.closest("li");
+			from = item.closest("section");
+			item.style.opacity = "0.5";
+		});
+		document.addEventListener("pointermove", e => {
+			if (!item) return;
+			const over = document.elementFromPoint(e.clientX, e.clientY);
+			const li = over?.closest("li[data-todo]"), ul = over?.closest("section[data-column]")?.querySelector("ul.todos");
+			if (li && li !== item) {
+				const r = li.getBoundingClientRect();
+				li.parentNode.insertBefore(item, e.clientY < r.top + r.height / 2 ? li : li.nextSibling);
+			} else if (!li && ul && !ul.contains(item)) {
+				ul.appendChild(item);
+			}
+		});
+		document.addEventListener("pointerup", () => {
+			if (!item) return;
+			item.style.opacity = "";
+			const to = item.closest("section");
+			for (const s of new Set([from, to])) {
+				const body = new URLSearchParams({ column_id: s.dataset.column });
+				s.querySelectorAll("li[data-todo]").forEach(li => body.append("ids", li.dataset.todo));
+				fetch("/todos/reorder", { method: "POST", body });
+			}
+			item = null;
+		});
+	})();
+	</script>
+}
+
+// TodoEditPage edits one to-do; it can move to another column.
+templ TodoEditPage(t Todo, columns []TodoColumn) {
+	@layout("To-do") {
+		<main>
+			<h1>To-do</h1>
+			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>
+				<label>Title <input name="title" required maxlength="200" value={ t.Title }/></label>
+				<label>
+					Column
+					<select name="column_id">
+						for _, c := range columns {
+							<option value={ strconv.FormatInt(c.ID, 10) } selected?={ c.ID == t.ColumnID }>{ c.Name }</option>
+						}
+					</select>
+				</label>
+				<label>Due <input type="date" name="due_date" value={ t.Due }/></label>
+				<label>Notes <textarea name="notes" maxlength="5000">{ t.Notes }</textarea></label>
+				<button>Save</button>
+			</form>
+			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/delete") } onsubmit="return confirm('Delete this to-do?')">
+				<button>Delete</button>
+			</form>
+			<p><a href="/todos">Back</a></p>
+		</main>
+	}
+}

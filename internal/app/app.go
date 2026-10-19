@@ -147,6 +147,18 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /lists/{id}/items", a.addItem)
 	mux.HandleFunc("POST /lists/{list}/items/{id}", a.checkItem)
 	mux.HandleFunc("POST /lists/{list}/items/{id}/move", a.moveItem)
+	// shortcut: completing to-dos ignores the to-do Lock until Locks land (#40).
+	mux.HandleFunc("GET /todos", a.getTodos)
+	mux.HandleFunc("POST /todos", a.createTodo)
+	mux.HandleFunc("POST /todos/reorder", a.reorderTodos)
+	mux.HandleFunc("GET /todos/{id}", a.getTodo)
+	mux.HandleFunc("POST /todos/{id}", a.updateTodo)
+	mux.HandleFunc("POST /todos/{id}/complete", a.completeTodo)
+	mux.HandleFunc("POST /todos/{id}/reopen", a.reopenTodo)
+	mux.HandleFunc("POST /todos/{id}/delete", a.deleteTodo)
+	mux.HandleFunc("POST /todo-columns", a.createTodoColumn)
+	mux.HandleFunc("POST /todo-columns/{id}", a.renameTodoColumn)
+	mux.HandleFunc("POST /todo-columns/{id}/delete", a.deleteTodoColumn)
 
 	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
 	csrf := http.NewCrossOriginProtection()
