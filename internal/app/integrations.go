@@ -152,12 +152,12 @@ func (a *App) gcm() (cipher.AEAD, error) {
 	return cipher.NewGCMWithRandomNonce(block)
 }
 
-// lastSync is when an integration last synced, as the pages show it.
-func (a *App) lastSync(at sql.NullInt64) string {
+// lastSync is when an integration last synced, as the pages show it; clock is a clockLayout.
+func (a *App) lastSync(at sql.NullInt64, clock string) string {
 	if !at.Valid {
 		return "never"
 	}
-	return time.Unix(at.Int64, 0).In(a.Config.Location).Format("2 Jan 2006 15:04")
+	return time.Unix(at.Int64, 0).In(a.Config.Location).Format("2 Jan 2006 " + clock)
 }
 
 // syncNow syncs every integration that can sync, due or not.
@@ -176,6 +176,7 @@ func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 
 // feeds is the iCal feeds as Settings shows them.
 func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
+	clock := a.clock(ctx)
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.color, i.last_success_at, i.consecutive_failures, i.last_error
 		FROM integrations i JOIN source_calendars c ON c.integration_id = i.id WHERE i.type = 'ical' ORDER BY i.name, i.id`)
 	if err != nil {
@@ -189,7 +190,7 @@ func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
 		if err := rows.Scan(&f.ID, &f.Name, &f.Color, &ok, &f.Failures, &f.LastError); err != nil {
 			return nil, err
 		}
-		f.LastSuccess = a.lastSync(ok)
+		f.LastSuccess = a.lastSync(ok, clock)
 		fs = append(fs, f)
 	}
 	return fs, rows.Err()

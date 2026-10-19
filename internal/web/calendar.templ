@@ -57,6 +57,7 @@ type CalendarPage struct {
 	Calendars         []CalendarInfo
 	Prev, Next, Today string
 	ViewLinks         map[string]string
+	DefaultView       string // this view and Member filter, at today
 	ICS               string // the absolute ICS export URL, for all calendars
 	Stale             []StaleCalendar
 	BeyondGoogle      bool // the view reaches past the 12 months of Google events kept
@@ -176,6 +177,7 @@ templ Calendar(p CalendarPage) {
 				|
 				<a href={ newEventURL(p.Date) }>New event</a>
 			</nav>
+			@defaultViewButton(p.DefaultView)
 			<form method="post" action="/calendar/sync">
 				<input type="hidden" name="back" value={ p.ViewLinks[p.View] }/>
 				<button>Sync now</button>
