@@ -130,23 +130,15 @@ func (a *App) clock(ctx context.Context) string {
 func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	view := r.PostFormValue("default_view")
 	start, err := strconv.Atoi(r.PostFormValue("week_start"))
-	var idle *int
-	if v := r.PostFormValue("screensaver_idle_seconds"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 10 {
-			a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is at least 10 seconds.")
-			return
-		}
-		idle = &n
+	idle, ok := optInt(r, "screensaver_idle_seconds", 10)
+	if !ok {
+		a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is at least 10 seconds.")
+		return
 	}
-	var perPhoto *int
-	if v := r.PostFormValue("seconds_per_photo"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 5 {
-			a.settingsPage(w, r, http.StatusBadRequest, "Each photo shows for at least 5 seconds.")
-			return
-		}
-		perPhoto = &n
+	perPhoto, ok := optInt(r, "seconds_per_photo", 5)
+	if !ok {
+		a.settingsPage(w, r, http.StatusBadRequest, "Each photo shows for at least 5 seconds.")
+		return
 	}
 	var night *string
 	var nightStart, nightEnd *int
@@ -181,6 +173,20 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// optInt is form field name as a number of at least min, nil when not sent;
+// ok is false when it was sent but isn't one.
+func optInt(r *http.Request, name string, min int) (n *int, ok bool) {
+	v := r.PostFormValue(name)
+	if v == "" {
+		return nil, true
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil || i < min {
+		return nil, false
+	}
+	return &i, true
 }
 
 // getRoot sends the browser to this device's Default view, else the Household's.

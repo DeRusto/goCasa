@@ -61,7 +61,7 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if err := a.replacePhotos(ctx, "folder", found); err != nil {
+	if err := a.replacePhotos(ctx, photoSourceFolder, found); err != nil {
 		return err
 	}
 	a.folderMu.Lock()
@@ -75,7 +75,7 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 // is on. Immich has nothing to show when not connected, its list is empty,
 // or it is failing with none of its photos cached. Never both.
 func (a *App) screensaverPhotos(ctx context.Context) (map[int64]bool, error) {
-	im, err := a.photoList(ctx, "immich")
+	im, err := a.photoList(ctx, photoSourceImmich)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (a *App) screensaverPhotos(ctx context.Context) (map[int64]bool, error) {
 	if err := a.DB.QueryRowContext(ctx, "SELECT fallback_folder_enabled FROM household_settings").Scan(&on); err != nil || !on {
 		return nil, err
 	}
-	folder, err := a.photoList(ctx, "folder")
+	folder, err := a.photoList(ctx, photoSourceFolder)
 	for id := range folder {
 		folder[id] = true // on disk already
 	}

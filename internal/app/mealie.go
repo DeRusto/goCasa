@@ -121,10 +121,11 @@ func (it mealieItem) name() string {
 	if n == "" {
 		n = "(no name)"
 	}
-	return cut(n, 200)
+	return truncateRunes(n, 200)
 }
 
-func cut(s string, max int) string {
+// truncateRunes is s cut to at most max characters (runes, not bytes).
+func truncateRunes(s string, max int) string {
 	if r := []rune(s); len(r) > max {
 		return string(r[:max])
 	}
@@ -194,7 +195,7 @@ func placeholders(n int) string {
 }
 
 func upsertMealieList(ctx context.Context, tx *sql.Tx, integration int64, l mealieList) (int64, error) {
-	name := cut(strings.TrimSpace(l.Name), 50)
+	name := truncateRunes(strings.TrimSpace(l.Name), 50)
 	if name == "" {
 		name = "Mealie list"
 	}
@@ -257,22 +258,15 @@ func mealieVersionOK(v string) bool {
 func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	token := strings.TrimSpace(r.PostFormValue("token"))
-	u, err := url.Parse(raw)
 	switch {
-	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
+	case parseUpstreamURL(raw) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "Mealie's address starts with https:// or http://.")
 		return
 	case token == "":
 		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API token from Mealie (Profile > API Tokens).")
 		return
 	}
-	var exists bool
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM integrations WHERE type = ?)", mealieType).Scan(&exists); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	if exists {
-		a.settingsPage(w, r, http.StatusBadRequest, "Mealie is already connected. Disconnect it first.")
+	if a.alreadyConnected(w, r, mealieType, "Mealie") {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -288,23 +282,7 @@ func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, fmt.Sprintf("GoCasa needs Mealie v2.0 or later; this one is %q.", about.Version))
 		return
 	}
-	enc, err := a.seal([]byte(token))
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	cfg, _ := json.Marshal(mealieConfig{URL: raw})
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO integrations (type, name, config_json, credentials_enc, sync_interval_seconds, next_sync_at)
-		VALUES (?, 'Mealie', ?, ?, ?, ?) RETURNING id`, mealieType, string(cfg), enc, mealiePoll, a.Now().Add(syncTimeout).Unix()).Scan(&id); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	if err := a.syncIntegration(r.Context(), id); err != nil { // its outcome shows in Settings
-		a.serverError(w, r, err)
-		return
-	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	a.addIntegration(w, r, mealieType, "Mealie", mealieConfig{URL: raw}, token, mealiePoll)
 }
 
 // disconnectMealie removes Mealie and its Mirrored lists from GoCasa; Mealie keeps them.
