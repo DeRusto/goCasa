@@ -128,7 +128,12 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, errMsg))
+	g, err := a.googleSettings(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, status, web.Settings(ms, fs, g, errMsg))
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {

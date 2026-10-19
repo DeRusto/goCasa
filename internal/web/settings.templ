@@ -24,6 +24,27 @@ type Feed struct {
 	LastError   string
 }
 
+// Google is the Google accounts section of Settings.
+type Google struct {
+	Configured  bool   // GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set
+	RedirectURI string // to enter in the Cloud project
+	Accounts    []GoogleAccount
+}
+
+type GoogleAccount struct {
+	ID        int64
+	Email     string
+	Calendars []GoogleCalendar
+}
+
+type GoogleCalendar struct {
+	ID          int64
+	Name, Color string
+	Enabled     bool
+	ReadOnly    bool
+	Members     map[int64]bool // default Members
+}
+
 // Initials are the first letters of the first two words of name.
 func Initials(name string) string {
 	var b strings.Builder
@@ -115,7 +136,7 @@ templ memberFields(m Member) {
 }
 
 // Settings is the unlocked Settings page.
-templ Settings(members []Member, feeds []Feed, errMsg string) {
+templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
 	@layout("Settings") {
 		<main>
 			<h1>Settings</h1>
@@ -207,6 +228,57 @@ templ Settings(members []Member, feeds []Feed, errMsg string) {
 				<label>Colour <input type="color" name="color" value="#f59e0b"/></label>
 				<button>Add feed</button>
 			</form>
+			@googleSection(google, members)
 		</main>
+	}
+}
+
+func calendarDot(color string) string {
+	return "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + color
+}
+
+templ googleSection(g Google, members []Member) {
+	<h2>Google accounts</h2>
+	if !g.Configured {
+		<p>To connect Google calendars, create your own Google Cloud OAuth client and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (see the README). Its redirect URI is <code>{ g.RedirectURI }</code>.</p>
+	} else {
+		<p>Pick which calendars to show and whose events they are. Its redirect URI is <code>{ g.RedirectURI }</code>.</p>
+		for _, acct := range g.Accounts {
+			<section>
+				<h3>{ acct.Email }</h3>
+				for _, c := range acct.Calendars {
+					<form method="post" action={ templ.SafeURL("/settings/google-calendars/" + strconv.FormatInt(c.ID, 10)) }>
+						<fieldset>
+							<legend>
+								<span aria-hidden="true" style={ calendarDot(c.Color) }></span>
+								{ c.Name }
+								if c.ReadOnly {
+									(read-only)
+								}
+							</legend>
+							<label><input type="checkbox" name="enabled" checked?={ c.Enabled }/> Show</label>
+							for _, m := range members {
+								if !m.Archived {
+									<label><input type="checkbox" name="member" value={ strconv.FormatInt(m.ID, 10) } checked?={ c.Members[m.ID] }/> { m.Name }</label>
+								}
+							}
+							<button>Save { c.Name }</button>
+						</fieldset>
+					</form>
+				}
+				<form method="post" action="/integrations/google/connect">
+					<input type="hidden" name="account" value={ strconv.FormatInt(acct.ID, 10) }/>
+					<button>Reconnect { acct.Email }</button>
+				</form>
+				<form method="post" action={ templ.SafeURL("/settings/google/" + strconv.FormatInt(acct.ID, 10) + "/delete") }>
+					<label>
+						<input type="checkbox" name="confirm" required/>
+						Disconnecting deletes its calendars and events here, with their default Members and every Member change made to its events.
+					</label>
+					<button>Disconnect { acct.Email }</button>
+				</form>
+			</section>
+		}
+		<form method="post" action="/integrations/google/connect"><button>Connect a Google account</button></form>
 	}
 }

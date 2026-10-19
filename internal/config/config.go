@@ -20,6 +20,9 @@ type Config struct {
 	Location      *time.Location // from TZ: the Household's default zone
 	EncryptionKey []byte         // 32 bytes, AES-256
 	SessionSecret []byte
+	// The Household's own Google OAuth client; empty ID = Google not set up.
+	GoogleClientID, GoogleClientSecret string
+	GoogleRedirectURI                  string // default ${BASE_URL}/auth/google/callback
 }
 
 // Load builds a Config from getenv (os.Getenv in main, a map in tests).
@@ -27,6 +30,10 @@ func Load(getenv func(string) string) (Config, error) {
 	c := Config{
 		Addr:    getenv("ADDR"),
 		DataDir: getenv("DATA_DIR"),
+
+		GoogleClientID:     getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURI:  getenv("GOOGLE_REDIRECT_URI"),
 	}
 	if c.Addr == "" {
 		c.Addr = DefaultAddr
@@ -42,6 +49,12 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("BASE_URL %q must be an absolute http(s) URL", raw))
 	} else {
 		c.BaseURL = u
+		if c.GoogleRedirectURI == "" {
+			c.GoogleRedirectURI = u.String() + "/auth/google/callback"
+		}
+	}
+	if (c.GoogleClientID == "") != (c.GoogleClientSecret == "") {
+		errs = append(errs, errors.New("set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither"))
 	}
 
 	tz := getenv("TZ")
