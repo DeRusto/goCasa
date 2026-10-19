@@ -45,8 +45,8 @@ func Load(getenv func(string) string) (Config, error) {
 
 	if raw := getenv("BASE_URL"); raw == "" {
 		errs = append(errs, errors.New("BASE_URL is required, e.g. https://casa.example.com"))
-	} else if u, err := url.Parse(strings.TrimSuffix(raw, "/")); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		errs = append(errs, fmt.Errorf("BASE_URL %q must be an absolute http(s) URL", raw))
+	} else if u, err := url.Parse(strings.TrimSuffix(raw, "/")); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		errs = append(errs, fmt.Errorf("BASE_URL %q must be an absolute http(s) URL with no query or fragment", raw))
 	} else {
 		c.BaseURL = u
 		if c.GoogleRedirectURI == "" {

@@ -48,6 +48,7 @@ func TestLoadRejectsBadValues(t *testing.T) {
 	for name, tc := range map[string]struct{ key, val, want string }{
 		"missing base url":  {"BASE_URL", "", "BASE_URL"},
 		"relative base url": {"BASE_URL", "casa.example.com", "BASE_URL"},
+		"base url query":    {"BASE_URL", "https://casa.example.com/?x=1", "BASE_URL"},
 		"bad tz":            {"TZ", "Mars/Olympus", "TZ"},
 		"short key":         {"APP_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZQ==", "APP_ENCRYPTION_KEY"}, // 31 bytes
 		"key not base64":    {"APP_ENCRYPTION_KEY", "not base64!", "APP_ENCRYPTION_KEY"},

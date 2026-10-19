@@ -37,7 +37,7 @@ GoCasa never ships a shared Google client: each Household makes its own, free, i
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a project, e.g. "GoCasa".
 2. **APIs & Services → Library**: enable the **Google Calendar API**.
-3. **APIs & Services → OAuth consent screen** (Google Auth Platform): user type **External** (a Google Workspace household can pick **Internal** instead and skip step 6). Fill in the app name and your email. Under **Data access** add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/calendar.events` and `.../auth/calendar.calendarlist.readonly`.
+3. **APIs & Services → OAuth consent screen** (Google Auth Platform): user type **External** (a Google Workspace household can pick **Internal** instead and skip step 6). Fill in the app name and your email. Under **Data access** add the scopes `openid`, `https://www.googleapis.com/auth/userinfo.email`, `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.calendarlist.readonly`.
 4. **Credentials → Create credentials → OAuth client ID**: type **Web application**, authorised redirect URI exactly what Settings shows under *Google accounts*: `${BASE_URL}/auth/google/callback`, e.g. `https://casa.example.com/auth/google/callback`.
 5. Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and restart GoCasa.
 6. **Audience → Publish app**: move it from **Testing** to **In production**. Don't skip this: in Testing, Google expires the connection every 7 days. You don't need Google's verification: a personal app with under 100 users is exempt.
@@ -45,7 +45,7 @@ GoCasa never ships a shared Google client: each Household makes its own, free, i
 
 Connect more logins the same way; each is its own Google account in Settings. **Reconnect** signs the same login in again and keeps its calendars and Member defaults; signing in as a different login is refused. **Disconnect** tells Google to drop GoCasa's access and deletes that account's calendars and events here, with their Member defaults and any Member changes made to its events.
 
-**Without HTTPS:** Google only accepts an `https` redirect on a real domain, or plain `http://localhost`. If GoCasa has no HTTPS name yet, connect once from the host itself or through an SSH tunnel from your computer: `ssh -L 8080:localhost:8080 you@gocasa-host`. Set `GOOGLE_REDIRECT_URI=http://localhost:8080/auth/google/callback`, use that as the client's redirect URI, restart, and open `http://localhost:8080/settings` to connect. The connection keeps working afterwards from any address; only connecting and reconnecting need the redirect.
+**Without HTTPS:** Google only accepts an `https` redirect on a real domain, or plain `http://localhost`. If GoCasa has no HTTPS name yet, connect once from the host itself or through an SSH tunnel from your computer: `ssh -L 8080:localhost:8080 you@gocasa-host`. Set `GOOGLE_REDIRECT_URI=http://localhost:8080/auth/google/callback`, use that as the client's redirect URI, restart, and open `http://localhost:8080/settings` to connect. The connection keeps working afterwards from any address; only connecting and reconnecting need the redirect. If `BASE_URL` is `https`, use Chrome or Firefox for this: Safari won't keep GoCasa's secure cookies on `http://localhost`.
 
 ## Backups and restore
 

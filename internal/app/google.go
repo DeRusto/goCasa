@@ -195,9 +195,9 @@ func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGr
 				color = defaultGoogleColor
 			}
 			readOnly := c.AccessRole != "owner" && c.AccessRole != "writer"
-			// New calendars start hidden until an Admin picks them; known ones keep their settings but not their access.
+			// New calendars start hidden until an Admin picks them; known ones keep their Admin's choices but take Google's name, colour and access.
 			if _, err := tx.ExecContext(ctx, `INSERT INTO source_calendars (integration_id, external_id, name, color, enabled, read_only) VALUES (?, ?, ?, ?, 0, ?)
-				ON CONFLICT (integration_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET read_only = excluded.read_only`,
+				ON CONFLICT (integration_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, color = excluded.color, read_only = excluded.read_only`,
 				id, c.ID, string(name[:min(len(name), 50)]), color, readOnly); err != nil {
 				return err
 			}
@@ -236,13 +236,16 @@ func (a *App) googleExchange(ctx context.Context, code string) (googleGrant, err
 		Sub   string `json:"sub"`
 		Email string `json:"email"`
 		Aud   string `json:"aud"`
+		Iss   string `json:"iss"`
+		Exp   int64  `json:"exp"`
 	}
 	parts := strings.Split(body.IDToken, ".")
 	if len(parts) != 3 {
 		return googleGrant{}, errors.New("Google sent no ID token")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil || json.Unmarshal(raw, &claims) != nil || claims.Sub == "" || claims.Aud != a.Config.GoogleClientID {
+	if err != nil || json.Unmarshal(raw, &claims) != nil || claims.Sub == "" || claims.Aud != a.Config.GoogleClientID ||
+		(claims.Iss != "https://accounts.google.com" && claims.Iss != "accounts.google.com") || claims.Exp <= a.Now().Unix() {
 		return googleGrant{}, errors.New("Google's ID token isn't for this client")
 	}
 	return googleGrant{refresh: body.RefreshToken, access: body.AccessToken, sub: claims.Sub, email: claims.Email}, nil
@@ -363,7 +366,8 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 			found = false
 			return nil
 		}
-		if _, err := tx.ExecContext(r.Context(), "DELETE FROM source_calendar_members WHERE calendar_id = ?", id); err != nil {
+		// The form lists only active Members: an archived one's default stays for their return.
+		if _, err := tx.ExecContext(r.Context(), "DELETE FROM source_calendar_members WHERE calendar_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", id); err != nil {
 			return err
 		}
 		for _, m := range parseIDs(r.PostForm["member"]) {

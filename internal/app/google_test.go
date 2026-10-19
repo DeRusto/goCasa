@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DeRusto/goCasa/internal/app"
 	"github.com/DeRusto/goCasa/internal/apptest"
@@ -50,7 +51,8 @@ func newGoogle(t *testing.T) *fakeGoogle {
 		g.issued++
 		access := fmt.Sprintf("access-%d", g.issued)
 		g.access[access] = sub
-		claims, _ := json.Marshal(map[string]string{"sub": sub, "email": strings.TrimPrefix(sub, "sub-") + "@example.com", "aud": "client-id"})
+		claims, _ := json.Marshal(map[string]any{"sub": sub, "email": strings.TrimPrefix(sub, "sub-") + "@example.com", "aud": "client-id",
+			"iss": "https://accounts.google.com", "exp": apptest.Start.Add(time.Hour).Unix()})
 		json.NewEncoder(w).Encode(map[string]string{
 			"access_token":  access,
 			"refresh_token": fmt.Sprintf("refresh-%s-%d", sub, g.issued),
@@ -82,6 +84,7 @@ func (g *fakeGoogle) list(cals ...map[string]any) {
 	g.calendars = cals
 	g.mu.Unlock()
 }
+func (g *fakeGoogle) tokens() int { g.mu.Lock(); defer g.mu.Unlock(); return g.issued }
 func (g *fakeGoogle) revocations() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -181,11 +184,11 @@ func TestConnectReconnectDisconnectGoogle(t *testing.T) {
 	// Reconnecting the same login replaces the token and keeps the rest; a new calendar shows up.
 	g.signInAs("sub-alice")
 	g.list(cal("alice@example.com", "Alice renamed", "#000000", "reader"), cal("work", "Work", "#ffffff", "writer"))
-	if code, page := h.Post(t, "/integrations/google/connect", url.Values{"account": {fmt.Sprint(acct)}}); code != http.StatusOK || !strings.Contains(page, "Work") {
+	if code, page := h.Post(t, "/integrations/google/connect", url.Values{"account": {fmt.Sprint(acct)}}); code != http.StatusOK || !strings.Contains(page, "Work") || !strings.Contains(page, "Alice renamed") {
 		t.Fatalf("reconnect = %d:\n%s", code, page)
 	}
-	if g.consents[2].Get("login_hint") != "alice@example.com" {
-		t.Fatalf("reconnect consent = %v", g.consents[2])
+	if last := g.consents[len(g.consents)-1]; last.Get("login_hint") != "alice@example.com" {
+		t.Fatalf("reconnect consent = %v", last)
 	}
 	if storedToken(t, h, acct) == before {
 		t.Fatal("reconnect kept the old token")
@@ -197,6 +200,14 @@ func TestConnectReconnectDisconnectGoogle(t *testing.T) {
 	h.App.DB.QueryRow("SELECT sync_cursor FROM integrations WHERE id = ?", acct).Scan(&cursor)
 	if id != aliceCal || enabled != 1 || members != 1 || cursor != "cursor-1" || readOnly != 1 {
 		t.Fatalf("after reconnect: calendar %d enabled %d defaults %d cursor %q read-only %d", id, enabled, members, cursor, readOnly)
+	}
+
+	// An archived Member isn't on the form, so saving keeps their default for when they're back.
+	h.Post(t, "/settings/members/2/archive", nil)
+	h.Post(t, fmt.Sprintf("/settings/google-calendars/%d", aliceCal), url.Values{"enabled": {"on"}})
+	h.App.DB.QueryRow("SELECT count(*) FROM source_calendar_members WHERE calendar_id = ? AND member_id = 2", aliceCal).Scan(&members)
+	if members != 1 {
+		t.Fatal("saving the calendar dropped an archived Member's default")
 	}
 
 	// Connecting a login that's already here reconnects it rather than adding a second.
@@ -214,7 +225,7 @@ func TestConnectReconnectDisconnectGoogle(t *testing.T) {
 	if code, _ := h.Post(t, fmt.Sprintf("/settings/google/%d/delete", acct), url.Values{"confirm": {"on"}}); code != http.StatusOK {
 		t.Fatalf("disconnect = %d", code)
 	}
-	if got := g.revocations(); len(got) != 2 || got[1] != fmt.Sprintf("refresh-sub-alice-%d", 4) {
+	if got := g.revocations(); len(got) != 2 || got[1] != fmt.Sprintf("refresh-sub-alice-%d", g.tokens()) { // the token the last reconnect stored
 		t.Fatalf("revoked %q", got)
 	}
 	var left int
