@@ -32,7 +32,7 @@ func (a *App) getICS(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.DB.QueryContext(r.Context(), `SELECT id, title, description, location, all_day, coalesce(start_utc, 0), coalesce(end_utc, 0),
 			coalesce(start_tzid, ''), coalesce(all_day_date, ''), coalesce(all_day_end_date, ''), coalesce(rrule, ''), exdates_json, rdates_json,
 			coalesce(recurring_master_id, 0), coalesce(original_start_utc, 0), status = 'cancelled', updated_at
-		FROM events WHERE ?1 = '' OR calendar_id IN (SELECT value FROM json_each(?1))
+		FROM events WHERE (?1 = '' OR calendar_id IN (SELECT value FROM json_each(?1))) AND calendar_id IN (SELECT id FROM source_calendars WHERE enabled)
 		ORDER BY recurring_master_id IS NOT NULL, id`, filter) // masters before their edits
 	if err != nil {
 		a.serverError(w, r, err)

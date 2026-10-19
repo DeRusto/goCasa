@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/config"
@@ -51,6 +52,7 @@ type App struct {
 	Scheduler *Scheduler
 	Bus       *Bus
 	handler   http.Handler
+	syncLocks sync.Map // integration id → *sync.Mutex; see syncIntegration
 }
 
 // New opens DATA_DIR/app.db, runs migrations and builds the handler.
@@ -135,6 +137,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /calendar/event/{id}", a.getEvent)
 	mux.HandleFunc("POST /calendar/event/{id}", a.saveEvent)
 	mux.HandleFunc("POST /calendar/event/{id}/delete", a.deleteEvent)
+	mux.HandleFunc("GET /calendar/synced/{id}", a.getSynced)
+	mux.HandleFunc("POST /calendar/synced/{id}", a.saveSynced)
+	mux.HandleFunc("POST /calendar/sync", a.syncNow)
 
 	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
 	csrf := http.NewCrossOriginProtection()

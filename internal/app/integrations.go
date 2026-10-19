@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -23,13 +24,14 @@ type Integration interface {
 	Sync(ctx context.Context, a *App, in integrationRow) error
 }
 
-var integrationTypes = map[string]Integration{"ical": icalFeed{}}
+var integrationTypes = map[string]Integration{"ical": icalFeed{}, googleType: googleSync{}}
 
 // integrationRow is what Sync gets from its row.
 type integrationRow struct {
 	id          int64
 	credentials []byte // decrypted; nil if none
 	cursor      string // sync_cursor; Sync writes it back itself, in its own transaction
+	sealed      []byte // credentials_enc as read: a reconnect meanwhile changes it
 }
 
 const (
@@ -37,9 +39,10 @@ const (
 	maxBackoff  = 6 * time.Hour
 )
 
-// syncDue syncs each enabled integration whose next_sync_at has come, one at a time.
+// syncDue syncs each enabled integration whose next_sync_at has come, one at a
+// time; a Google account needing a reconnect waits for it.
 func (a *App) syncDue(ctx context.Context, now time.Time) error {
-	rows, err := a.DB.QueryContext(ctx, "SELECT id FROM integrations WHERE enabled AND next_sync_at <= ? ORDER BY next_sync_at, id", now.Unix())
+	rows, err := a.DB.QueryContext(ctx, "SELECT id FROM integrations WHERE enabled AND status = 'ok' AND next_sync_at <= ? ORDER BY next_sync_at, id", now.Unix())
 	if err != nil {
 		return err
 	}
@@ -68,6 +71,10 @@ func (a *App) syncDue(ctx context.Context, now time.Time) error {
 // syncIntegration runs integration id's Sync and records how it went. Its
 // error is only one recording that failed.
 func (a *App) syncIntegration(ctx context.Context, id int64) error {
+	// One sync of an integration at a time: each writes back the cursor it read.
+	mu, _ := a.syncLocks.LoadOrStore(id, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
 	var typ, cursor string
 	var enc []byte
 	var interval, failures int64
@@ -76,7 +83,7 @@ func (a *App) syncIntegration(ctx context.Context, id int64) error {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, syncTimeout)
-	err := a.runSync(ctx, typ, enc, integrationRow{id: id, cursor: cursor})
+	err := a.runSync(ctx, typ, enc, integrationRow{id: id, cursor: cursor, sealed: enc})
 	cancel()
 	now := a.Now()
 	if err == nil {
@@ -87,9 +94,13 @@ func (a *App) syncIntegration(ctx context.Context, id int64) error {
 	a.Log.Warn("integration sync failed", "integration", id, "type", typ, "err", err)
 	// 1, 2, 4… minutes, at most maxBackoff.
 	delay := min(time.Minute<<min(failures, 20), maxBackoff)
+	if errors.As(err, new(transientError)) {
+		delay = time.Duration(interval) * time.Second
+	}
 	msg := []rune(err.Error())
 	_, err = a.DB.ExecContext(context.WithoutCancel(ctx), `UPDATE integrations SET last_sync_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ?, next_sync_at = ? WHERE id = ?`,
 		now.Unix(), string(msg[:min(len(msg), 500)]), now.Add(delay).Unix(), id)
+	a.publish("updated", "integration", id) // an open calendar page may now show a stale-sync notice
 	return err
 }
 
@@ -141,6 +152,28 @@ func (a *App) gcm() (cipher.AEAD, error) {
 	return cipher.NewGCMWithRandomNonce(block)
 }
 
+// lastSync is when an integration last synced, as the pages show it.
+func (a *App) lastSync(at sql.NullInt64) string {
+	if !at.Valid {
+		return "never"
+	}
+	return time.Unix(at.Int64, 0).In(a.Config.Location).Format("2 Jan 2006 15:04")
+}
+
+// syncNow syncs every integration that can sync, due or not.
+func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
+	// Not cancelled by a closed tab: a sync cut short counts as a failure.
+	if err := a.syncDue(context.WithoutCancel(r.Context()), time.Unix(1<<62, 0)); err != nil { // every next_sync_at is before then
+		a.serverError(w, r, err)
+		return
+	}
+	back := r.PostFormValue("back")
+	if !strings.HasPrefix(back, "/calendar?") { // only back to a calendar view, never off-site
+		back = "/calendar"
+	}
+	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
 // feeds is the iCal feeds as Settings shows them.
 func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.color, i.last_success_at, i.consecutive_failures, i.last_error
@@ -156,10 +189,7 @@ func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
 		if err := rows.Scan(&f.ID, &f.Name, &f.Color, &ok, &f.Failures, &f.LastError); err != nil {
 			return nil, err
 		}
-		f.LastSuccess = "never"
-		if ok.Valid {
-			f.LastSuccess = time.Unix(ok.Int64, 0).In(a.Config.Location).Format("2 Jan 2006 15:04")
-		}
+		f.LastSuccess = a.lastSync(ok)
 		fs = append(fs, f)
 	}
 	return fs, rows.Err()

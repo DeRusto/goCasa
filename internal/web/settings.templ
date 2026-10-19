@@ -7,10 +7,10 @@ import (
 
 // Member is a Household Member as the pages show it.
 type Member struct {
-	ID    int64
-	Name  string
-	Color string // #rrggbb
-	Role     string // "admin" or "member"
+	ID        int64
+	Name      string
+	Color     string // #rrggbb
+	Role      string // "admin" or "member"
 	Archived  bool
 	HasAvatar bool // else initials on colour
 }
@@ -32,9 +32,13 @@ type Google struct {
 }
 
 type GoogleAccount struct {
-	ID        int64
-	Email     string
-	Calendars []GoogleCalendar
+	ID          int64
+	Email       string
+	Reconnect   bool   // Reconnect needed
+	LastSuccess string // when it last synced, or "never"
+	Failures    int    // syncs failed in a row
+	LastError   string
+	Calendars   []GoogleCalendar
 }
 
 type GoogleCalendar struct {
@@ -61,7 +65,7 @@ templ avatar(m Member) {
 	if m.HasAvatar {
 		<img class="avatar" src={ "/members/" + strconv.FormatInt(m.ID, 10) + "/avatar" } alt="" style="width:2.5em;height:2.5em;border-radius:50%;vertical-align:middle"/>
 	} else {
-	<span class="avatar" style={ "display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
+		<span class="avatar" style={ "display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
 	}
 }
 
@@ -213,10 +217,7 @@ templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
 						<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color }></span>
 						{ f.Name }
 					</h3>
-					<p>Last synced: { f.LastSuccess }</p>
-					if f.Failures > 0 {
-						<p role="alert">Sync failing ({ strconv.Itoa(f.Failures) } in a row): { f.LastError }</p>
-					}
+					@syncStatus(f.LastSuccess, f.Failures, f.LastError)
 					<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
 						<button>Remove { f.Name }</button>
 					</form>
@@ -237,6 +238,14 @@ func calendarDot(color string) string {
 	return "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + color
 }
 
+// syncStatus is an integration's last sync and, while failing, its error.
+templ syncStatus(lastSuccess string, failures int, lastError string) {
+	<p>Last synced: { lastSuccess }</p>
+	if failures > 0 {
+		<p role="alert">Sync failing ({ strconv.Itoa(failures) } in a row): { lastError }</p>
+	}
+}
+
 templ googleSection(g Google, members []Member) {
 	<h2>Google accounts</h2>
 	if !g.Configured {
@@ -247,6 +256,10 @@ templ googleSection(g Google, members []Member) {
 	for _, acct := range g.Accounts {
 		<section>
 			<h3>{ acct.Email }</h3>
+			if acct.Reconnect {
+				<p role="alert">Reconnect needed: Google withdrew GoCasa's access, so it has stopped syncing. Its events show as last synced.</p>
+			}
+			@syncStatus(acct.LastSuccess, acct.Failures, acct.LastError)
 			for _, c := range acct.Calendars {
 				<form method="post" action={ templ.SafeURL("/settings/google-calendars/" + strconv.FormatInt(c.ID, 10)) }>
 					<fieldset>
