@@ -321,7 +321,7 @@ func applySeriesMembers(ctx context.Context, tx *sql.Tx, only []int64) error {
 	if err != nil {
 		return err
 	}
-	picked := map[int64][]int64{}
+	picked := map[int64]string{}
 	for rows.Next() {
 		var id int64
 		var members string
@@ -329,9 +329,7 @@ func applySeriesMembers(ctx context.Context, tx *sql.Tx, only []int64) error {
 			rows.Close()
 			return err
 		}
-		var ms []int64
-		json.Unmarshal([]byte(members), &ms)
-		picked[id] = ms
+		picked[id] = members
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -341,7 +339,11 @@ func applySeriesMembers(ctx context.Context, tx *sql.Tx, only []int64) error {
 		if _, err := tx.ExecContext(ctx, "UPDATE events SET local_override = 1 WHERE id = ?", id); err != nil {
 			return err
 		}
-		if err := setMembers(ctx, tx, id, ms); err != nil {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM event_members WHERE event_id = ?", id); err != nil {
+			return err
+		}
+		// Archived since the choice or not: a Member chosen stays chosen, as on the rows that had it then.
+		if _, err := tx.ExecContext(ctx, "INSERT INTO event_members (event_id, member_id) SELECT ?, m.id FROM members m WHERE m.id IN (SELECT value FROM json_each(?))", id, ms); err != nil {
 			return err
 		}
 	}

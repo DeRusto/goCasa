@@ -45,14 +45,15 @@ type googleRow struct {
 
 // googleResult is what a write leaves for the sync after it: the Google id
 // whose event or series rows the change's Members go on (only those from
-// event row from on, if set), whether those rows are new (their Members start
+// event row from on, if set), whether target is a Series (its later
+// occurrences keep the choice), whether those rows are new (their Members start
 // as the calendar's defaults), whether a series' rule changed, so its
 // calendar re-imports in full, and whether Google was left alone (local), so
 // there is nothing to sync.
 type googleResult struct {
 	target             string
 	from               int64
-	fresh, full, local bool
+	series, fresh, full, local bool
 }
 
 // googleAPI is a Google calendar's events, with an access token.
@@ -405,9 +406,9 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		case row.series == "" || sc == scopeThis:
 			return googleResult{target: row.external, local: true}, nil
 		case sc == scopeFollowing:
-			return googleResult{target: row.series, from: row.id, local: true}, nil
+			return googleResult{target: row.series, series: true, from: row.id, local: true}, nil
 		}
-		return googleResult{target: row.series, local: true}, nil
+		return googleResult{target: row.series, series: true, local: true}, nil
 	}
 	if row.etag == "" {
 		return googleResult{}, errNoVersion
@@ -435,9 +436,9 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		if len(patch) > 0 {
 			err = g.call(ctx, http.MethodPatch, row.series, master.Etag, patch, nil)
 		}
-		return googleResult{target: row.series}, err
+		return googleResult{target: row.series, series: true}, err
 	case first: // a new start renames every occurrence, so re-import
-		return googleResult{target: row.series, full: true}, g.call(ctx, http.MethodPatch, row.series, master.Etag, googleBody(c), nil)
+		return googleResult{target: row.series, series: true, full: true}, g.call(ctx, http.MethodPatch, row.series, master.Etag, googleBody(c), nil)
 	}
 	old, from, err := a.splitRecurrence(master, o)
 	if err != nil {
@@ -456,7 +457,7 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		}
 		return googleResult{}, err
 	}
-	return googleResult{target: made.ID, fresh: true, full: true}, nil
+	return googleResult{target: made.ID, series: true, fresh: true, full: true}, nil
 }
 
 // removeGoogle deletes Google event row in Edit scope sc: This event cancels
@@ -557,15 +558,17 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 				return err
 			}
 		}
-		// A Series (it has occurrence rows) keeps the choice for occurrences that sync later.
+		if !res.series {
+			return nil
+		}
+		// Kept for the Series' occurrences that sync later, even with none in the window yet.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM google_series_members WHERE calendar_id = ?1 AND series_id = ?2
 			AND (?3 = 0 OR from_key >= (SELECT `+startKey+` FROM events WHERE id = ?3))`, cal, res.target, res.from); err != nil {
 			return err
 		}
 		list, _ := json.Marshal(members)
 		_, err = tx.ExecContext(ctx, `INSERT INTO google_series_members (calendar_id, series_id, from_key, members)
-			SELECT ?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4
-			WHERE EXISTS (SELECT 1 FROM events WHERE calendar_id = ?1 AND external_series_id = ?2)`, cal, res.target, res.from, string(list))
+			VALUES (?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4)`, cal, res.target, res.from, string(list))
 		return err
 	})
 	if err == nil && len(ids) > 0 {
@@ -754,7 +757,7 @@ func (a *App) createGoogle(w http.ResponseWriter, r *http.Request, f web.EventFo
 		base, err = a.defaultMembers(r.Context(), c.calendarID)
 	}
 	if err == nil {
-		err = a.landGoogle(r.Context(), account, c.calendarID, googleResult{target: made.ID, fresh: true}, c.members, base)
+		err = a.landGoogle(r.Context(), account, c.calendarID, googleResult{target: made.ID, series: googleRecurrence(c) != nil, fresh: true}, c.members, base)
 		if err != nil {
 			a.landFailed(w, r, err)
 			return true

@@ -396,6 +396,8 @@ func membersOf(t *testing.T, h *apptest.Harness, external string) string {
 func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 	g := newGoogle(t)
 	h := swimSeries(t, g)
+	var alice int64
+	h.App.DB.QueryRow("SELECT id FROM source_calendars WHERE external_id = 'alice@example.com'").Scan(&alice)
 	second := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260321"))
 	third := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260328"))
 	if code, _ := submit(t, h, second, "/edit", googleEdit("Swim", "2026-03-21T10:00", "2026-03-21T11:00", "scope", "all", "members", "1")); code != http.StatusOK {
@@ -404,6 +406,8 @@ func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 	later := func(id, start, end string) map[string]any {
 		return withEtag(gOccurrence("swim", id, "Swim", start, end), "x")
 	}
+	// Archived since, the Member still goes on the Series' later Occurrences.
+	h.App.DB.Exec("UPDATE members SET archived = 1 WHERE id = 1")
 	g.set(func(g *fakeGoogle) {
 		g.changes["alice@example.com"] = []map[string]any{later("swim_20260411", "2026-04-11T09:00:00Z", "2026-04-11T10:00:00Z")}
 	})
@@ -411,6 +415,7 @@ func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 	if got := membersOf(t, h, "swim_20260411"); got != "1" {
 		t.Fatalf("a later Occurrence after All events has Members %q", got)
 	}
+	h.App.DB.Exec("UPDATE members SET archived = 0 WHERE id = 1")
 
 	if code, _ := submit(t, h, third, "/edit", googleEdit("Swim", "2026-03-28T10:00", "2026-03-28T11:00", "scope", "following", "members", "1", "members", "2")); code != http.StatusOK {
 		t.Fatalf("This and following Members = %d", code)
@@ -431,12 +436,25 @@ func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 		}
 	}
 
+	// A Series created with none of its Occurrences synced yet keeps its Members for them.
+	form := googleEdit("Gym", "2026-03-17T07:00", "2026-03-17T08:00", "calendar_id", fmt.Sprint(alice), "repeat", "weekly", "members", "1")
+	if code, _ := h.Post(t, "/calendar/event", form); code != http.StatusOK {
+		t.Fatalf("creating = %d", code)
+	}
+	g.set(func(g *fakeGoogle) {
+		g.changes["alice@example.com"] = []map[string]any{withEtag(gOccurrence("new1", "new1_20260317", "Gym", "2026-03-17T07:00:00Z", "2026-03-17T08:00:00Z"), "x")}
+	})
+	h.Post(t, "/calendar/sync", nil)
+	if got := membersOf(t, h, "new1_20260317"); got != "1" {
+		t.Fatalf("a created Series' Occurrence synced later has Members %q", got)
+	}
+
 	// Deleting the calendar takes the choices with it.
 	var before, n int
 	h.App.DB.QueryRow("SELECT count(*) FROM google_series_members").Scan(&before)
 	h.App.DB.Exec("DELETE FROM integrations WHERE type = 'google_calendar'")
 	h.App.DB.QueryRow("SELECT count(*) FROM google_series_members").Scan(&n)
-	if before != 2 || n != 0 {
+	if before != 3 || n != 0 {
 		t.Fatalf("%d Series Member choices outlived their calendar", n)
 	}
 }
