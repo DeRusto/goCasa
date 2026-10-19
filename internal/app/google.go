@@ -116,8 +116,13 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadGateway, "Couldn't finish connecting to Google: "+err.Error())
 		return
 	}
-	msg, err := a.storeGoogleAccount(r.Context(), account, g)
-	if msg != "" || err != nil {
+	// Only Google's own errors are shown; anything of GoCasa's is a server error.
+	var msg string
+	cals, gerr := a.googleCalendars(r.Context(), g.access)
+	if gerr == nil {
+		msg, err = a.storeGoogleAccount(r.Context(), account, g, cals)
+	}
+	if gerr != nil || msg != "" || err != nil {
 		// Don't leave a grant behind that GoCasa won't use. Revoking ends the
 		// login's whole grant, so not for a login that's connected here.
 		// Its own context: a browser closed mid-connect still gets cleaned up after.
@@ -132,9 +137,11 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	switch {
+	case gerr != nil:
+		a.Log.Warn("google connect failed", "err", gerr)
+		a.settingsPage(w, r, http.StatusBadGateway, "Couldn't finish connecting to Google: "+gerr.Error())
 	case err != nil:
-		a.Log.Warn("google connect failed", "err", err)
-		a.settingsPage(w, r, http.StatusBadGateway, "Couldn't finish connecting to Google: "+err.Error())
+		a.serverError(w, r, err)
 	case msg != "":
 		a.settingsPage(w, r, http.StatusConflict, msg)
 	default:
@@ -143,12 +150,8 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 // storeGoogleAccount saves g as Google account account (an integration id, or
-// "" to add one) with its calendars. msg refuses the login, for the person.
-func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGrant) (msg string, err error) {
-	cals, err := a.googleCalendars(ctx, g.access)
-	if err != nil {
-		return "", err
-	}
+// "" to add one) with its calendars cals. msg refuses the login, for the person.
+func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGrant, cals []googleCalendar) (msg string, err error) {
 	tok, _ := json.Marshal(googleToken{RefreshToken: g.refresh})
 	enc, err := a.seal(tok)
 	if err != nil {
