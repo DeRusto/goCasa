@@ -124,3 +124,10 @@ func TestReorderPersists(t *testing.T) {
 		t.Errorf("moving a missing item = %d, want 404", code)
 	}
 }
+
+func TestListsPageFollowsLiveUpdates(t *testing.T) {
+	h := household(t)
+	if _, page := h.Get(t, "/lists"); !strings.Contains(page, `id="live"`) || !strings.Contains(page, "/events/stream") {
+		t.Fatalf("Lists has no live region: %q", page)
+	}
+}

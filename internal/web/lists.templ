@@ -21,57 +21,60 @@ templ Lists(lists []ShoppingList, msg string) {
 			<h1>Lists</h1>
 			@defaultViewButton("/lists")
 			@formError(msg)
-			for _, l := range lists {
-				<section data-list={ id(l.ID) }>
-					<h2>{ l.Name }</h2>
-					if l.ReadOnly {
-						<p role="status">GoCasa can't reach Mealie, so this list shows its last contents and can't be changed until Mealie answers again.</p>
-					}
-					<ul>
-						for i, it := range l.Items {
-							<li>
-								if !l.ReadOnly {
-									<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } style="display:inline">
-										if it.Checked {
-											<input type="hidden" name="checked" value="false"/>
-											<button aria-label={ "Uncheck " + it.Note }>☑</button>
-										} else {
-											<input type="hidden" name="checked" value="true"/>
-											<button aria-label={ "Check " + it.Note }>☐</button>
-										}
-									</form>
-								}
-								<span data-item={ id(it.ID) } data-checked?={ it.Checked } style={ templ.KV("text-decoration:line-through", it.Checked) }>{ it.Note }</span>
-								if !l.Mirrored && i > 0 {
-									@moveButton(l.ID, it, i-1, "↑", "Move up ")
-								}
-								if !l.Mirrored && i < len(l.Items)-1 {
-									@moveButton(l.ID, it, i+1, "↓", "Move down ")
-								}
-								if !l.ReadOnly {
-									<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/delete") } style="display:inline">
-										<button aria-label={ "Delete " + it.Note }>✕</button>
-									</form>
-								}
-							</li>
+			<div id="live">
+				for _, l := range lists {
+					<section data-list={ id(l.ID) }>
+						<h2>{ l.Name }</h2>
+						if l.ReadOnly {
+							<p role="status">GoCasa can't reach Mealie, so this list shows its last contents and can't be changed until Mealie answers again.</p>
 						}
-					</ul>
-					if !l.ReadOnly {
-						<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items") }>
-							<input name="note" required maxlength="200" aria-label={ "Add to " + l.Name }/>
-							<button>Add</button>
-						</form>
-						<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/clear") }>
-							<button>Clear checked from { l.Name }</button>
-						</form>
-					}
-				</section>
-			}
+						<ul>
+							for i, it := range l.Items {
+								<li>
+									if !l.ReadOnly {
+										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } style="display:inline">
+											if it.Checked {
+												<input type="hidden" name="checked" value="false"/>
+												<button aria-label={ "Uncheck " + it.Note }>☑</button>
+											} else {
+												<input type="hidden" name="checked" value="true"/>
+												<button aria-label={ "Check " + it.Note }>☐</button>
+											}
+										</form>
+									}
+									<span data-item={ id(it.ID) } data-checked?={ it.Checked } style={ templ.KV("text-decoration:line-through", it.Checked) }>{ it.Note }</span>
+									if !l.Mirrored && i > 0 {
+										@moveButton(l.ID, it, i-1, "↑", "Move up ")
+									}
+									if !l.Mirrored && i < len(l.Items)-1 {
+										@moveButton(l.ID, it, i+1, "↓", "Move down ")
+									}
+									if !l.ReadOnly {
+										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/delete") } style="display:inline">
+											<button aria-label={ "Delete " + it.Note }>✕</button>
+										</form>
+									}
+								</li>
+							}
+						</ul>
+						if !l.ReadOnly {
+							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items") }>
+								<input name="note" required maxlength="200" aria-label={ "Add to " + l.Name }/>
+								<button>Add</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/clear") }>
+								<button>Clear checked from { l.Name }</button>
+							</form>
+						}
+					</section>
+				}
+			</div>
 			<form method="post" action="/lists">
 				<input name="name" required maxlength="50" aria-label="New list name"/>
 				<button>New list</button>
 			</form>
 		</main>
+		@liveUpdates()
 	}
 }
 
