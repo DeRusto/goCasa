@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -299,7 +300,9 @@ func TestFeedURLIsEncrypted(t *testing.T) {
 func TestRemoveFeed(t *testing.T) {
 	h := household(t)
 	addFeed(t, h, "School", newFeed(t, vcal(swim)).URL)
-	if code, _ := h.Post(t, "/settings/feeds/2/delete", nil); code != http.StatusOK {
+	var id int64
+	h.App.DB.QueryRow("SELECT id FROM integrations WHERE type = 'ical'").Scan(&id)
+	if code, _ := h.Post(t, "/settings/feeds/"+strconv.FormatInt(id, 10)+"/delete", nil); code != http.StatusOK {
 		t.Fatalf("remove = %d", code)
 	}
 	if page := agendaPage(t, h); strings.Contains(page, "Swim meet") {

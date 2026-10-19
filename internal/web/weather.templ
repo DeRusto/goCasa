@@ -1,0 +1,61 @@
+package web
+
+import (
+	"context"
+	"strconv"
+)
+
+// WeatherPill is the cached weather the slim pill shows (spec §8).
+type WeatherPill struct {
+	Current   int    // rounded
+	Unit      string // "C" or "F"
+	HasToday  bool   // the cache has today's high and low
+	High, Low int
+}
+
+// Weather is the Weather section of Settings.
+type Weather struct {
+	Lat, Lon    string // blank: no weather
+	Units       string // "metric" or "imperial"
+	LastSuccess string
+	Failures    int
+	LastError   string
+}
+
+type pillKey struct{}
+
+// WithWeatherPill gives the pages rendered with ctx their pill; nil for none.
+func WithWeatherPill(ctx context.Context, p *WeatherPill) context.Context {
+	return context.WithValue(ctx, pillKey{}, p)
+}
+
+func deg(n int) string { return strconv.Itoa(n) + "°" }
+
+templ weatherPill() {
+	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
+		<aside class="weather-pill" aria-label="Weather" style="display:inline-block;padding:.2em .8em;border-radius:1em;background:#e5e7eb">
+			{ deg(p.Current) + p.Unit }
+			if p.HasToday {
+				· H { deg(p.High) } L { deg(p.Low) }
+			}
+		</aside>
+	}
+}
+
+templ weatherSection(w Weather) {
+	<h2>Weather</h2>
+	<p>Where the weather is for, from Open-Meteo. Leave both blank for no weather.</p>
+	@syncStatus(w.LastSuccess, w.Failures, w.LastError)
+	<form method="post" action="/settings/weather">
+		<label>Latitude <input name="lat" type="text" inputmode="decimal" value={ w.Lat } placeholder="51.5"/></label>
+		<label>Longitude <input name="lon" type="text" inputmode="decimal" value={ w.Lon } placeholder="-0.12"/></label>
+		<label>
+			Units
+			<select name="units">
+				<option value="metric" selected?={ w.Units != "imperial" }>Metric (°C)</option>
+				<option value="imperial" selected?={ w.Units == "imperial" }>Imperial (°F)</option>
+			</select>
+		</label>
+		<button>Save weather</button>
+	</form>
+}

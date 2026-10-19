@@ -1,0 +1,183 @@
+package app
+
+import (
+	"database/sql"
+	"errors"
+	"net/http"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/DeRusto/goCasa/internal/web"
+)
+
+// Shopping is never locked (spec §9): no handler here checks a Lock or a PIN.
+
+func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
+	rows, err := a.DB.QueryContext(r.Context(), `SELECT l.id, l.name, i.id, i.note, i.checked
+		FROM shopping_lists l LEFT JOIN shopping_items i ON i.list_id = l.id
+		WHERE NOT l.hidden ORDER BY l.position, l.id, i.position, i.id`)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	defer rows.Close()
+	var lists []web.ShoppingList
+	for rows.Next() {
+		var l web.ShoppingList
+		var itemID sql.NullInt64
+		var note sql.NullString
+		var checked sql.NullBool
+		if err := rows.Scan(&l.ID, &l.Name, &itemID, &note, &checked); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		if n := len(lists); n == 0 || lists[n-1].ID != l.ID {
+			lists = append(lists, l)
+		}
+		if itemID.Valid {
+			last := &lists[len(lists)-1]
+			last.Items = append(last.Items, web.ShoppingItem{ID: itemID.Int64, Note: note.String, Checked: checked.Bool})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, http.StatusOK, web.Lists(lists))
+}
+
+// text is form field key trimmed, or "" when it is longer than max characters.
+func text(r *http.Request, key string, max int) string {
+	v := strings.TrimSpace(r.PostFormValue(key))
+	if len([]rune(v)) > max {
+		return ""
+	}
+	return v
+}
+
+func (a *App) createList(w http.ResponseWriter, r *http.Request) {
+	name := text(r, "name", 50)
+	if name == "" {
+		http.Error(w, "A list needs a name of 1 to 50 characters.", http.StatusBadRequest)
+		return
+	}
+	var id int64
+	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO shopping_lists (name, position)
+		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_lists)) RETURNING id`, name).Scan(&id); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.publish("created", "shopping_list", id)
+	http.Redirect(w, r, "/lists", http.StatusSeeOther)
+}
+
+func (a *App) addItem(w http.ResponseWriter, r *http.Request) {
+	list, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	note := text(r, "note", 200)
+	if note == "" {
+		http.Error(w, "An item needs 1 to 200 characters.", http.StatusBadRequest)
+		return
+	}
+	var id int64
+	err := a.DB.QueryRowContext(r.Context(), `INSERT INTO shopping_items (list_id, note, position)
+		SELECT id, ?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_items WHERE list_id = ?)
+		FROM shopping_lists WHERE id = ? AND integration_id IS NULL RETURNING id`, note, list, list).Scan(&id)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		http.NotFound(w, r)
+		return
+	case err != nil:
+		a.serverError(w, r, err)
+		return
+	}
+	a.publish("created", "shopping_item", id)
+	http.Redirect(w, r, "/lists", http.StatusSeeOther)
+}
+
+var errBadPosition = errors.New("bad position")
+
+// moveItem puts an item at a 0-based position in its list and renumbers the list.
+func (a *App) moveItem(w http.ResponseWriter, r *http.Request) {
+	id, list := itemPath(r)
+	to, err := strconv.Atoi(r.PostFormValue("position"))
+	if err != nil {
+		to = -1
+	}
+	err = a.inTx(r.Context(), func(tx *sql.Tx) error {
+		var exists bool
+		if err := tx.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM shopping_items WHERE "+localItem+")", id, list).Scan(&exists); err != nil {
+			return err
+		} else if !exists {
+			return sql.ErrNoRows
+		}
+		rows, err := tx.QueryContext(r.Context(), "SELECT id FROM shopping_items WHERE list_id = ? AND id != ? ORDER BY position, id", list, id)
+		if err != nil {
+			return err
+		}
+		var ids []int64
+		for rows.Next() {
+			var i int64
+			if err := rows.Scan(&i); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, i)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if to < 0 || to > len(ids) {
+			return errBadPosition
+		}
+		ids = slices.Insert(ids, to, id)
+		for pos, i := range ids {
+			if _, err := tx.ExecContext(r.Context(), "UPDATE shopping_items SET position = ? WHERE id = ?", pos, i); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		http.NotFound(w, r)
+	case errors.Is(err, errBadPosition):
+		http.Error(w, "That position is outside the list.", http.StatusBadRequest)
+	case err != nil:
+		a.serverError(w, r, err)
+	default:
+		a.publish("updated", "shopping_list", list)
+		http.Redirect(w, r, "/lists", http.StatusSeeOther)
+	}
+}
+
+// localItem limits a query on shopping_items to item ? on local list ?; a Mirrored list changes through Mealie.
+const localItem = "id = ? AND list_id = (SELECT id FROM shopping_lists WHERE id = ? AND integration_id IS NULL)"
+
+// itemPath is the item and list ids of a /lists/{list}/items/{id} request.
+func itemPath(r *http.Request) (item, list int64) {
+	item, _ = strconv.ParseInt(r.PathValue("id"), 10, 64)
+	list, _ = strconv.ParseInt(r.PathValue("list"), 10, 64)
+	return item, list
+}
+
+func (a *App) checkItem(w http.ResponseWriter, r *http.Request) {
+	id, list := itemPath(r)
+	checked, err := strconv.ParseBool(r.PostFormValue("checked"))
+	if err != nil {
+		http.Error(w, "checked must be true or false.", http.StatusBadRequest)
+		return
+	}
+	res, err := a.DB.ExecContext(r.Context(), "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, id, list)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	a.publish("updated", "shopping_item", id)
+	http.Redirect(w, r, "/lists", http.StatusSeeOther)
+}
