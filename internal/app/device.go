@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -228,19 +229,45 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	photo, left, err := a.currentPhoto(r.Context(), now, time.Duration(hh.SecondsPerPhoto)*time.Second)
+	src, left, err := a.photoNow(r.Context(), now, hh)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	var src string
-	if photo != 0 {
-		src = "/screensaver/photos/" + strconv.FormatInt(photo, 10)
-	}
 	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
 		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
-	}, src, int(left.Seconds()+.999)))
+	}, src, left))
+}
+
+// photoNow is the screensaver photo's address ("" for none) and the seconds it has left.
+func (a *App) photoNow(ctx context.Context, now time.Time, hh web.Household) (string, int, error) {
+	photo, left, err := a.currentPhoto(ctx, now, time.Duration(hh.SecondsPerPhoto)*time.Second)
+	if err != nil || photo == 0 {
+		return "", int(left.Seconds() + .999), err
+	}
+	return "/screensaver/photos/" + strconv.FormatInt(photo, 10), int(left.Seconds() + .999), nil
+}
+
+// getScreensaverPhoto tells an open screensaver its current photo, so it
+// swaps the image in place and its camera (motion-wake) stays up.
+func (a *App) getScreensaverPhoto(w http.ResponseWriter, r *http.Request) {
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	src, left, err := a.photoNow(r.Context(), a.Now(), hh)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(struct {
+		Src     string `json:"src"`
+		Seconds int    `json:"seconds"`
+	}{src, left})
 }
 
 // nightModeAt is the Night mode in force at hour (0-23): the household's

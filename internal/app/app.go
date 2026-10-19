@@ -118,6 +118,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /device/wall-display", a.requireUnlock(a.setWallDisplay))
 	mux.HandleFunc("POST /device/motion-wake", a.requireUnlock(a.setMotionWake))
 	mux.HandleFunc("GET /screensaver", a.getScreensaver)
+	mux.HandleFunc("GET /screensaver/photo", a.getScreensaverPhoto)
 	mux.HandleFunc("GET /screensaver/photos/{id}", a.getPhoto)
 	mux.HandleFunc("POST /settings/household", a.requireUnlock(a.saveHousehold))
 	mux.HandleFunc("GET /settings", a.getSettings)

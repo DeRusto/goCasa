@@ -370,3 +370,26 @@ func TestThePhotoCacheDropsTheLeastRecentlyUsed(t *testing.T) {
 		t.Errorf("the least recent photo wasn't evicted: %d fetches, want %d", after, before+1)
 	}
 }
+
+func TestScreensaverRotatesPhotosWithoutReloading(t *testing.T) {
+	h, _ := immichHousehold(t)
+	wall := h.Device()
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	first := photo(t, wall)
+	var p struct {
+		Src     string `json:"src"`
+		Seconds int    `json:"seconds"`
+	}
+	_, body := wall.Get(t, "/screensaver/photo")
+	if err := json.Unmarshal([]byte(body), &p); err != nil || p.Src != first || p.Seconds < 1 {
+		t.Fatalf("current photo = %q (%v), want %s", body, err, first)
+	}
+	h.Clock.Advance(30 * time.Second)
+	_, body = wall.Get(t, "/screensaver/photo")
+	if err := json.Unmarshal([]byte(body), &p); err != nil || p.Src == first || p.Src == "" {
+		t.Fatalf("next photo = %q, want a new one", body)
+	}
+	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `fetch("/screensaver/photo")`) {
+		t.Fatal("the screensaver does not swap photos in place")
+	}
+}
