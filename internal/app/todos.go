@@ -85,7 +85,9 @@ func (a *App) getTodos(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		t.Overdue = !t.Done && t.Due != "" && t.Due < today.Format(dateLayout)
-		cols[at[t.ColumnID]].Todos = append(cols[at[t.ColumnID]].Todos, t)
+		if i, ok := at[t.ColumnID]; ok {
+			cols[i].Todos = append(cols[i].Todos, t)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		a.serverError(w, r, err)

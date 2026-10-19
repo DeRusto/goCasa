@@ -38,7 +38,14 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
 			}
-			return err
+			if p == a.folderDir() {
+				return err
+			}
+			a.Log.Warn("fallback folder: skipping unreadable entry", "path", p, "err", err)
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		switch strings.ToLower(filepath.Ext(p)) {
 		case ".jpg", ".jpeg", ".png", ".webp":

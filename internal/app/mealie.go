@@ -166,7 +166,7 @@ func (mealie) Sync(ctx context.Context, a *App, in integrationRow) error {
 		}
 		lists = append(lists, full)
 	}
-	return a.inTx(ctx, func(tx *sql.Tx) error {
+	err = a.inTx(ctx, func(tx *sql.Tx) error {
 		keep := []any{in.id}
 		for _, l := range lists {
 			id, err := upsertMealieList(ctx, tx, in.id, l)
@@ -179,11 +179,12 @@ func (mealie) Sync(ctx context.Context, a *App, in integrationRow) error {
 			keep = append(keep, l.ID)
 		}
 		_, err := tx.ExecContext(ctx, "DELETE FROM shopping_lists WHERE integration_id = ? AND external_id NOT IN ("+placeholders(len(keep)-1)+")", keep...)
-		if err == nil {
-			a.publish("updated", "shopping_list", 0)
-		}
 		return err
 	})
+	if err == nil { // only once committed, so a refresh sees the new lists
+		a.publish("updated", "shopping_list", 0)
+	}
+	return err
 }
 
 // placeholders is n comma-separated ?s for an IN list; with none, an empty set.

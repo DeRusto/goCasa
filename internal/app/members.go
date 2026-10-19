@@ -248,7 +248,10 @@ func toLock(w http.ResponseWriter, r *http.Request) {
 
 // safeNext is next if it is a path on this site, else "": no open redirect.
 func safeNext(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, `/\`) {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsFunc(next, func(r rune) bool { return r == '\\' || r < 0x20 || r == 0x7f }) {
+		return ""
+	}
+	if u, err := url.Parse(next); err != nil || u.Scheme != "" || u.Host != "" {
 		return ""
 	}
 	return next
