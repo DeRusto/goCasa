@@ -15,3 +15,10 @@ func SetSyncFault(f func(n int)) (restore func()) {
 	syncFault = f
 	return func() { syncFault = old }
 }
+
+// SetPhotoCacheLimit shrinks the photo cache to n bytes for a test.
+func SetPhotoCacheLimit(n int) (restore func()) {
+	old := photoCacheLimit
+	photoCacheLimit = int64(n)
+	return func() { photoCacheLimit = old }
+}

@@ -21,6 +21,7 @@ type Household struct {
 	Clock24     bool
 	WeekStart   int // 0 = Sunday
 	IdleSeconds int // a Wall display's screensaver after this long with no input
+	SecondsPerPhoto int // each screensaver photo shows this long
 }
 
 type deviceKey struct{}
@@ -105,6 +106,10 @@ templ householdSection(h Household) {
 			Wall display screensaver after
 			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" required/>
 			seconds idle
+		</label>
+		<label>
+			Seconds per photo
+			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" required/>
 		</label>
 		<button>Save household</button>
 	</form>

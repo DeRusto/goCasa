@@ -52,6 +52,7 @@ type App struct {
 	Bus       *Bus
 	handler   http.Handler
 	syncLocks sync.Map // integration id → *sync.Mutex; see syncIntegration
+	photos    photoDeck
 }
 
 // New opens DATA_DIR/app.db, runs migrations and builds the handler.
@@ -93,6 +94,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		return nil, fmt.Errorf("startup backup: %w", err)
 	}
 	a.Scheduler.Add("integrations", func(time.Time) bool { return true }, a.syncDue)
+	a.Scheduler.Add("photo prefetch", func(time.Time) bool { return true }, a.prefetchPhotos)
 	a.handler = a.routes()
 	return a, nil
 }
@@ -111,6 +113,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /device/theme", a.setTheme)
 	mux.HandleFunc("POST /device/wall-display", a.requireUnlock(a.setWallDisplay))
 	mux.HandleFunc("GET /screensaver", a.getScreensaver)
+	mux.HandleFunc("GET /screensaver/photos/{id}", a.getPhoto)
 	mux.HandleFunc("POST /settings/household", a.requireUnlock(a.saveHousehold))
 	mux.HandleFunc("GET /settings", a.getSettings)
 	mux.HandleFunc("POST /setup", a.postSetup)
@@ -133,6 +136,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/mealie", a.requireUnlock(a.connectMealie))
 	mux.HandleFunc("POST /settings/mealie/delete", a.requireUnlock(a.disconnectMealie))
 	mux.HandleFunc("POST /settings/mealie-lists/{id}", a.requireUnlock(a.hideMealieList))
+	mux.HandleFunc("POST /settings/immich", a.requireUnlock(a.connectImmich))
+	mux.HandleFunc("POST /settings/immich/delete", a.requireUnlock(a.disconnectImmich))
+	mux.HandleFunc("POST /settings/immich/picks", a.requireUnlock(a.saveImmichPicks))
+	mux.HandleFunc("POST /settings/immich/refresh", a.requireUnlock(a.refreshImmich))
 	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 	mux.HandleFunc("POST /settings/locks", a.requireUnlock(a.saveLocks))
