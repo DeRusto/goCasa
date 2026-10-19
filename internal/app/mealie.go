@@ -262,6 +262,9 @@ func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 	case parseUpstreamURL(raw) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "Mealie's address starts with https:// or http://.")
 		return
+	case parseUpstreamURL(raw).User != nil: // the address is stored unsealed
+		a.settingsPage(w, r, http.StatusBadRequest, "Leave the user name and password out of Mealie's address.")
+		return
 	case token == "":
 		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API token from Mealie (Profile > API Tokens).")
 		return
@@ -322,7 +325,7 @@ func (a *App) mealieSettings(ctx context.Context) (*web.Mealie, error) {
 	}
 	var c mealieConfig
 	json.Unmarshal([]byte(cfg), &c)
-	m.URL, m.LastSuccess = c.URL, a.lastSync(ok, a.clock(ctx))
+	m.URL, m.LastSuccess = c.URL, a.lastSync(ctx, ok, a.clock(ctx))
 	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, hidden FROM shopping_lists WHERE integration_id = ? ORDER BY position, id", m.ID)
 	if err != nil {
 		return nil, err
@@ -382,12 +385,30 @@ func (a *App) mealieWrite(w http.ResponseWriter, r *http.Request, m *mirror, wri
 	}
 	mu, _ := a.syncLocks.LoadOrStore(m.c.id, &sync.Mutex{}) // not mid-poll
 	mu.(*sync.Mutex).Lock()
+	// Again under the lock: a poll we waited behind may have found Mealie down.
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT consecutive_failures >= ? FROM integrations WHERE id = ?", mealieDownPoll, m.c.id).Scan(&m.down); err != nil || m.down {
+		mu.(*sync.Mutex).Unlock()
+		if err != nil {
+			a.serverError(w, r, err)
+		} else {
+			a.listsPage(w, r, http.StatusServiceUnavailable, mealieUnreachable)
+		}
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
 	err := write(ctx)
 	if errors.Is(err, errMealieGone) {
 		if err = a.pullMealieList(ctx, m); err == nil {
 			err = errMealieGone
 		}
+	}
+	var recErr error
+	if err != nil && !errors.Is(err, errMealieGone) {
+		// Recorded before the lock goes, so a write waiting on it sees Mealie down.
+		a.Log.Warn("Mealie write failed", "err", err)
+		msg := []rune(err.Error())
+		_, recErr = a.DB.ExecContext(context.WithoutCancel(r.Context()), "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
+			mealieDownPoll, string(msg[:min(len(msg), 500)]), m.c.id)
 	}
 	cancel()
 	mu.(*sync.Mutex).Unlock()
@@ -399,14 +420,9 @@ func (a *App) mealieWrite(w http.ResponseWriter, r *http.Request, m *mirror, wri
 	switch {
 	case errors.Is(err, errMealieGone):
 		a.listsPage(w, r, http.StatusNotFound, errMealieRemoved)
+	case recErr != nil:
+		a.serverError(w, r, recErr)
 	case err != nil:
-		a.Log.Warn("Mealie write failed", "err", err)
-		msg := []rune(err.Error())
-		if _, err := a.DB.ExecContext(r.Context(), "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
-			mealieDownPoll, string(msg[:min(len(msg), 500)]), m.c.id); err != nil {
-			a.serverError(w, r, err)
-			return
-		}
 		a.listsPage(w, r, http.StatusServiceUnavailable, mealieUnreachable)
 	default:
 		http.Redirect(w, r, "/lists", http.StatusSeeOther)

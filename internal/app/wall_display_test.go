@@ -51,6 +51,12 @@ func TestTheHouseholdSetsTheScreensaverIdleTime(t *testing.T) {
 	if _, body := h.Get(t, "/settings"); !strings.Contains(body, `name="screensaver_idle_seconds" value="60"`) {
 		t.Fatalf("Settings doesn't show the idle time: %q", body)
 	}
+	// Browsers fire a setTimeout over about 24.8 days at once.
+	for _, f := range []string{"screensaver_idle_seconds", "seconds_per_photo"} {
+		if code, _ := h.Post(t, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, f: {"86401"}}); code != http.StatusBadRequest {
+			t.Errorf("%s over a day = %d, want 400", f, code)
+		}
+	}
 }
 
 func TestTheScreensaverShowsClockAndTodaysAgendaAndEndsTheUnlock(t *testing.T) {

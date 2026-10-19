@@ -300,6 +300,9 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	case parseUpstreamURL(raw) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "Immich's address starts with https:// or http://.")
 		return
+	case parseUpstreamURL(raw).User != nil: // the address is stored unsealed
+		a.settingsPage(w, r, http.StatusBadRequest, "Leave the user name and password out of Immich's address.")
+		return
 	case key == "":
 		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API key from Immich (Account Settings > API Keys).")
 		return
@@ -383,7 +386,7 @@ func (a *App) immichSettings(ctx context.Context) (*web.Immich, error) {
 	}
 	var cfg immichConfig
 	json.Unmarshal([]byte(raw), &cfg)
-	m.URL, m.LastSuccess = cfg.URL, a.lastSync(ok, a.clock(ctx))
+	m.URL, m.LastSuccess = cfg.URL, a.lastSync(ctx, ok, a.clock(ctx))
 	picked := map[string]bool{}
 	for _, id := range append(cfg.PickedAlbums, cfg.PickedPeople...) {
 		picked[id] = true

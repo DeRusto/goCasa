@@ -413,7 +413,7 @@ func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
 		if err := rows.Scan(&acct.ID, &acct.Email, &acct.Reconnect, &lastSuccess, &acct.Failures, &acct.LastError, &calID, &name, &color, &enabled, &readOnly, &members); err != nil {
 			return g, err
 		}
-		acct.LastSuccess = a.lastSync(lastSuccess, clock)
+		acct.LastSuccess = a.lastSync(ctx, lastSuccess, clock)
 		if acct.Reconnect {
 			acct.Failures = 0 // Reconnect needed says why it isn't syncing
 		}

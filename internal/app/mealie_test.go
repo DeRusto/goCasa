@@ -233,19 +233,35 @@ func TestMealieConnectMirrorsEveryListWithMealiesDisplay(t *testing.T) {
 func TestMealieRefusesOldVersionsAndBadAddresses(t *testing.T) {
 	m := newMealie(t)
 	m.version = "v1.12.0"
+	m.addList("l1", "Groceries")
 	h := apptest.New(t)
 	setup(t, h)
 	if code, page := h.Post(t, "/settings/mealie", url.Values{"url": {m.URL}, "token": {mealieToken}}); code != http.StatusBadRequest || !strings.Contains(page, "v2.0") {
 		t.Errorf("Mealie v1 = %d %q", code, page)
 	}
-	if code, _ := h.Post(t, "/settings/mealie", url.Values{"url": {"ftp://x"}, "token": {mealieToken}}); code != http.StatusBadRequest {
-		t.Errorf("ftp address = %d", code)
+	m.version = "v3.29.0"
+	userinfo, _ := url.Parse(m.URL)
+	userinfo.User = url.UserPassword("ada", "secret") // config_json isn't sealed
+	if code, _ := h.Post(t, "/settings/mealie", url.Values{"url": {userinfo.String()}, "token": {mealieToken}}); code != http.StatusBadRequest {
+		t.Errorf("a password in the address = %d, want 400", code)
 	}
-	if code, _ := h.Post(t, "/settings/mealie", url.Values{"url": {m.URL}, "token": {""}}); code != http.StatusBadRequest {
-		t.Errorf("no token = %d", code)
+	if _, page := h.Get(t, "/lists"); strings.Contains(page, "Groceries") {
+		t.Errorf("a refused connect pulled lists: %q", page)
 	}
-	if _, page := h.Get(t, "/lists"); strings.Contains(page, "data-list") {
-		t.Errorf("refused connect left lists: %q", page)
+
+	// A connection is kept, and its lists with it, through refused attempts.
+	post(t, h, "/settings/mealie", url.Values{"url": {m.URL}, "token": {mealieToken}})
+	for name, f := range map[string]url.Values{
+		"ftp address":     {"url": {"ftp://x"}, "token": {mealieToken}},
+		"no token":        {"url": {m.URL}, "token": {""}},
+		"a second Mealie": {"url": {m.URL}, "token": {mealieToken}},
+	} {
+		if code, _ := h.Post(t, "/settings/mealie", f); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", name, code)
+		}
+	}
+	if _, page := h.Get(t, "/lists"); strings.Count(page, "<h2>Groceries</h2>") != 1 {
+		t.Errorf("refused connects changed the Mirrored lists: %q", page)
 	}
 }
 

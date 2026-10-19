@@ -37,7 +37,6 @@ func (a *App) getTodos(w http.ResponseWriter, r *http.Request) {
 	case "week":
 		to = dayAt(today, 6).Format(dateLayout)
 	case "none":
-		where = append(where, "due_date IS NULL")
 	default:
 		p.Due = ""
 	}
@@ -46,6 +45,9 @@ func (a *App) getTodos(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := time.Parse(dateLayout, q.Get("to")); err == nil {
 		p.To, to = q.Get("to"), q.Get("to")
+	}
+	if p.Due == "none" && from == "" && to == "" {
+		where = append(where, "due_date IS NULL")
 	}
 	if from != "" {
 		where, args = append(where, "due_date >= ?"), append(args, from)
@@ -217,9 +219,9 @@ func nextTodoDue(rule string, fromCompletion bool, due string, today time.Time) 
 		n := opt.Interval
 		switch opt.Freq {
 		case rrule.YEARLY:
-			day = day.AddDate(n, 0, 0)
+			day = addMonthsClamped(day, 12*n)
 		case rrule.MONTHLY:
-			day = day.AddDate(0, n, 0)
+			day = addMonthsClamped(day, n)
 		case rrule.WEEKLY:
 			day = day.AddDate(0, 0, 7*n)
 		default:
@@ -235,6 +237,13 @@ func nextTodoDue(rule string, fromCompletion bool, due string, today time.Time) 
 		day = start
 	}
 	return ruleDate(opt, start, day, false)
+}
+
+// addMonthsClamped adds n months to day, keeping to the target month's last
+// day when it is shorter (January 31 plus one month is February 28).
+func addMonthsClamped(day time.Time, n int) time.Time {
+	first := time.Date(day.Year(), day.Month()+time.Month(n), 1, 0, 0, 0, 0, time.UTC)
+	return first.AddDate(0, 0, min(day.Day(), first.AddDate(0, 1, -1).Day())-1)
 }
 
 // ruleDate is the first date of rule, counted from start, after day (or on it, when inc).
@@ -297,8 +306,20 @@ func (a *App) reopenTodo(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
+// deleteTodo deletes a to-do, refusing a completed copy whose completion made
+// the next copy: removing it would cut the chain, so re-opening its
+// predecessor could leave two open copies.
 func (a *App) deleteTodo(w http.ResponseWriter, r *http.Request) {
-	a.todoExec(w, r, "deleted", "todo", "DELETE FROM todos WHERE id = ?")
+	var chained bool
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM todos WHERE id = ? AND next_id IS NOT NULL)", r.PathValue("id")).Scan(&chained); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if chained {
+		http.Error(w, "This to-do's next copy still exists: delete or re-open that one first.", http.StatusConflict)
+		return
+	}
+	a.todoExec(w, r, "deleted", "todo", "DELETE FROM todos WHERE id = ? AND next_id IS NULL")
 }
 
 // todoExec runs query with args and the path's id last: 404 if no row changed,
@@ -508,5 +529,5 @@ func (a *App) reorderTodos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.publish("updated", "todo_column", col)
-	w.WriteHeader(http.StatusOK)
+	http.Redirect(w, r, "/todos", http.StatusSeeOther) // for the up/down buttons; a drag's fetch doesn't follow it
 }

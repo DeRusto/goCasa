@@ -142,4 +142,8 @@ func TestHouseholdTimezoneSetsTheDay(t *testing.T) {
 	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `value="Pacific/Kiritimati"`) {
 		t.Fatal("Settings doesn't show the household timezone")
 	}
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "timezone": {""}})
+	if _, page := h.Get(t, "/today"); !strings.Contains(page, "Sunday 15 March") {
+		t.Fatalf("a blank timezone isn't the server's: %q", page)
+	}
 }

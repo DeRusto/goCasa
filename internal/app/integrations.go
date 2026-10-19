@@ -154,11 +154,11 @@ func (a *App) gcm() (cipher.AEAD, error) {
 }
 
 // lastSync is when an integration last synced, as the pages show it; clock is a clockLayout.
-func (a *App) lastSync(at sql.NullInt64, clock string) string {
+func (a *App) lastSync(ctx context.Context, at sql.NullInt64, clock string) string {
 	if !at.Valid {
 		return "never"
 	}
-	return time.Unix(at.Int64, 0).In(a.Config.Location).Format("2 Jan 2006 " + clock)
+	return time.Unix(at.Int64, 0).In(a.location(ctx)).Format("2 Jan 2006 " + clock)
 }
 
 // syncNow syncs every integration that can sync, due or not.
@@ -191,7 +191,7 @@ func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
 		if err := rows.Scan(&f.ID, &f.Name, &f.Color, &ok, &f.Failures, &f.LastError); err != nil {
 			return nil, err
 		}
-		f.LastSuccess = a.lastSync(ok, clock)
+		f.LastSuccess = a.lastSync(ctx, ok, clock)
 		fs = append(fs, f)
 	}
 	return fs, rows.Err()
@@ -271,7 +271,7 @@ func (a *App) alreadyConnected(w http.ResponseWriter, r *http.Request, typ, name
 	return exists
 }
 
-// addIntegration stores a just-checked integration with its secret sealed,
+// addIntegration stores a just-checked integration, one per typ, with its secret sealed,
 // syncs it once (its outcome shows in Settings) and returns to Settings.
 func (a *App) addIntegration(w http.ResponseWriter, r *http.Request, typ, name string, cfg any, secret string, intervalSeconds int) {
 	enc, err := a.seal([]byte(secret))
@@ -281,8 +281,14 @@ func (a *App) addIntegration(w http.ResponseWriter, r *http.Request, typ, name s
 	}
 	cfgJSON, _ := json.Marshal(cfg)
 	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO integrations (type, name, config_json, credentials_enc, sync_interval_seconds, next_sync_at)
-		VALUES (?, ?, ?, ?, ?, ?) RETURNING id`, typ, name, string(cfgJSON), enc, intervalSeconds, a.Now().Add(syncTimeout).Unix()).Scan(&id); err != nil {
+	// One statement, so a connect racing this one since alreadyConnected can't add a second.
+	err = a.DB.QueryRowContext(r.Context(), `INSERT INTO integrations (type, name, config_json, credentials_enc, sync_interval_seconds, next_sync_at)
+		SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM integrations WHERE type = ?1) RETURNING id`,
+		typ, name, string(cfgJSON), enc, intervalSeconds, a.Now().Add(syncTimeout).Unix()).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		a.settingsPage(w, r, http.StatusBadRequest, name+" is already connected. Disconnect it first.")
+		return
+	} else if err != nil {
 		a.serverError(w, r, err)
 		return
 	}

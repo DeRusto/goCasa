@@ -219,6 +219,15 @@ func (a *App) clearChecked(w http.ResponseWriter, r *http.Request) {
 	if a.mirrored(w, r, list, func(m *mirror) { a.mealieClear(w, r, m) }) {
 		return
 	}
+	var exists bool
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM shopping_lists WHERE id = ?)", list).Scan(&exists); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if !exists {
+		http.NotFound(w, r)
+		return
+	}
 	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM shopping_items WHERE checked AND list_id = ?", list); err != nil {
 		a.serverError(w, r, err)
 		return

@@ -35,6 +35,13 @@ func items(t *testing.T, h *apptest.Harness, list string) []string {
 	return names
 }
 
+func TestClearingAMissingListIsNotFound(t *testing.T) {
+	h := shopper(t)
+	if code, _ := h.Post(t, "/lists/99/clear", nil); code != http.StatusNotFound {
+		t.Fatalf("clearing a missing list = %d, want 404", code)
+	}
+}
+
 func TestCreateListsAndItemsWithoutAPIN(t *testing.T) {
 	h := shopper(t)
 	post(t, h, "/lists", url.Values{"name": {"Groceries"}})

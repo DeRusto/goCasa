@@ -54,7 +54,7 @@ func immichSection(m *Immich) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if m == nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<p>The screensaver shows no photos: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p><form method=\"post\" action=\"/settings/immich\"><label>Address <input name=\"url\" type=\"text\" inputmode=\"url\" required placeholder=\"https://photos.example.com\"></label> <label>API key <input name=\"key\" type=\"password\" required autocomplete=\"off\"></label> <button>Connect Immich</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<p>No Immich photos show: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p><form method=\"post\" action=\"/settings/immich\"><label>Address <input name=\"url\" type=\"text\" inputmode=\"url\" required placeholder=\"https://photos.example.com\"></label> <label>API key <input name=\"key\" type=\"password\" required autocomplete=\"off\"></label> <button>Connect Immich</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -82,12 +82,12 @@ func immichSection(m *Immich) templ.Component {
 			}
 			switch {
 			case m.NothingPicked:
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<p role=\"status\">No photos show: pick at least one album or person.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<p role=\"status\">No Immich photos show: pick at least one album or person.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			case m.Photos == 0:
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<p role=\"status\">No photos show: the picked albums and people have no photos.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<p role=\"status\">No Immich photos show: the picked albums and people have no photos.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

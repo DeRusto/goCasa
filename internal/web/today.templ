@@ -7,8 +7,8 @@ import (
 
 // TodayPage is the Today page: always the whole Household, no Member filter.
 type TodayPage struct {
-	Now     time.Time      // in the household's timezone
-	Clock   string         // Now's time, 12- or 24-hour as the Household has it
+	Now     time.Time // in the household's timezone
+	Clock   string    // Now's time, 12- or 24-hour as the Household has it
 	Clock24 bool
 	Weather *WeatherHeader // nil: no cached weather
 	Days    [2]CalendarDay // today and tomorrow
@@ -75,12 +75,16 @@ templ Today(p TodayPage) {
 			// Tick the clock, and refresh each minute so past events grey and midnight turns the day.
 			const h24 = document.getElementById("clock").dataset.h24 === "true";
 			const opts = h24 ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "numeric", minute: "2-digit", hourCycle: "h12" };
-			try { opts.timeZone = document.getElementById("clock").dataset.tz; new Intl.DateTimeFormat([], opts); } catch { delete opts.timeZone; }
+			try { opts.timeZone = document.getElementById("clock").dataset.tz; new Intl.DateTimeFormat("en-US", opts); } catch { delete opts.timeZone; }
+			// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).
+			let minute = Math.floor(Date.now() / 60000);
 			setInterval(() => {
-				const el = document.getElementById("clock");
-				const now = new Date().toLocaleTimeString([], opts);
-				if (el.textContent !== now) document.dispatchEvent(new Event("refresh-live"));
-				el.textContent = now;
+				document.getElementById("clock").textContent = new Date().toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
+				const m = Math.floor(Date.now() / 60000); // not the text, which a swap of #live re-renders
+				if (m !== minute) {
+					minute = m;
+					document.dispatchEvent(new Event("refresh-live"));
+				}
 			}, 5000);
 		})();
 		</script>

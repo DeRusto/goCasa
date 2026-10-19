@@ -54,8 +54,31 @@ func TestTheFallbackFolderShowsWithoutImmich(t *testing.T) {
 			t.Errorf("the rotation never served %s: %v", want, seen)
 		}
 	}
-	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "3 images in the Fallback folder") {
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "Images in the Fallback folder: 3") {
 		t.Errorf("Settings doesn't count the folder's images: %q", page)
+	}
+}
+
+// A photo replaced in place keeps its address, so browsers must check back
+// rather than show cached bytes for a day.
+func TestAFallbackPhotoReplacedInPlaceIsRefetched(t *testing.T) {
+	h := apptest.New(t)
+	setup(t, h)
+	wall := h.Device()
+	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
+	h.RunDue()
+	p := photo(t, wall)
+	res, err := wall.Client.Get(wall.Server.URL + p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if cc := res.Header.Get("Cache-Control"); !strings.Contains(cc, "no-cache") || res.Header.Get("Last-Modified") == "" {
+		t.Fatalf("Cache-Control %q, Last-Modified %q: a replaced photo can show stale", cc, res.Header.Get("Last-Modified"))
+	}
+	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach at sunset")
+	if _, img := wall.Get(t, p); img != "jpeg:beach at sunset" {
+		t.Fatalf("replaced photo = %q", img)
 	}
 }
 
@@ -123,7 +146,7 @@ func TestTheFallbackFolderRescansHourlyAndOnRefreshNow(t *testing.T) {
 	if _, img := wall.Get(t, photo(t, wall)); img != "png:park" {
 		t.Errorf("after Refresh now the screensaver showed %q", img)
 	}
-	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "1 images in the Fallback folder") {
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "Images in the Fallback folder: 1") {
 		t.Errorf("Settings doesn't count the rescanned folder: %q", page)
 	}
 }

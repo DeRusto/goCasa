@@ -13,7 +13,7 @@ type Device struct {
 	DefaultView string // "" uses the Household's
 	WallDisplay bool
 	MotionWake  bool // camera motion-wake, only ever on for a Wall display
-	IdleSeconds int // a Wall display's screensaver_idle_seconds; 0 when unknown
+	IdleSeconds int  // a Wall display's screensaver_idle_seconds; 0 when unknown
 }
 
 // Household is the household settings the pages follow.
@@ -117,12 +117,12 @@ templ householdSection(h Household) {
 		</label>
 		<label>
 			Wall display screensaver after
-			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" required/>
+			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" max="86400" required/>
 			seconds idle
 		</label>
 		<label>
 			Seconds per photo
-			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" required/>
+			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
 		</label>
 		<label>
 			Night mode (Wall displays)
@@ -206,18 +206,34 @@ templ thisDevice() {
 	</p>
 	if device(ctx).MotionWake {
 		<script>
-		// Ask for the camera here, while an Admin is at the device, so the screensaver never waits on a prompt.
+		// Shows the camera permission without opening the camera, which runs only on the
+		// screensaver and Dim clock (spec §8); the Admin asks for it here, by a button,
+		// so the screensaver never waits on a prompt.
 		(async () => {
-			const status = s => document.getElementById("motion-wake").textContent = s;
+			const el = document.getElementById("motion-wake"), status = s => el.textContent = s;
 			if (!window.isSecureContext) return status("needs HTTPS");
 			if (!navigator.mediaDevices) return status("not supported by this browser");
+			const ask = () => {
+				const b = document.createElement("button");
+				b.type = "button";
+				b.textContent = "Allow the camera";
+				b.onclick = async () => {
+					try {
+						(await navigator.mediaDevices.getUserMedia({ video: true })).getTracks().forEach(t => t.stop());
+						status("allowed; runs on the screensaver and Dim clock");
+					} catch (e) {
+						status("not allowed: " + e.message);
+					}
+				};
+				status("not yet allowed ");
+				el.append(b);
+			};
 			try {
-				const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-				stream.getTracks().forEach(t => t.stop());
-				status("allowed; runs on the screensaver and Dim clock");
-			} catch (e) {
-				status("not allowed: " + e.message);
-			}
+				const p = await navigator.permissions.query({ name: "camera" });
+				if (p.state === "granted") return status("allowed; runs on the screensaver and Dim clock");
+				if (p.state === "denied") return status("not allowed: blocked in the browser's site settings");
+			} catch {} // a browser that can't say: ask
+			ask();
 		})();
 		</script>
 	}

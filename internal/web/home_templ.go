@@ -301,7 +301,7 @@ func householdSection(h Household) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" min=\"10\" required> seconds idle</label> <label>Seconds per photo <input type=\"number\" name=\"seconds_per_photo\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" min=\"10\" max=\"86400\" required> seconds idle</label> <label>Seconds per photo <input type=\"number\" name=\"seconds_per_photo\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -314,7 +314,7 @@ func householdSection(h Household) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" min=\"5\" required></label> <label>Night mode (Wall displays) <select name=\"night_mode\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" min=\"5\" max=\"86400\" required></label> <label>Night mode (Wall displays) <select name=\"night_mode\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -520,7 +520,7 @@ func thisDevice() templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if device(ctx).MotionWake {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<script>\n\t\t// Ask for the camera here, while an Admin is at the device, so the screensaver never waits on a prompt.\n\t\t(async () => {\n\t\t\tconst status = s => document.getElementById(\"motion-wake\").textContent = s;\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!navigator.mediaDevices) return status(\"not supported by this browser\");\n\t\t\ttry {\n\t\t\t\tconst stream = await navigator.mediaDevices.getUserMedia({ video: true });\n\t\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\t\tstatus(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t})();\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<script>\n\t\t// Shows the camera permission without opening the camera, which runs only on the\n\t\t// screensaver and Dim clock (spec §8); the Admin asks for it here, by a button,\n\t\t// so the screensaver never waits on a prompt.\n\t\t(async () => {\n\t\t\tconst el = document.getElementById(\"motion-wake\"), status = s => el.textContent = s;\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!navigator.mediaDevices) return status(\"not supported by this browser\");\n\t\t\tconst ask = () => {\n\t\t\t\tconst b = document.createElement(\"button\");\n\t\t\t\tb.type = \"button\";\n\t\t\t\tb.textContent = \"Allow the camera\";\n\t\t\t\tb.onclick = async () => {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t(await navigator.mediaDevices.getUserMedia({ video: true })).getTracks().forEach(t => t.stop());\n\t\t\t\t\t\tstatus(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\tstatus(\"not yet allowed \");\n\t\t\t\tel.append(b);\n\t\t\t};\n\t\t\ttry {\n\t\t\t\tconst p = await navigator.permissions.query({ name: \"camera\" });\n\t\t\t\tif (p.state === \"granted\") return status(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t\tif (p.state === \"denied\") return status(\"not allowed: blocked in the browser's site settings\");\n\t\t\t} catch {} // a browser that can't say: ask\n\t\t\task();\n\t\t})();\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -74,7 +74,7 @@ func weatherPill() templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<aside class=\"weather-pill\" aria-label=\"Weather\" style=\"display:inline-block;padding:.2em .8em;border-radius:1em;background:#e5e7eb\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<aside class=\"weather-pill\" aria-label=\"Weather\" style=\"display:inline-block;padding:.2em .8em;border-radius:1em;background:#e5e7eb;color:#111\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

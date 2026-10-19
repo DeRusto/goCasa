@@ -37,20 +37,20 @@ func fallbackSection(f Fallback) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Fallback folder</h2><p>When Immich has no photos to show, the screensaver shows the images in the photos folder of the data volume (subfolders included; JPEG, PNG and WebP).</p><p role=\"status\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Fallback folder</h2><p>When Immich has no photos to show, the screensaver shows the images in the photos folder of the data volume (subfolders included; JPEG, PNG and WebP).</p><p role=\"status\">Images in the Fallback folder: ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(f.Images))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/fallback.templ`, Line: 14, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/fallback.templ`, Line: 14, Col: 73}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " images in the Fallback folder.</p><form method=\"post\" action=\"/settings/fallback-folder\"><label><input type=\"checkbox\" name=\"enabled\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</p><form method=\"post\" action=\"/settings/fallback-folder\"><label><input type=\"checkbox\" name=\"enabled\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

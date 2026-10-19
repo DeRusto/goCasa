@@ -34,12 +34,17 @@ func (openMeteo) Sync(ctx context.Context, a *App, _ integrationRow) error {
 	if !lat.Valid || !lon.Valid {
 		return nil
 	}
+	// Daily dates in the household timezone, so they match the pages' today.
+	tz := a.location(ctx).String()
+	if tz == "Local" { // an unnamed zone: the location's own
+		tz = "auto"
+	}
 	q := url.Values{
 		"latitude":      {strconv.FormatFloat(lat.Float64, 'f', -1, 64)},
 		"longitude":     {strconv.FormatFloat(lon.Float64, 'f', -1, 64)},
 		"current":       {"temperature_2m,weather_code"},
 		"daily":         {"temperature_2m_max,temperature_2m_min,weather_code"},
-		"timezone":      {"auto"},
+		"timezone":      {tz},
 		"forecast_days": {"6"}, // today and 5 days ahead, for Today
 	}
 	if units == "imperial" {
@@ -173,7 +178,7 @@ func (a *App) weatherSettings(ctx context.Context) (web.Weather, error) {
 	if lat.Valid && lon.Valid {
 		w.Lat, w.Lon = strconv.FormatFloat(lat.Float64, 'f', -1, 64), strconv.FormatFloat(lon.Float64, 'f', -1, 64)
 	}
-	w.LastSuccess = a.lastSync(ok, a.clock(ctx))
+	w.LastSuccess = a.lastSync(ctx, ok, a.clock(ctx))
 	return w, err
 }
 

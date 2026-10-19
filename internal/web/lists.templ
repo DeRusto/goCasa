@@ -14,7 +14,7 @@ type ShoppingList struct {
 	Items    []ShoppingItem
 }
 
-// shortcut: reorder is up/down buttons; drag (SortableJS, spec §14) once it is vendored.
+// Local list items reorder by drag (dragReorder) or, from the keyboard, up/down buttons.
 templ Lists(lists []ShoppingList, msg string) {
 	@layout("Lists") {
 		<main>
@@ -28,9 +28,13 @@ templ Lists(lists []ShoppingList, msg string) {
 						if l.ReadOnly {
 							<p role="status">GoCasa can't reach Mealie, so this list shows its last contents and can't be changed until Mealie answers again.</p>
 						}
-						<ul>
+						<ul data-drag={ "list-" + id(l.ID) }>
 							for i, it := range l.Items {
-								<li>
+								<li
+									if !l.Mirrored {
+										data-move={ "/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/move" }
+									}
+								>
 									if !l.ReadOnly {
 										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } style="display:inline">
 											if it.Checked {
@@ -43,6 +47,9 @@ templ Lists(lists []ShoppingList, msg string) {
 										</form>
 									}
 									<span data-item={ id(it.ID) } data-checked?={ it.Checked } style={ templ.KV("text-decoration:line-through", it.Checked) }>{ it.Note }</span>
+									if !l.Mirrored {
+										<span class="handle" aria-hidden="true">⠿</span>
+									}
 									if !l.Mirrored && i > 0 {
 										@moveButton(l.ID, it, i-1, "↑", "Move up ")
 									}
@@ -74,6 +81,7 @@ templ Lists(lists []ShoppingList, msg string) {
 				<button>New list</button>
 			</form>
 		</main>
+		@dragReorder()
 		@liveUpdates()
 	}
 }
