@@ -535,7 +535,7 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 	var ids []int64
 	err = a.inTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `UPDATE events SET local_override = 1 WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2)
-				AND (?3 = 0 OR coalesce(start_utc, unixepoch(all_day_date)) >= (SELECT coalesce(start_utc, unixepoch(all_day_date)) FROM events WHERE id = ?3))
+				AND (?3 = 0 OR `+startKey+` >= (SELECT `+startKey+` FROM events WHERE id = ?3))
 			RETURNING id`, cal, res.target, res.from)
 		if err != nil {
 			return err
@@ -557,7 +557,16 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 				return err
 			}
 		}
-		return nil
+		// A Series (it has occurrence rows) keeps the choice for occurrences that sync later.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM google_series_members WHERE calendar_id = ?1 AND series_id = ?2
+			AND (?3 = 0 OR from_key >= (SELECT `+startKey+` FROM events WHERE id = ?3))`, cal, res.target, res.from); err != nil {
+			return err
+		}
+		list, _ := json.Marshal(members)
+		_, err = tx.ExecContext(ctx, `INSERT INTO google_series_members (calendar_id, series_id, from_key, members)
+			SELECT ?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4
+			WHERE EXISTS (SELECT 1 FROM events WHERE calendar_id = ?1 AND external_series_id = ?2)`, cal, res.target, res.from, string(list))
+		return err
 	})
 	if err == nil && len(ids) > 0 {
 		a.publish("updated", "event", ids[0])

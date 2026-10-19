@@ -252,6 +252,9 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 				if _, err := tx.ExecContext(ctx, "DELETE FROM events WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2)", cal, e.ID); err != nil {
 					return err
 				}
+				if _, err := tx.ExecContext(ctx, "DELETE FROM google_series_members WHERE calendar_id = ? AND series_id = ?", cal, e.ID); err != nil {
+					return err
+				}
 				continue
 			}
 			seen = append(seen, e.ID)
@@ -275,6 +278,9 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 			upserted = append(upserted, row)
 		}
 		if len(upserted) > 0 {
+			if err := applySeriesMembers(ctx, tx, upserted); err != nil {
+				return err
+			}
 			if err := applyDefaultMembers(ctx, tx, cal, upserted); err != nil {
 				return err
 			}
@@ -298,6 +304,48 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 		a.publish("updated", "calendar", cal)
 	}
 	return err
+}
+
+// startKey is an events row's start as a number to compare: the instant, or for all-day the date's UTC midnight.
+const startKey = "coalesce(start_utc, unixepoch(all_day_date))"
+
+// applySeriesMembers gives the events in only that have no Member change made
+// in GoCasa the Members picked for their Series from their start on, if any,
+// marking them a GoCasa change.
+func applySeriesMembers(ctx context.Context, tx *sql.Tx, only []int64) error {
+	list, _ := json.Marshal(only)
+	rows, err := tx.QueryContext(ctx, `SELECT e.id, s.members FROM events e JOIN google_series_members s ON s.rowid = (
+			SELECT rowid FROM google_series_members WHERE calendar_id = e.calendar_id AND series_id = e.external_series_id
+				AND (from_key IS NULL OR from_key <= coalesce(e.start_utc, unixepoch(e.all_day_date))) ORDER BY from_key DESC LIMIT 1)
+		WHERE e.id IN (SELECT value FROM json_each(?)) AND NOT e.local_override`, string(list))
+	if err != nil {
+		return err
+	}
+	picked := map[int64][]int64{}
+	for rows.Next() {
+		var id int64
+		var members string
+		if err := rows.Scan(&id, &members); err != nil {
+			rows.Close()
+			return err
+		}
+		var ms []int64
+		json.Unmarshal([]byte(members), &ms)
+		picked[id] = ms
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for id, ms := range picked {
+		if _, err := tx.ExecContext(ctx, "UPDATE events SET local_override = 1 WHERE id = ?", id); err != nil {
+			return err
+		}
+		if err := setMembers(ctx, tx, id, ms); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // applyDefaultMembers gives calendar cal's events that have no Member change

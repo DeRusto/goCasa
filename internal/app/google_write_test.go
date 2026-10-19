@@ -382,3 +382,61 @@ func TestGoogleSplitLands(t *testing.T) {
 	}
 	eventID(t, h, "swim_20260314") // before the Split, unchanged
 }
+
+// membersOf is Google event external's Members, as "1,2".
+func membersOf(t *testing.T, h *apptest.Harness, external string) string {
+	t.Helper()
+	var ms string
+	h.App.DB.QueryRow("SELECT coalesce(group_concat(member_id, ',' ORDER BY member_id), '') FROM event_members WHERE event_id = ?", eventID(t, h, external)).Scan(&ms)
+	return ms
+}
+
+// Members picked for a Series also go on its Occurrences that sync later:
+// All events on every one, This and following from that Occurrence on.
+func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
+	g := newGoogle(t)
+	h := swimSeries(t, g)
+	second := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260321"))
+	third := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260328"))
+	if code, _ := submit(t, h, second, "/edit", googleEdit("Swim", "2026-03-21T10:00", "2026-03-21T11:00", "scope", "all", "members", "1")); code != http.StatusOK {
+		t.Fatalf("All events Members = %d", code)
+	}
+	later := func(id, start, end string) map[string]any {
+		return withEtag(gOccurrence("swim", id, "Swim", start, end), "x")
+	}
+	g.set(func(g *fakeGoogle) {
+		g.changes["alice@example.com"] = []map[string]any{later("swim_20260411", "2026-04-11T09:00:00Z", "2026-04-11T10:00:00Z")}
+	})
+	h.Post(t, "/calendar/sync", nil)
+	if got := membersOf(t, h, "swim_20260411"); got != "1" {
+		t.Fatalf("a later Occurrence after All events has Members %q", got)
+	}
+
+	if code, _ := submit(t, h, third, "/edit", googleEdit("Swim", "2026-03-28T10:00", "2026-03-28T11:00", "scope", "following", "members", "1", "members", "2")); code != http.StatusOK {
+		t.Fatalf("This and following Members = %d", code)
+	}
+	// The 21st goes and comes back (before the 28th); the 18th arrives (after it).
+	g.set(func(g *fakeGoogle) { g.changes["alice@example.com"] = []map[string]any{gCancelled("swim_20260321")} })
+	h.Post(t, "/calendar/sync", nil)
+	g.set(func(g *fakeGoogle) {
+		g.changes["alice@example.com"] = []map[string]any{
+			later("swim_20260321", "2026-03-21T10:00:00Z", "2026-03-21T11:00:00Z"),
+			later("swim_20260418", "2026-04-18T09:00:00Z", "2026-04-18T10:00:00Z"),
+		}
+	})
+	h.Post(t, "/calendar/sync", nil)
+	for id, want := range map[string]string{"swim_20260314": "1", "swim_20260321": "1", "swim_20260328": "1,2", "swim_20260411": "1,2", "swim_20260418": "1,2"} {
+		if got := membersOf(t, h, id); got != want {
+			t.Errorf("%s has Members %q, want %q", id, got, want)
+		}
+	}
+
+	// Deleting the calendar takes the choices with it.
+	var before, n int
+	h.App.DB.QueryRow("SELECT count(*) FROM google_series_members").Scan(&before)
+	h.App.DB.Exec("DELETE FROM integrations WHERE type = 'google_calendar'")
+	h.App.DB.QueryRow("SELECT count(*) FROM google_series_members").Scan(&n)
+	if before != 2 || n != 0 {
+		t.Fatalf("%d Series Member choices outlived their calendar", n)
+	}
+}
