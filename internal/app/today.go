@@ -9,7 +9,7 @@ import (
 // getToday shows the Today page: the weather header, today's and tomorrow's
 // agenda for everyone, today's Chores, and open to-dos due today or overdue.
 func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
-	now := a.Now().In(a.Config.Location)
+	now := a.Now().In(a.location(r.Context()))
 	today := dayAt(now, 0)
 	hh, err := a.household(r.Context())
 	if err != nil {

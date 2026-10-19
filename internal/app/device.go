@@ -88,9 +88,22 @@ func deviceOf(r *http.Request) web.Device {
 // household is the household settings the pages follow.
 func (a *App) household(ctx context.Context) (web.Household, error) {
 	var h web.Household
-	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, night_mode, night_start, night_end FROM household_settings").
-		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.NightMode, &h.NightStart, &h.NightEnd)
+	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, night_mode, night_start, night_end, timezone FROM household_settings").
+		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.NightMode, &h.NightStart, &h.NightEnd, &h.Timezone)
 	return h, err
+}
+
+// location is the Household's timezone, else the server's (TZ). An unreadable
+// setting falls back too rather than failing the page.
+func (a *App) location(ctx context.Context) *time.Location {
+	var tz string
+	if err := a.DB.QueryRowContext(ctx, "SELECT timezone FROM household_settings").Scan(&tz); err != nil {
+		a.Log.Error("reading household timezone", "err", err)
+	}
+	if loc, err := time.LoadLocation(tz); tz != "" && err == nil {
+		return loc
+	}
+	return a.Config.Location
 }
 
 // clockLayout is how times show under the Household's 12/24-hour setting.
@@ -146,14 +159,24 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		}
 		night, nightStart, nightEnd = &v, &s, &e
 	}
+	var tz *string
+	if r.PostForm.Has("timezone") {
+		v := strings.TrimSpace(r.PostFormValue("timezone"))
+		if _, err := time.LoadLocation(v); err != nil || strings.EqualFold(v, "local") {
+			a.settingsPage(w, r, http.StatusBadRequest, "Pick a timezone by its IANA name, like Europe/London, or leave it blank for the server's.")
+			return
+		}
+		tz = &v
+	}
 	if _, ok := defaultViews[view]; !ok || err != nil || start < 0 || start > 6 {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a default view and the day weeks start on.")
 		return
 	}
 	if _, err := a.DB.ExecContext(r.Context(), `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
 		screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo),
-		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end)`,
-		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, night, nightStart, nightEnd); err != nil {
+		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end),
+		timezone = coalesce(?, timezone)`,
+		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, night, nightStart, nightEnd, tz); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -212,7 +235,7 @@ func (a *App) setMotionWake(w http.ResponseWriter, r *http.Request) {
 // view at today.
 func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 	a.clearUnlock(w) // after withUnlock's refresh, so this later Set-Cookie wins
-	now := a.Now().In(a.Config.Location)
+	now := a.Now().In(a.location(r.Context()))
 	today := dayAt(now, 0)
 	hh, err := a.household(r.Context())
 	if err != nil {

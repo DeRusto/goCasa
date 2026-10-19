@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // todayAgendaItem is the <li> on page whose text contains title.
@@ -121,5 +122,24 @@ func TestEveryPageLinksToTheOthersButNotTheScreensaver(t *testing.T) {
 	}
 	if _, body := h.Get(t, "/screensaver"); strings.Contains(body, "<nav") {
 		t.Error("the screensaver has the nav")
+	}
+}
+
+func TestHouseholdTimezoneSetsTheDay(t *testing.T) {
+	h := household(t)
+	h.Clock.Advance(3 * time.Hour) // 12:00 UTC on 15 March is 02:00 on the 16th in Kiritimati (UTC+14)
+	if _, page := h.Get(t, "/today"); !strings.Contains(page, "Sunday 15 March") {
+		t.Fatalf("with no timezone set, Today isn't the server's day: %q", page)
+	}
+	unlock(t, h, 1, "1234") // the clock jump ended the unlock
+	if code, _ := h.Post(t, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "timezone": {"Mars/Olympus"}}); code != http.StatusBadRequest {
+		t.Fatalf("an unknown timezone = %d, want 400", code)
+	}
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "timezone": {"Pacific/Kiritimati"}})
+	if _, page := h.Get(t, "/today"); !strings.Contains(page, "Monday 16 March") {
+		t.Fatalf("Today doesn't follow the household timezone: %q", page)
+	}
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `value="Pacific/Kiritimati"`) {
+		t.Fatal("Settings doesn't show the household timezone")
 	}
 }

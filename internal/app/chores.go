@@ -69,7 +69,7 @@ func back(r *http.Request) string {
 // chores is every Chore with, for active ones, its claimable Rounds and who
 // can still tap or has done each.
 func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
-	loc := a.Config.Location
+	loc := a.location(ctx)
 	today := dayAt(a.Now().In(loc), 0)
 	hh, err := a.household(ctx)
 	if err != nil {
@@ -383,7 +383,7 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	loc := a.Config.Location
+	loc := a.location(r.Context())
 	open := false
 	for _, cr := range claimable(schedule, days, hh.WeekStart, dayAt(a.Now().In(loc), 0), dayAt(time.Unix(at, 0).In(loc), 0)) {
 		open = open || cr.start.Format(dateLayout) == round
