@@ -147,7 +147,7 @@ templ memberFields(m Member) {
 }
 
 // Settings is the unlocked Settings page.
-templ Settings(members []Member, feeds []Feed, google Google, weather Weather, locks Locks, mealie *Mealie, immich *Immich, household Household, errMsg string) {
+templ Settings(members []Member, feeds []Feed, google Google, weather Weather, locks Locks, mealie *Mealie, immich *Immich, fallback Fallback, household Household, errMsg string) {
 	@layout("Settings") {
 		<main>
 			<h1>Settings</h1>
@@ -248,6 +248,7 @@ templ Settings(members []Member, feeds []Feed, google Google, weather Weather, l
 			@weatherSection(weather)
 			@mealieSection(mealie)
 			@immichSection(immich)
+			@fallbackSection(fallback)
 			@householdSection(household)
 			@thisDevice()
 		</main>

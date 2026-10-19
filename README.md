@@ -12,7 +12,9 @@ docker compose up -d
 
 Open `http://<host>:8080`. `GET /healthz` returns `200 ok` when the app is up and the database answers.
 
-Data lives in the `gocasa-data` volume at `/data` (`app.db`, `backups/`, and later `photo-cache/`, `photos/`). To use a bind mount instead, make the host directory writable by UID 65532, which the container runs as: `sudo chown 65532:65532 ./data`.
+Data lives in the `gocasa-data` volume at `/data` (`app.db`, `backups/`, `photo-cache/`, `photos/`). To use a bind mount instead, make the host directory writable by UID 65532, which the container runs as: `sudo chown 65532:65532 ./data`.
+
+The screensaver's Fallback folder is `/data/photos`: when Immich has no photos to show, it shows the JPEG, PNG and WebP images there, subfolders included, rescanned hourly and on "Refresh now". Bind-mount a folder of your own images there, read-only is fine: `- ./photos:/data/photos:ro`.
 
 ## Configuration
 

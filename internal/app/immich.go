@@ -120,7 +120,7 @@ func (immich) Sync(ctx context.Context, a *App, in integrationRow) error {
 			return err
 		}
 	}
-	return a.replacePhotos(ctx, assets)
+	return a.replacePhotos(ctx, "immich", assets)
 }
 
 // pickable is the albums and named people the key's user can see.
@@ -203,20 +203,20 @@ func (c immichConn) search(ctx context.Context, albums, people []string) ([]immi
 	return all, nil
 }
 
-// replacePhotos makes the Immich rotation list exactly assets, keeping the
+// replacePhotos makes source's rotation list exactly assets, keeping the
 // cached bytes of those still in it.
-func (a *App) replacePhotos(ctx context.Context, assets []immichAsset) error {
+func (a *App) replacePhotos(ctx context.Context, source string, assets []immichAsset) error {
 	var gone []string
 	err := a.inTx(ctx, func(tx *sql.Tx) error {
 		keep := map[string]bool{}
 		for _, as := range assets {
 			keep[as.ID] = true
-			if _, err := tx.ExecContext(ctx, `INSERT INTO photos_cache (source, external_id_or_path, taken_at) VALUES ('immich', ?, ?)
-				ON CONFLICT (source, external_id_or_path) DO UPDATE SET taken_at = excluded.taken_at`, as.ID, as.TakenAt.Unix()); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO photos_cache (source, external_id_or_path, taken_at) VALUES (?, ?, ?)
+				ON CONFLICT (source, external_id_or_path) DO UPDATE SET taken_at = excluded.taken_at`, source, as.ID, as.TakenAt.Unix()); err != nil {
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id, external_id_or_path, coalesce(cache_path, '') FROM photos_cache WHERE source = 'immich'")
+		rows, err := tx.QueryContext(ctx, "SELECT id, external_id_or_path, coalesce(cache_path, '') FROM photos_cache WHERE source = ?", source)
 		if err != nil {
 			return err
 		}
@@ -353,7 +353,7 @@ func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	if err := a.replacePhotos(r.Context(), nil); err != nil {
+	if err := a.replacePhotos(r.Context(), "immich", nil); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -420,7 +420,7 @@ func (a *App) immichSettings(ctx context.Context) (*web.Immich, error) {
 	return &m, err
 }
 
-// photoDeck is the screensaver's no-repeat shuffle of the Immich photos,
+// photoDeck is the screensaver's no-repeat shuffle of its photos,
 // shared by every Wall display: each shows the photo current at the time.
 type photoDeck struct {
 	mu      sync.Mutex
@@ -432,12 +432,12 @@ type photoDeck struct {
 // currentPhoto is the photo the screensaver shows now, moving on once it
 // has shown for every seconds, and how long it still shows; 0 for none. It
 // prefers a cached photo, so rotation continues from the cache while Immich
-// is down.
+// is down. The photos are Immich's, else the Fallback folder's.
 func (a *App) currentPhoto(ctx context.Context, now time.Time, every time.Duration) (int64, time.Duration, error) {
 	d := &a.photos
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	cached, err := a.immichPhotos(ctx)
+	cached, err := a.screensaverPhotos(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -478,9 +478,9 @@ func (a *App) currentPhoto(ctx context.Context, now time.Time, every time.Durati
 	return 0, 0, nil
 }
 
-// immichPhotos is every Immich photo's id and whether its bytes are cached.
-func (a *App) immichPhotos(ctx context.Context) (map[int64]bool, error) {
-	rows, err := a.DB.QueryContext(ctx, "SELECT id, cache_path IS NOT NULL FROM photos_cache WHERE source = 'immich'")
+// photoList is every id in source's list and whether its bytes are cached.
+func (a *App) photoList(ctx context.Context, source string) (map[int64]bool, error) {
+	rows, err := a.DB.QueryContext(ctx, "SELECT id, cache_path IS NOT NULL FROM photos_cache WHERE source = ?", source)
 	if err != nil {
 		return nil, err
 	}
@@ -592,10 +592,17 @@ func (a *App) evictPhotos(ctx context.Context, keep int64) error {
 	}
 }
 
-// getPhoto serves a screensaver photo's bytes, proxied through the cache:
-// the browser never sees Immich or its key.
+// getPhoto serves a screensaver photo's bytes: Immich's proxied through the
+// cache, so the browser never sees Immich or its key; the Fallback folder's as-is.
 func (a *App) getPhoto(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if rel, err := a.folderPhoto(r.Context(), id); err == nil {
+		a.serveFolderPhoto(w, r, rel)
+		return
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		a.serverError(w, r, err)
+		return
+	}
 	path, err := a.cachedPhoto(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)

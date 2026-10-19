@@ -53,6 +53,9 @@ type App struct {
 	handler   http.Handler
 	syncLocks sync.Map // integration id → *sync.Mutex; see syncIntegration
 	photos    photoDeck
+
+	folderMu      sync.Mutex
+	folderScanned time.Time // the Fallback folder's last scan
 }
 
 // New opens DATA_DIR/app.db, runs migrations and builds the handler.
@@ -94,6 +97,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		return nil, fmt.Errorf("startup backup: %w", err)
 	}
 	a.Scheduler.Add("integrations", func(time.Time) bool { return true }, a.syncDue)
+	a.Scheduler.Add("fallback folder", a.folderScanDue, a.scanFolder)
 	a.Scheduler.Add("photo prefetch", func(time.Time) bool { return true }, a.prefetchPhotos)
 	a.handler = a.routes()
 	return a, nil
@@ -141,6 +145,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/immich/delete", a.requireUnlock(a.disconnectImmich))
 	mux.HandleFunc("POST /settings/immich/picks", a.requireUnlock(a.saveImmichPicks))
 	mux.HandleFunc("POST /settings/immich/refresh", a.requireUnlock(a.refreshImmich))
+	mux.HandleFunc("POST /settings/fallback-folder", a.requireUnlock(a.saveFallbackFolder))
+	mux.HandleFunc("POST /settings/fallback-folder/refresh", a.requireUnlock(a.refreshFolder))
 	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 	mux.HandleFunc("POST /settings/locks", a.requireUnlock(a.saveLocks))
