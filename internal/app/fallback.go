@@ -126,8 +126,13 @@ func (a *App) serveFolderPhoto(w http.ResponseWriter, r *http.Request, rel strin
 		return
 	}
 	defer f.Close()
-	w.Header().Set("Cache-Control", "private, max-age=86400")
-	http.ServeContent(w, r, rel, time.Time{}, f) // typed by its extension
+	var mod time.Time
+	if info, err := f.Stat(); err == nil {
+		mod = info.ModTime()
+	}
+	// A file replaced in place keeps its URL: browsers check back, and get a 304 while it's unchanged.
+	w.Header().Set("Cache-Control", "private, no-cache")
+	http.ServeContent(w, r, rel, mod, f) // typed by its extension
 }
 
 // refreshFolder rescans the Fallback folder now ("Refresh now").
