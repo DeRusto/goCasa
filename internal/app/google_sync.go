@@ -242,6 +242,7 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 	from, to := syncWindow(now)
 	err := a.inTx(ctx, func(tx *sql.Tx) error {
 		seen := []string{}
+		var upserted []int64
 		for _, e := range items {
 			if e.Status == "cancelled" {
 				// A whole series' deletion may come as its own id alone.
@@ -256,7 +257,6 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 				continue // its last good copy stays
 			}
 			var row int64
-			var override bool
 			err := tx.QueryRowContext(ctx, `INSERT INTO events (calendar_id, external_id, external_series_id, title, location, description, all_day,
 					start_utc, end_utc, start_tzid, all_day_date, all_day_end_date, updated_at)
 				VALUES (?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -264,15 +264,16 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 					title = excluded.title, location = excluded.location, description = excluded.description, all_day = excluded.all_day,
 					start_utc = excluded.start_utc, end_utc = excluded.end_utc, start_tzid = excluded.start_tzid,
 					all_day_date = excluded.all_day_date, all_day_end_date = excluded.all_day_end_date, status = 'confirmed', updated_at = excluded.updated_at
-				RETURNING id, local_override`,
-				cal, e.ID, e.RecurringEventID, c.title, c.location, c.description, c.allDay, c.start, c.end, c.tzid, c.date, c.endDate, now.Unix()).Scan(&row, &override)
+				RETURNING id`,
+				cal, e.ID, e.RecurringEventID, c.title, c.location, c.description, c.allDay, c.start, c.end, c.tzid, c.date, c.endDate, now.Unix()).Scan(&row)
 			if err != nil {
 				return err
 			}
-			if !override {
-				if err := applyDefaultMembers(ctx, tx, cal, row); err != nil {
-					return err
-				}
+			upserted = append(upserted, row)
+		}
+		if len(upserted) > 0 {
+			if err := applyDefaultMembers(ctx, tx, cal, upserted); err != nil {
+				return err
 			}
 		}
 		if full {
@@ -297,13 +298,18 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 }
 
 // applyDefaultMembers gives calendar cal's events that have no Member change
-// made in GoCasa its default Members: just event's, or with event 0 all of them.
-func applyDefaultMembers(ctx context.Context, tx *sql.Tx, cal, event int64) error {
-	const evs = "SELECT id FROM events WHERE calendar_id = ?1 AND NOT local_override AND (?2 = 0 OR id = ?2)"
-	if _, err := tx.ExecContext(ctx, "DELETE FROM event_members WHERE event_id IN ("+evs+")", cal, event); err != nil {
+// made in GoCasa their default Members: just those in only, or with a nil only all of them.
+func applyDefaultMembers(ctx context.Context, tx *sql.Tx, cal int64, only []int64) error {
+	var ids any
+	if only != nil {
+		list, _ := json.Marshal(only)
+		ids = string(list)
+	}
+	const evs = "SELECT id FROM events WHERE calendar_id = ?1 AND NOT local_override AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2)))"
+	if _, err := tx.ExecContext(ctx, "DELETE FROM event_members WHERE event_id IN ("+evs+")", cal, ids); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, "INSERT INTO event_members (event_id, member_id) SELECT e.id, d.member_id FROM ("+evs+") e JOIN source_calendar_members d ON d.calendar_id = ?1", cal, event)
+	_, err := tx.ExecContext(ctx, "INSERT INTO event_members (event_id, member_id) SELECT e.id, d.member_id FROM ("+evs+") e JOIN source_calendar_members d ON d.calendar_id = ?1", cal, ids)
 	return err
 }
 

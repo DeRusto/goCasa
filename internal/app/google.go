@@ -380,7 +380,7 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		return applyDefaultMembers(r.Context(), tx, id, 0)
+		return applyDefaultMembers(r.Context(), tx, id, nil)
 	})
 	switch {
 	case err != nil:
