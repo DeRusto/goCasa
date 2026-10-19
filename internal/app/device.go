@@ -18,6 +18,7 @@ const (
 	defaultViewCookie = "default_view"
 	themeCookie       = "theme"
 	wallDisplayCookie = "wall_display"
+	motionWakeCookie  = "motion_wake"
 	deviceCookieAge   = 10 * 365 * 24 * 60 * 60 // a device keeps its choices until cleared
 )
 
@@ -77,6 +78,8 @@ func deviceOf(r *http.Request) web.Device {
 	d.DefaultView, _ = cookieView(r)
 	_, err := r.Cookie(wallDisplayCookie)
 	d.WallDisplay = err == nil
+	_, err = r.Cookie(motionWakeCookie)
+	d.MotionWake = d.WallDisplay && err == nil
 	return d
 }
 
@@ -175,6 +178,17 @@ func (a *App) setTheme(w http.ResponseWriter, r *http.Request) {
 func (a *App) setWallDisplay(w http.ResponseWriter, r *http.Request) {
 	c := &http.Cookie{Name: wallDisplayCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1}
 	if r.PostFormValue("wall_display") != "" {
+		c.Value, c.MaxAge = "on", deviceCookieAge
+	}
+	http.SetCookie(w, c)
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// setMotionWake switches this Wall display's camera motion-wake on or off; it
+// sits behind requireUnlock (Admin PIN needed).
+func (a *App) setMotionWake(w http.ResponseWriter, r *http.Request) {
+	c := &http.Cookie{Name: motionWakeCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1}
+	if r.PostFormValue("motion_wake") != "" {
 		c.Value, c.MaxAge = "on", deviceCookieAge
 	}
 	http.SetCookie(w, c)

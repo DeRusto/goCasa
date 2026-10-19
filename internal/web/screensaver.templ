@@ -27,6 +27,9 @@ templ Screensaver(p TodayPage) {
 			if device(ctx).WallDisplay {
 				@wallDisplay(0)
 			}
+			if device(ctx).MotionWake {
+				@motionWake()
+			}
 			<script>
 			// Reload on the next minute so the clock and agenda stay current.
 			setTimeout(() => location.reload(), 60000 - Date.now() % 60000);
@@ -60,12 +63,64 @@ templ Night(mode string, p TodayPage) {
 			if mode == "dim_clock" && device(ctx).WallDisplay {
 				@wallDisplay(0)
 			}
+			if mode == "dim_clock" && device(ctx).MotionWake {
+				@motionWake()
+			}
 			<script>
 			// Reload on the next minute: the clock stays current and Night mode ends on time.
 			setTimeout(() => location.reload(), 60000 - Date.now() % 60000);
 			</script>
 		</body>
 	</html>
+}
+
+// motionWake watches the camera on the screensaver and Dim clock: it compares
+// each frame, downscaled to 64×48, with the one before, and when enough
+// pixels change it wakes the page like a touch on #wake. Frames stay in this
+// page; #camera shows while it runs.
+templ motionWake() {
+	<span id="camera" hidden role="img" aria-label="Camera motion-wake on" style="position:fixed;right:1rem;bottom:1rem;color:#555;font-size:1.25rem;pointer-events:none">&#x1F4F7;&#xFE0E;</span>
+	<script>
+	(async () => {
+		if (!window.isSecureContext || !navigator.mediaDevices) return; // Settings shows why
+		let stream;
+		try {
+			stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+		} catch {
+			return;
+		}
+		const video = document.createElement("video");
+		video.muted = true;
+		video.playsInline = true;
+		video.srcObject = stream;
+		await video.play();
+		const w = 64, h = 48, canvas = document.createElement("canvas");
+		canvas.width = w;
+		canvas.height = h;
+		const g = canvas.getContext("2d", { willReadFrequently: true });
+		document.getElementById("camera").hidden = false;
+		// Fixed sensitivity: a pixel changed when its R+G+B moves by over 96; motion is over 5% of pixels changed.
+		const pixelDelta = 96, motionShare = 0.05;
+		let prev;
+		const tick = () => {
+			g.drawImage(video, 0, 0, w, h);
+			const d = g.getImageData(0, 0, w, h).data;
+			if (prev) {
+				let changed = 0;
+				for (let i = 0; i < d.length; i += 4) {
+					if (Math.abs(d[i] + d[i + 1] + d[i + 2] - prev[i] - prev[i + 1] - prev[i + 2]) > pixelDelta) changed++;
+				}
+				if (changed > w * h * motionShare) {
+					stream.getTracks().forEach(t => t.stop());
+					return document.getElementById("wake").click();
+				}
+			}
+			prev = d;
+			setTimeout(tick, 250); // 4 fps: enough to see someone walk up, and well under a video-activity rate
+		};
+		setTimeout(tick, 2000); // let the camera's exposure settle first, or its first frames read as motion
+	})();
+	</script>
 }
 
 // wallDisplay holds a Screen Wake Lock where the browser allows it, showing
