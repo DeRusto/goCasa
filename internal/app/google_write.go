@@ -51,8 +51,8 @@ type googleRow struct {
 // calendar re-imports in full, and whether Google was left alone (local), so
 // there is nothing to sync.
 type googleResult struct {
-	target             string
-	from               int64
+	target                     string
+	from                       int64
 	series, fresh, full, local bool
 }
 
