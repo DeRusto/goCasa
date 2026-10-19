@@ -117,12 +117,12 @@ templ householdSection(h Household) {
 		</label>
 		<label>
 			Wall display screensaver after
-			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" required/>
+			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" max="86400" required/>
 			seconds idle
 		</label>
 		<label>
 			Seconds per photo
-			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" required/>
+			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
 		</label>
 		<label>
 			Night mode (Wall displays)

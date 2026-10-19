@@ -37,7 +37,7 @@ func (a *App) points(ctx context.Context) (web.Points, error) {
 			return err
 		}, `SELECT rd.id, rw.name, rw.points_cost, m.id, m.name, m.color, m.avatar IS NOT NULL
 			FROM redemptions rd JOIN rewards rw ON rw.id = rd.reward_id JOIN members m ON m.id = rd.member_id
-			WHERE rd.status = 'pending' ORDER BY rd.requested_at, rd.id`)
+			WHERE rd.status = 'pending' AND NOT m.archived ORDER BY rd.requested_at, rd.id`)
 	}
 	return p, err
 }
@@ -116,12 +116,12 @@ func (a *App) redeem(w http.ResponseWriter, r *http.Request) {
 }
 
 // decide is an Admin approving or declining a pending Redemption. Approving
-// can't take the balance below zero; the check and the change are one statement.
+// can't take the balance below zero or be for an archived Member; the check and the change are one statement.
 func (a *App) decide(status string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		res, err := a.DB.ExecContext(r.Context(), `UPDATE redemptions SET status = ?1, decided_at = ?2, decided_by = ?3
-			WHERE id = ?4 AND status = 'pending' AND (?1 = 'declined' OR (SELECT b.points - rw.points_cost >= 0
+			WHERE id = ?4 AND status = 'pending' AND (?1 = 'declined' OR (SELECT NOT archived FROM members WHERE id = redemptions.member_id) AND (SELECT b.points - rw.points_cost >= 0
 				FROM balances b, rewards rw WHERE b.member_id = redemptions.member_id AND rw.id = redemptions.reward_id))`,
 			status, a.Now().Unix(), unlockedAdmin(r.Context()), id)
 		if err != nil {
@@ -138,7 +138,7 @@ func (a *App) decide(status string) http.HandlerFunc {
 				http.NotFound(w, r)
 				return
 			}
-			http.Error(w, "Approving that would take the balance below zero.", http.StatusConflict)
+			http.Error(w, "Approving that would take the balance below zero, or they're archived.", http.StatusConflict)
 			return
 		}
 		a.publish("updated", "redemption", id)

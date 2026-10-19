@@ -301,7 +301,7 @@ func householdSection(h Household) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" min=\"10\" required> seconds idle</label> <label>Seconds per photo <input type=\"number\" name=\"seconds_per_photo\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" min=\"10\" max=\"86400\" required> seconds idle</label> <label>Seconds per photo <input type=\"number\" name=\"seconds_per_photo\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -314,7 +314,7 @@ func householdSection(h Household) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" min=\"5\" required></label> <label>Night mode (Wall displays) <select name=\"night_mode\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" min=\"5\" max=\"86400\" required></label> <label>Night mode (Wall displays) <select name=\"night_mode\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

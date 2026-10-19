@@ -132,12 +132,12 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	start, err := strconv.Atoi(r.PostFormValue("week_start"))
 	idle, ok := optInt(r, "screensaver_idle_seconds", 10)
 	if !ok {
-		a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is at least 10 seconds.")
+		a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is 10 seconds to a day (86400).")
 		return
 	}
 	perPhoto, ok := optInt(r, "seconds_per_photo", 5)
 	if !ok {
-		a.settingsPage(w, r, http.StatusBadRequest, "Each photo shows for at least 5 seconds.")
+		a.settingsPage(w, r, http.StatusBadRequest, "Each photo shows for 5 seconds to a day (86400).")
 		return
 	}
 	var night *string
@@ -175,15 +175,19 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-// optInt is form field name as a number of at least min, nil when not sent;
-// ok is false when it was sent but isn't one.
+// maxSeconds caps a timer setting at a day: browsers fire a setTimeout over
+// about 24.8 days (2^31 ms) at once.
+const maxSeconds = 86400
+
+// optInt is form field name as a number from min to maxSeconds, nil when not
+// sent; ok is false when it was sent but isn't one.
 func optInt(r *http.Request, name string, min int) (n *int, ok bool) {
 	v := r.PostFormValue(name)
 	if v == "" {
 		return nil, true
 	}
 	i, err := strconv.Atoi(v)
-	if err != nil || i < min {
+	if err != nil || i < min || i > maxSeconds {
 		return nil, false
 	}
 	return &i, true

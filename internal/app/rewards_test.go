@@ -20,6 +20,27 @@ func balance(t *testing.T, h *apptest.Harness, id string) string {
 	return strings.TrimSpace(b)
 }
 
+// An archived Member's pending request leaves the board and can't be approved
+// until they're restored.
+func TestAnArchivedMembersPendingRedemptionIsHiddenAndCantBeApproved(t *testing.T) {
+	h := choreHousehold(t)
+	post(t, h, "/adjustments", url.Values{"member_id": {"2"}, "points": {"5"}, "reason": {"Start"}})
+	post(t, h, "/rewards", url.Values{"name": {"Ice cream"}, "points": {"3"}})
+	post(t, h, "/rewards/1/redeem", url.Values{"member_id": {"2"}})
+	post(t, h, "/settings/members/2/archive", nil)
+	if strings.Contains(choreBoard(t, h), "asks for") {
+		t.Fatal("an archived Member's request is on the board")
+	}
+	if code, _ := h.Post(t, "/redemptions/1/approve", nil); code != http.StatusConflict {
+		t.Fatalf("approving an archived Member's request = %d, want 409", code)
+	}
+	post(t, h, "/settings/members/2/restore", nil)
+	post(t, h, "/redemptions/1/approve", nil)
+	if got := balance(t, h, "2"); got != "2" {
+		t.Fatalf("Bob's balance after restoring and approving = %s, want 2", got)
+	}
+}
+
 func TestBalanceIsCompletionsLessApprovedRedemptionsPlusAdjustments(t *testing.T) {
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))

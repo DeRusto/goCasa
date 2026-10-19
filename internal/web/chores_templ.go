@@ -170,9 +170,9 @@ func choreRounds(c Chore, next string) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var8 string
-					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(t.Member.Name + " did " + c.Name)
+					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue("Complete " + c.Name + " for " + t.Member.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 60, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 60, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 					if templ_7745c5c3_Err != nil {
