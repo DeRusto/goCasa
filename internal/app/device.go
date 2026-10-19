@@ -266,7 +266,14 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
 		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
-	}, src, left))
+	}, src, left, nextHour(now)))
+}
+
+// nextHour is the seconds until the next hour starts in now's zone (the
+// household's), when Night mode may begin; the browser's own zone may differ.
+func nextHour(now time.Time) int {
+	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, now.Location())
+	return int(next.Sub(now).Seconds() + .999)
 }
 
 // photoNow is the screensaver photo's address ("" for none) and the seconds it has left.

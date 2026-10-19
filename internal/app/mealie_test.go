@@ -374,6 +374,24 @@ func TestMealiePollsEveryMinuteAndOnListOpen(t *testing.T) {
 	}
 }
 
+func TestMealieLiveRefreshOfListsDoesNotPoll(t *testing.T) {
+	h, d, m := mealieHousehold(t)
+	h.RunDue() // the poll a list open made due
+	m.addItem("L2", "I9", "Batteries", false)
+	h.Clock.Advance(30 * time.Second)
+	req, _ := http.NewRequest(http.MethodGet, d.Server.URL+"/lists", nil)
+	req.Header.Set("X-Background", "1") // the live-update refetch after a change
+	res, err := d.Client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	h.RunDue()
+	if got := listByName(t, d, "Costco"); len(got) != 1 {
+		t.Errorf("a live refresh made a poll due: %q", got)
+	}
+}
+
 func TestMealieListsCanBeHidden(t *testing.T) {
 	h, d, _ := mealieHousehold(t)
 	costco, _ := ids(t, d, "Costco", "Paper towels")

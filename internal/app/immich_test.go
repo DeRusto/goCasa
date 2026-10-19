@@ -345,6 +345,23 @@ func TestPhotosAreCachedPrefetchedAndOutliveAnImmichOutage(t *testing.T) {
 	}
 }
 
+func TestAnOutageWithAPartialCacheRotatesOnlyCachedPhotos(t *testing.T) {
+	h, f := immichHousehold(t)
+	wall := h.Device()
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}})
+	wall.Get(t, photo(t, wall)) // one cached, no prefetch yet
+	f.setDown(true)
+	h.Clock.Advance(time.Hour)
+	h.RunDue() // the re-list and prefetch fail
+	for range 4 {
+		p := photo(t, wall)
+		if code, img := wall.Get(t, p); code != http.StatusOK || !strings.HasPrefix(img, "img:") {
+			t.Fatalf("while Immich is down the screensaver picked uncached %s = %d %q", p, code, img)
+		}
+		h.Clock.Advance(30 * time.Second)
+	}
+}
+
 func TestThePhotoCacheDropsTheLeastRecentlyUsed(t *testing.T) {
 	defer app.SetPhotoCacheLimit(2 * len("img:a1"))()
 	h, f := immichHousehold(t)
@@ -389,7 +406,7 @@ func TestScreensaverRotatesPhotosWithoutReloading(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &p); err != nil || p.Src == first || p.Src == "" {
 		t.Fatalf("next photo = %q, want a new one", body)
 	}
-	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `fetch("/screensaver/photo")`) {
+	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `fetch("/screensaver/photo"`) {
 		t.Fatal("the screensaver does not swap photos in place")
 	}
 }
