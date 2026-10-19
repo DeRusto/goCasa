@@ -344,7 +344,7 @@ func (a *App) mealieSettings(ctx context.Context) (*web.Mealie, error) {
 	}
 	var c mealieConfig
 	json.Unmarshal([]byte(cfg), &c)
-	m.URL, m.LastSuccess = c.URL, a.lastSync(ok)
+	m.URL, m.LastSuccess = c.URL, a.lastSync(ok, a.clock(ctx))
 	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, hidden FROM shopping_lists WHERE integration_id = ? ORDER BY position, id", m.ID)
 	if err != nil {
 		return nil, err

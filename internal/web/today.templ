@@ -1,10 +1,15 @@
 package web
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // TodayPage is the Today page: always the whole Household, no Member filter.
 type TodayPage struct {
 	Now     time.Time      // in the household's timezone
+	Clock   string         // Now's time, 12- or 24-hour as the Household has it
+	Clock24 bool
 	Weather *WeatherHeader // nil: no cached weather
 	Days    [2]CalendarDay // today and tomorrow
 	Chores  []Chore        // with a Round that can be claimed today
@@ -16,7 +21,7 @@ templ Today(p TodayPage) {
 	@page("Today", false) {
 		<div id="live">
 			<header>
-				<p style="font-size:4rem;margin:0"><time id="clock" data-tz={ p.Now.Location().String() }>{ p.Now.Format("15:04") }</time></p>
+				<p style="font-size:4rem;margin:0"><time id="clock" data-tz={ p.Now.Location().String() } data-h24={ strconv.FormatBool(p.Clock24) }>{ p.Clock }</time></p>
 				<h1>{ p.Now.Format("Monday 2 January") }</h1>
 				if w := p.Weather; w != nil {
 					<p style="font-size:2rem;margin:0">
@@ -33,6 +38,7 @@ templ Today(p TodayPage) {
 				}
 			</header>
 			<main>
+				@defaultViewButton("/today")
 				@calendarDay(p.Days[0], "Today")
 				@calendarDay(p.Days[1], "Tomorrow")
 				<section id="today-chores">
@@ -67,7 +73,8 @@ templ Today(p TodayPage) {
 		<script>
 		(() => {
 			// Tick the clock, and refresh each minute so past events grey and midnight turns the day.
-			const opts = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+			const h24 = document.getElementById("clock").dataset.h24 === "true";
+			const opts = h24 ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "numeric", minute: "2-digit", hourCycle: "h12" };
 			try { opts.timeZone = document.getElementById("clock").dataset.tz; new Intl.DateTimeFormat([], opts); } catch { delete opts.timeZone; }
 			setInterval(() => {
 				const el = document.getElementById("clock");

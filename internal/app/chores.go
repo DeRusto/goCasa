@@ -21,11 +21,10 @@ type choreRound struct{ start, end time.Time }
 // roundOn is the Round of a Chore's schedule that day falls in: the day
 // (daily, or a chosen weekday), its week or its calendar month. ok is false on
 // a day a chosen-weekdays Chore doesn't run.
-func roundOn(schedule, days string, day time.Time) (r choreRound, ok bool) {
+func roundOn(schedule, days string, weekStart int, day time.Time) (r choreRound, ok bool) {
 	switch schedule {
 	case "weekly":
-		// shortcut: weeks start on Sunday, as on the calendar; follow week_start once household settings have it.
-		s := dayAt(day, -int(day.Weekday()))
+		s := dayAt(day, -(int(day.Weekday())-weekStart+7)%7)
 		return choreRound{s, dayAt(s, 6)}, true
 	case "monthly":
 		s := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location())
@@ -42,14 +41,14 @@ func roundOn(schedule, days string, day time.Time) (r choreRound, ok bool) {
 // first: the Round running today, if any, and the latest Round before it,
 // which is Late until the Round after it ends; older ones are Missed. A Round
 // that ended before the Chore was created never counts.
-func claimable(schedule, days string, today, created time.Time) []choreRound {
+func claimable(schedule, days string, weekStart int, today, created time.Time) []choreRound {
 	var rs []choreRound
 	from := today
-	if cur, ok := roundOn(schedule, days, today); ok {
+	if cur, ok := roundOn(schedule, days, weekStart, today); ok {
 		rs, from = append(rs, cur), cur.start
 	}
 	for i := 1; i <= 7; i++ {
-		if r, ok := roundOn(schedule, days, dayAt(from, -i)); ok {
+		if r, ok := roundOn(schedule, days, weekStart, dayAt(from, -i)); ok {
 			if !r.end.Before(created) {
 				rs = append([]choreRound{r}, rs...)
 			}
@@ -72,6 +71,10 @@ func back(r *http.Request) string {
 func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 	loc := a.Config.Location
 	today := dayAt(a.Now().In(loc), 0)
+	hh, err := a.household(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, schedule, days, kind = 'anyone', points, archived, created_at FROM chores ORDER BY name, id")
 	if err != nil {
 		return nil, err
@@ -131,7 +134,7 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 		if c.Archived {
 			continue
 		}
-		for _, cr := range claimable(c.Schedule, c.Days, today, dayAt(time.Unix(created[c.ID], 0).In(loc), 0)) {
+		for _, cr := range claimable(c.Schedule, c.Days, hh.WeekStart, today, dayAt(time.Unix(created[c.ID], 0).In(loc), 0)) {
 			rd := web.ChoreRound{Start: cr.start.Format(dateLayout), Late: cr.end.Before(today)}
 			taps := done[key{c.ID, rd.Start}]
 			open := false
@@ -370,9 +373,14 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	loc := a.Config.Location
 	open := false
-	for _, cr := range claimable(schedule, days, dayAt(a.Now().In(loc), 0), dayAt(time.Unix(at, 0).In(loc), 0)) {
+	for _, cr := range claimable(schedule, days, hh.WeekStart, dayAt(a.Now().In(loc), 0), dayAt(time.Unix(at, 0).In(loc), 0)) {
 		open = open || cr.start.Format(dateLayout) == round
 	}
 	if !open {

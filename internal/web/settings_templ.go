@@ -104,7 +104,7 @@ func avatar(m Member) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue("/members/" + strconv.FormatInt(m.ID, 10) + "/avatar")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 72, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 72, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 			if templ_7745c5c3_Err != nil {
@@ -122,7 +122,7 @@ func avatar(m Member) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 74, Col: 187}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 74, Col: 187}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -135,7 +135,7 @@ func avatar(m Member) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(Initials(m.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 74, Col: 227}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 74, Col: 227}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -179,7 +179,7 @@ func formError(msg string) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(msg)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 80, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 80, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -222,7 +222,7 @@ func pinInput(label string) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 86, Col: 9}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 86, Col: 9}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -354,7 +354,7 @@ func Lock(admins []Member, errMsg string) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(m.ID, 10))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 119, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 119, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 				if templ_7745c5c3_Err != nil {
@@ -385,7 +385,7 @@ func Lock(admins []Member, errMsg string) templ.Component {
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 121, Col: 15}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 121, Col: 15}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -450,7 +450,7 @@ func memberFields(m Member) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 137, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 137, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {
@@ -463,7 +463,7 @@ func memberFields(m Member) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Color)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 138, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 138, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -508,7 +508,7 @@ func memberFields(m Member) templ.Component {
 }
 
 // Settings is the unlocked Settings page.
-func Settings(members []Member, feeds []Feed, google Google, weather Weather, locks Locks, mealie *Mealie, errMsg string) templ.Component {
+func Settings(members []Member, feeds []Feed, google Google, weather Weather, locks Locks, mealie *Mealie, household Household, errMsg string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -600,7 +600,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var20 string
 					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 171, Col: 15}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 171, Col: 15}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 					if templ_7745c5c3_Err != nil {
@@ -623,7 +623,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var21 templ.SafeURL
 					templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, ""))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 176, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 176, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 					if templ_7745c5c3_Err != nil {
@@ -655,7 +655,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var22 templ.SafeURL
 					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/avatar"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 185, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 185, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 					if templ_7745c5c3_Err != nil {
@@ -673,7 +673,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 						var templ_7745c5c3_Var23 templ.SafeURL
 						templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/avatar/delete"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 190, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 190, Col: 66}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 						if templ_7745c5c3_Err != nil {
@@ -691,7 +691,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var24 templ.SafeURL
 					templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/archive"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 194, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 194, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 					if templ_7745c5c3_Err != nil {
@@ -704,7 +704,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 195, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 195, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
@@ -717,7 +717,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var26 templ.SafeURL
 					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/delete"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 197, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 197, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 					if templ_7745c5c3_Err != nil {
@@ -730,7 +730,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 198, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 198, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
@@ -775,7 +775,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 216, Col: 15}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 216, Col: 15}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
@@ -788,7 +788,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var29 templ.SafeURL
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/restore"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 218, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 218, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -801,7 +801,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var30 string
 					templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 219, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 219, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 					if templ_7745c5c3_Err != nil {
@@ -814,7 +814,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var31 templ.SafeURL
 					templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinURLErrs(memberURL(m, "/delete"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 221, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 221, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 					if templ_7745c5c3_Err != nil {
@@ -827,7 +827,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					var templ_7745c5c3_Var32 string
 					templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 222, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 222, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 					if templ_7745c5c3_Err != nil {
@@ -851,7 +851,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 				var templ_7745c5c3_Var33 string
 				templ_7745c5c3_Var33, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 232, Col: 124}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 232, Col: 124}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 				if templ_7745c5c3_Err != nil {
@@ -864,7 +864,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(f.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 233, Col: 14}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 233, Col: 14}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {
@@ -885,7 +885,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 				var templ_7745c5c3_Var35 templ.SafeURL
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 236, Col: 109}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 236, Col: 109}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 				if templ_7745c5c3_Err != nil {
@@ -898,7 +898,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 				var templ_7745c5c3_Var36 string
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(f.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 237, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 237, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -922,6 +922,14 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 				return templ_7745c5c3_Err
 			}
 			templ_7745c5c3_Err = mealieSection(mealie).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = householdSection(household).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = thisDevice().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -972,7 +980,7 @@ func syncStatus(lastSuccess string, failures int, lastError string) templ.Compon
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(lastSuccess)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 260, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 262, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 		if templ_7745c5c3_Err != nil {
@@ -990,7 +998,7 @@ func syncStatus(lastSuccess string, failures int, lastError string) templ.Compon
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(failures))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 262, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 264, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 			if templ_7745c5c3_Err != nil {
@@ -1003,7 +1011,7 @@ func syncStatus(lastSuccess string, failures int, lastError string) templ.Compon
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(lastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 262, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 264, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
@@ -1051,7 +1059,7 @@ func googleSection(g Google, members []Member) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(g.RedirectURI)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 269, Col: 185}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 271, Col: 185}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -1069,7 +1077,7 @@ func googleSection(g Google, members []Member) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(g.RedirectURI)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 271, Col: 102}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 273, Col: 102}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -1088,7 +1096,7 @@ func googleSection(g Google, members []Member) templ.Component {
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(acct.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 275, Col: 19}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 277, Col: 19}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -1116,7 +1124,7 @@ func googleSection(g Google, members []Member) templ.Component {
 				var templ_7745c5c3_Var45 templ.SafeURL
 				templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/google-calendars/" + strconv.FormatInt(c.ID, 10)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 281, Col: 107}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 283, Col: 107}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 				if templ_7745c5c3_Err != nil {
@@ -1129,7 +1137,7 @@ func googleSection(g Google, members []Member) templ.Component {
 				var templ_7745c5c3_Var46 string
 				templ_7745c5c3_Var46, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(calendarDot(c.Color))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 284, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 286, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 				if templ_7745c5c3_Err != nil {
@@ -1142,7 +1150,7 @@ func googleSection(g Google, members []Member) templ.Component {
 				var templ_7745c5c3_Var47 string
 				templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 285, Col: 15}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 287, Col: 15}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 				if templ_7745c5c3_Err != nil {
@@ -1181,7 +1189,7 @@ func googleSection(g Google, members []Member) templ.Component {
 						var templ_7745c5c3_Var48 string
 						templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(m.ID, 10))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 293, Col: 87}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 295, Col: 87}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 						if templ_7745c5c3_Err != nil {
@@ -1204,7 +1212,7 @@ func googleSection(g Google, members []Member) templ.Component {
 						var templ_7745c5c3_Var49 string
 						templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 293, Col: 129}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 295, Col: 129}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 						if templ_7745c5c3_Err != nil {
@@ -1223,7 +1231,7 @@ func googleSection(g Google, members []Member) templ.Component {
 				var templ_7745c5c3_Var50 string
 				templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 296, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 298, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 				if templ_7745c5c3_Err != nil {
@@ -1242,7 +1250,7 @@ func googleSection(g Google, members []Member) templ.Component {
 				var templ_7745c5c3_Var51 string
 				templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(acct.ID, 10))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 302, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 304, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 				if templ_7745c5c3_Err != nil {
@@ -1255,7 +1263,7 @@ func googleSection(g Google, members []Member) templ.Component {
 				var templ_7745c5c3_Var52 string
 				templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(acct.Email)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 303, Col: 35}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 305, Col: 35}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 				if templ_7745c5c3_Err != nil {
@@ -1273,7 +1281,7 @@ func googleSection(g Google, members []Member) templ.Component {
 			var templ_7745c5c3_Var53 templ.SafeURL
 			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/google/" + strconv.FormatInt(acct.ID, 10) + "/delete"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 306, Col: 111}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 308, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 			if templ_7745c5c3_Err != nil {
@@ -1286,7 +1294,7 @@ func googleSection(g Google, members []Member) templ.Component {
 			var templ_7745c5c3_Var54 string
 			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(acct.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/settings.templ`, Line: 311, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 313, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 			if templ_7745c5c3_Err != nil {

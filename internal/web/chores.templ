@@ -113,6 +113,7 @@ templ ChoresBoard(chores []Chore, people []Member) {
 		<main>
 			<h1>Chores</h1>
 			<p><a href="/">Home</a></p>
+			@defaultViewButton("/chores")
 			<div id="live">
 				for _, c := range chores {
 					if !c.Archived {

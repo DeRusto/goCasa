@@ -64,9 +64,8 @@ func parseIDs(vs []string) []int64 {
 }
 
 // span is the days a view shows around date, and the dates its arrows go to.
-func span(view string, date time.Time) (first time.Time, n int, prev, next time.Time) {
-	// shortcut: weeks start on Sunday; follow week_start once household settings exist.
-	weekStart := func(d time.Time) time.Time { return dayAt(d, -int(d.Weekday())) }
+func span(view string, date time.Time, weekday int) (first time.Time, n int, prev, next time.Time) {
+	weekStart := func(d time.Time) time.Time { return dayAt(d, -(int(d.Weekday())-weekday+7)%7) }
 	switch view {
 	case "day":
 		return date, 1, dayAt(date, -1), dayAt(date, 1)
@@ -108,7 +107,12 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		date = today
 	}
 	users := parseIDs(q["users"])
-	first, n, prev, next := span(view, date)
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	first, n, prev, next := span(view, date, hh.WeekStart)
 	end := dayAt(first, n)
 
 	evs, err := a.eventsIn(r.Context(), first, end, users)
@@ -117,7 +121,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}, ICS: a.icsURL()}
+	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}, ICS: a.icsURL(), DefaultView: calendarView(view, users)}
 	if p.Stale, p.BeyondGoogle, err = a.syncNotices(r.Context(), end); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -127,7 +131,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range n {
 		d0 := dayAt(first, i)
-		day := calendarDay(evs, d0, today, 0)
+		day := calendarDay(evs, d0, today, 0, clockLayout(hh.Clock24))
 		day.Faded = view == "month" && d0.Month() != date.Month()
 		if view != "agenda" || len(day.Events) > 0 {
 			p.Days = append(p.Days, day)
@@ -161,8 +165,8 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 }
 
 // calendarDay is the events of evs on day d0 (local midnight); timed events
-// that ended by now (unix seconds; 0: never) are Past.
-func calendarDay(evs []calendarEvent, d0, today time.Time, now int64) web.CalendarDay {
+// that ended by now (unix seconds; 0: never) are Past. clock is their times' layout.
+func calendarDay(evs []calendarEvent, d0, today time.Time, now int64, clock string) web.CalendarDay {
 	loc := d0.Location()
 	d1 := dayAt(d0, 1)
 	ds := d0.Format(dateLayout)
@@ -180,10 +184,10 @@ func calendarDay(evs []calendarEvent, d0, today time.Time, now int64) web.Calend
 			}
 			from, to := "…", "…"
 			if e.start >= d0.Unix() {
-				from = time.Unix(e.start, 0).In(loc).Format("15:04")
+				from = time.Unix(e.start, 0).In(loc).Format(clock)
 			}
 			if e.end <= d1.Unix() {
-				to = time.Unix(e.end, 0).In(loc).Format("15:04")
+				to = time.Unix(e.end, 0).In(loc).Format(clock)
 			}
 			ev.Time = from + "–" + to
 			ev.Past = e.end <= now

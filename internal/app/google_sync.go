@@ -405,6 +405,7 @@ func (e googleEvent) change(zone string, home *time.Location) (c eventChange, ok
 // missed 3 times or needs a reconnect, and whether a view ending at end reaches
 // past the Google window while a Google calendar is shown.
 func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.StaleCalendar, beyond bool, err error) {
+	clock := a.clock(ctx)
 	rows, err := a.DB.QueryContext(ctx, `SELECT c.name, i.last_success_at, i.status = 'reconnect_needed'
 		FROM source_calendars c JOIN integrations i ON i.id = c.integration_id
 		WHERE c.enabled AND i.type != 'local' AND (i.status = 'reconnect_needed' OR i.consecutive_failures >= 3) ORDER BY c.name, c.id`)
@@ -418,7 +419,7 @@ func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.Stale
 		if err := rows.Scan(&s.Name, &ok, &s.Reconnect); err != nil {
 			return nil, false, err
 		}
-		s.LastUpdated = a.lastSync(ok)
+		s.LastUpdated = a.lastSync(ok, clock)
 		stale = append(stale, s)
 	}
 	if err := rows.Err(); err != nil {
@@ -468,8 +469,8 @@ func (a *App) getSynced(w http.ResponseWriter, r *http.Request) {
 			s.When += " – " + last.Format("2 Jan 2006")
 		}
 	} else {
-		loc := a.Config.Location
-		s.When = time.Unix(start.Int64, 0).In(loc).Format("2 Jan 2006 15:04") + " – " + time.Unix(end.Int64, 0).In(loc).Format("2 Jan 2006 15:04")
+		loc, layout := a.Config.Location, "2 Jan 2006 "+a.clock(r.Context())
+		s.When = time.Unix(start.Int64, 0).In(loc).Format(layout) + " – " + time.Unix(end.Int64, 0).In(loc).Format(layout)
 	}
 	ms, err := a.activeMembers(r)
 	if err != nil {
