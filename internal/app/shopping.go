@@ -14,9 +14,18 @@ import (
 // Shopping is never locked (spec §9): no handler here checks a Lock or a PIN.
 
 func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.DB.QueryContext(r.Context(), `SELECT l.id, l.name, i.id, i.note, i.checked
-		FROM shopping_lists l LEFT JOIN shopping_items i ON i.list_id = l.id
-		WHERE NOT l.hidden ORDER BY l.position, l.id, i.position, i.id`)
+	// Opening the lists pulls Mirrored lists on the next scheduler tick; the page never waits on Mealie.
+	if _, err := a.DB.ExecContext(r.Context(), "UPDATE integrations SET next_sync_at = min(next_sync_at, ?) WHERE type = ?", a.Now().Unix(), mealieType); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.listsPage(w, r, http.StatusOK, "")
+}
+
+func (a *App) listsPage(w http.ResponseWriter, r *http.Request, status int, msg string) {
+	rows, err := a.DB.QueryContext(r.Context(), `SELECT l.id, l.name, l.integration_id IS NOT NULL, coalesce(g.consecutive_failures >= ?, 0), i.id, i.note, i.checked
+		FROM shopping_lists l LEFT JOIN shopping_items i ON i.list_id = l.id LEFT JOIN integrations g ON g.id = l.integration_id
+		WHERE NOT l.hidden ORDER BY l.position, l.id, i.position, i.id`, mealieDownPoll)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -28,7 +37,7 @@ func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
 		var itemID sql.NullInt64
 		var note sql.NullString
 		var checked sql.NullBool
-		if err := rows.Scan(&l.ID, &l.Name, &itemID, &note, &checked); err != nil {
+		if err := rows.Scan(&l.ID, &l.Name, &l.Mirrored, &l.ReadOnly, &itemID, &note, &checked); err != nil {
 			a.serverError(w, r, err)
 			return
 		}
@@ -44,7 +53,22 @@ func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, web.Lists(lists))
+	a.render(w, r, status, web.Lists(lists, msg))
+}
+
+// mirrored hands a request on a Mirrored list to Mealie: it reports whether
+// list is one (or the lookup failed and was answered).
+func (a *App) mirrored(w http.ResponseWriter, r *http.Request, list int64, write func(*mirror)) bool {
+	m, err := a.mirrorOf(r.Context(), list)
+	if err != nil {
+		a.serverError(w, r, err)
+		return true
+	}
+	if m == nil {
+		return false
+	}
+	write(m)
+	return true
 }
 
 // text is form field key trimmed, or "" when it is longer than max characters.
@@ -77,6 +101,9 @@ func (a *App) addItem(w http.ResponseWriter, r *http.Request) {
 	note := text(r, "note", 200)
 	if note == "" {
 		http.Error(w, "An item needs 1 to 200 characters.", http.StatusBadRequest)
+		return
+	}
+	if a.mirrored(w, r, list, func(m *mirror) { a.mealieAdd(w, r, m, note) }) {
 		return
 	}
 	var id int64
@@ -169,7 +196,37 @@ func (a *App) checkItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "checked must be true or false.", http.StatusBadRequest)
 		return
 	}
-	res, err := a.DB.ExecContext(r.Context(), "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, id, list)
+	if a.mirrored(w, r, list, func(m *mirror) { a.mealieCheck(w, r, m, id, checked) }) {
+		return
+	}
+	a.localChange(w, r, "updated", id, "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, id, list)
+}
+
+func (a *App) deleteItem(w http.ResponseWriter, r *http.Request) {
+	id, list := itemPath(r)
+	if a.mirrored(w, r, list, func(m *mirror) { a.mealieDelete(w, r, m, id) }) {
+		return
+	}
+	a.localChange(w, r, "deleted", id, "DELETE FROM shopping_items WHERE "+localItem, id, list)
+}
+
+// clearChecked deletes a list's checked items.
+func (a *App) clearChecked(w http.ResponseWriter, r *http.Request) {
+	list, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if a.mirrored(w, r, list, func(m *mirror) { a.mealieClear(w, r, m) }) {
+		return
+	}
+	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM shopping_items WHERE checked AND list_id = ?", list); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.publish("updated", "shopping_list", list)
+	http.Redirect(w, r, "/lists", http.StatusSeeOther)
+}
+
+// localChange runs query on one item of a local list; no row changed is a 404.
+func (a *App) localChange(w http.ResponseWriter, r *http.Request, typ string, id int64, query string, args ...any) {
+	res, err := a.DB.ExecContext(r.Context(), query, args...)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -178,6 +235,6 @@ func (a *App) checkItem(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	a.publish("updated", "shopping_item", id)
+	a.publish(typ, "shopping_item", id)
 	http.Redirect(w, r, "/lists", http.StatusSeeOther)
 }

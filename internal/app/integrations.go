@@ -24,7 +24,7 @@ type Integration interface {
 	Sync(ctx context.Context, a *App, in integrationRow) error
 }
 
-var integrationTypes = map[string]Integration{"ical": icalFeed{}, googleType: googleSync{}, openMeteoType: openMeteo{}}
+var integrationTypes = map[string]Integration{"ical": icalFeed{}, googleType: googleSync{}, openMeteoType: openMeteo{}, mealieType: mealie{}}
 
 // integrationRow is what Sync gets from its row.
 type integrationRow struct {

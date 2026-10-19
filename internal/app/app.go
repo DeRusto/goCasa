@@ -127,6 +127,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /auth/google/callback", a.requireUnlock(a.googleCallback))
 	mux.HandleFunc("POST /settings/google/{id}/delete", a.requireUnlock(a.disconnectGoogle))
 	mux.HandleFunc("POST /settings/google-calendars/{id}", a.requireUnlock(a.updateGoogleCalendar))
+	mux.HandleFunc("POST /settings/mealie", a.requireUnlock(a.connectMealie))
+	mux.HandleFunc("POST /settings/mealie/delete", a.requireUnlock(a.disconnectMealie))
+	mux.HandleFunc("POST /settings/mealie-lists/{id}", a.requireUnlock(a.hideMealieList))
 	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 	// shortcut: calendar changes ignore the calendar Lock until Locks land (#40).
@@ -148,6 +151,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /lists/{id}/items", a.addItem)
 	mux.HandleFunc("POST /lists/{list}/items/{id}", a.checkItem)
 	mux.HandleFunc("POST /lists/{list}/items/{id}/move", a.moveItem)
+	mux.HandleFunc("POST /lists/{list}/items/{id}/delete", a.deleteItem)
+	mux.HandleFunc("POST /lists/{id}/clear", a.clearChecked)
 	// shortcut: completing to-dos ignores the to-do Lock until Locks land (#40).
 	mux.HandleFunc("GET /todos", a.getTodos)
 	mux.HandleFunc("POST /todos", a.createTodo)
