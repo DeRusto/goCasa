@@ -180,7 +180,7 @@ func TestConnectReconnectDisconnectGoogle(t *testing.T) {
 
 	// Reconnecting the same login replaces the token and keeps the rest; a new calendar shows up.
 	g.signInAs("sub-alice")
-	g.list(cal("alice@example.com", "Alice renamed", "#000000", "owner"), cal("work", "Work", "#ffffff", "writer"))
+	g.list(cal("alice@example.com", "Alice renamed", "#000000", "reader"), cal("work", "Work", "#ffffff", "writer"))
 	if code, page := h.Post(t, "/integrations/google/connect", url.Values{"account": {fmt.Sprint(acct)}}); code != http.StatusOK || !strings.Contains(page, "Work") {
 		t.Fatalf("reconnect = %d:\n%s", code, page)
 	}
@@ -190,13 +190,13 @@ func TestConnectReconnectDisconnectGoogle(t *testing.T) {
 	if storedToken(t, h, acct) == before {
 		t.Fatal("reconnect kept the old token")
 	}
-	var id, members int64
+	var id, members, readOnly int64
 	var cursor string
-	h.App.DB.QueryRow("SELECT id, enabled FROM source_calendars WHERE external_id = 'alice@example.com'").Scan(&id, &enabled)
+	h.App.DB.QueryRow("SELECT id, enabled, read_only FROM source_calendars WHERE external_id = 'alice@example.com'").Scan(&id, &enabled, &readOnly)
 	h.App.DB.QueryRow("SELECT count(*) FROM source_calendar_members WHERE calendar_id = ? AND member_id = 2", id).Scan(&members)
 	h.App.DB.QueryRow("SELECT sync_cursor FROM integrations WHERE id = ?", acct).Scan(&cursor)
-	if id != aliceCal || enabled != 1 || members != 1 || cursor != "cursor-1" {
-		t.Fatalf("after reconnect: calendar %d enabled %d defaults %d cursor %q", id, enabled, members, cursor)
+	if id != aliceCal || enabled != 1 || members != 1 || cursor != "cursor-1" || readOnly != 1 {
+		t.Fatalf("after reconnect: calendar %d enabled %d defaults %d cursor %q read-only %d", id, enabled, members, cursor, readOnly)
 	}
 
 	// Connecting a login that's already here reconnects it rather than adding a second.
@@ -256,5 +256,12 @@ func TestGoogleRefusalKeepsAnotherAccountsGrant(t *testing.T) {
 	}
 	if got := g.revocations(); len(got) != 0 {
 		t.Fatalf("revoked %q", got)
+	}
+
+	// Without the client, saved accounts can still be disconnected, not reconnected.
+	h.App.Config.GoogleClientID = ""
+	_, page := h.Get(t, "/settings")
+	if !strings.Contains(page, "Disconnect alice@example.com") || strings.Contains(page, "Reconnect") || strings.Contains(page, "Connect a Google account") {
+		t.Fatalf("unconfigured Settings:\n%s", page)
 	}
 }

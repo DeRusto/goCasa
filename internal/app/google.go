@@ -120,10 +120,13 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 	if msg != "" || err != nil {
 		// Don't leave a grant behind that GoCasa won't use. Revoking ends the
 		// login's whole grant, so not for a login that's connected here.
+		// Its own context: a browser closed mid-connect still gets cleaned up after.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
+		defer cancel()
 		var known bool
-		qerr := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM integrations WHERE type = ? AND account_sub = ?)", googleType, g.sub).Scan(&known)
+		qerr := a.DB.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM integrations WHERE type = ? AND account_sub = ?)", googleType, g.sub).Scan(&known)
 		if qerr == nil && !known {
-			if rerr := a.revokeGoogle(context.WithoutCancel(r.Context()), g.refresh); rerr != nil {
+			if rerr := a.revokeGoogle(ctx, g.refresh); rerr != nil {
 				a.Log.Warn("revoking an unused google token failed", "err", rerr)
 			}
 		}
@@ -192,9 +195,9 @@ func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGr
 				color = defaultGoogleColor
 			}
 			readOnly := c.AccessRole != "owner" && c.AccessRole != "writer"
-			// New calendars start hidden until an Admin picks them; known ones keep their settings.
+			// New calendars start hidden until an Admin picks them; known ones keep their settings but not their access.
 			if _, err := tx.ExecContext(ctx, `INSERT INTO source_calendars (integration_id, external_id, name, color, enabled, read_only) VALUES (?, ?, ?, ?, 0, ?)
-				ON CONFLICT (integration_id, external_id) WHERE external_id IS NOT NULL DO NOTHING`,
+				ON CONFLICT (integration_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET read_only = excluded.read_only`,
 				id, c.ID, string(name[:min(len(name), 50)]), color, readOnly); err != nil {
 				return err
 			}
