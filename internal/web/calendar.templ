@@ -165,7 +165,10 @@ templ Calendar(p CalendarPage) {
 				|
 				<a href={ newEventURL(p.Date) }>New event</a>
 			</nav>
-			<form method="post" action="/calendar/sync"><button>Sync now</button></form>
+			<form method="post" action="/calendar/sync">
+				<input type="hidden" name="back" value={ p.ViewLinks[p.View] }/>
+				<button>Sync now</button>
+			</form>
 			<form method="get" action="/calendar">
 				<input type="hidden" name="view" value={ p.View }/>
 				<input type="hidden" name="date" value={ p.Date.Format("2006-01-02") }/>

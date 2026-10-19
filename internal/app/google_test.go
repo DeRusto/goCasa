@@ -31,6 +31,7 @@ type fakeGoogle struct {
 	gone      bool                        // token syncs answer 410
 	withdrawn bool                        // refreshes answer invalid_grant
 	fail      int                         // when set, events lists answer it
+	missing   string                      // a calendar whose events list answers 404
 	pageSize  int
 	lists     []url.Values // each events list's query, with its calendar as "cal"
 	*httptest.Server
@@ -105,6 +106,9 @@ func newGoogle(t *testing.T) *fakeGoogle {
 		switch {
 		case g.fail != 0:
 			w.WriteHeader(g.fail)
+			return
+		case cal == g.missing:
+			w.WriteHeader(http.StatusNotFound)
 			return
 		case q.Has("syncToken") && g.gone:
 			w.WriteHeader(http.StatusGone)

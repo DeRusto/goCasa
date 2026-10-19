@@ -217,10 +217,7 @@ templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
 						<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color }></span>
 						{ f.Name }
 					</h3>
-					<p>Last synced: { f.LastSuccess }</p>
-					if f.Failures > 0 {
-						<p role="alert">Sync failing ({ strconv.Itoa(f.Failures) } in a row): { f.LastError }</p>
-					}
+					@syncStatus(f.LastSuccess, f.Failures, f.LastError)
 					<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
 						<button>Remove { f.Name }</button>
 					</form>
@@ -241,6 +238,14 @@ func calendarDot(color string) string {
 	return "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + color
 }
 
+// syncStatus is an integration's last sync and, while failing, its error.
+templ syncStatus(lastSuccess string, failures int, lastError string) {
+	<p>Last synced: { lastSuccess }</p>
+	if failures > 0 {
+		<p role="alert">Sync failing ({ strconv.Itoa(failures) } in a row): { lastError }</p>
+	}
+}
+
 templ googleSection(g Google, members []Member) {
 	<h2>Google accounts</h2>
 	if !g.Configured {
@@ -254,10 +259,7 @@ templ googleSection(g Google, members []Member) {
 			if acct.Reconnect {
 				<p role="alert">Reconnect needed: Google withdrew GoCasa's access, so it has stopped syncing. Its events show as last synced.</p>
 			}
-			<p>Last synced: { acct.LastSuccess }</p>
-			if acct.Failures > 0 {
-				<p role="alert">Sync failing ({ strconv.Itoa(acct.Failures) } in a row): { acct.LastError }</p>
-			}
+			@syncStatus(acct.LastSuccess, acct.Failures, acct.LastError)
 			for _, c := range acct.Calendars {
 				<form method="post" action={ templ.SafeURL("/settings/google-calendars/" + strconv.FormatInt(c.ID, 10)) }>
 					<fieldset>

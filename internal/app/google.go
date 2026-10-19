@@ -413,6 +413,9 @@ func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
 			return g, err
 		}
 		acct.LastSuccess = a.lastSync(lastSuccess)
+		if acct.Reconnect {
+			acct.Failures = 0 // Reconnect needed says why it isn't syncing
+		}
 		if n := len(g.Accounts); n == 0 || g.Accounts[n-1].ID != acct.ID {
 			g.Accounts = append(g.Accounts, acct)
 		}

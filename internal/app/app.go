@@ -52,7 +52,7 @@ type App struct {
 	Scheduler *Scheduler
 	Bus       *Bus
 	handler   http.Handler
-	syncMu    sync.Mutex // see syncIntegration
+	syncLocks sync.Map // integration id → *sync.Mutex; see syncIntegration
 }
 
 // New opens DATA_DIR/app.db, runs migrations and builds the handler.

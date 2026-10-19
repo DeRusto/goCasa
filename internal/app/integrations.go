@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -30,6 +31,7 @@ type integrationRow struct {
 	id          int64
 	credentials []byte // decrypted; nil if none
 	cursor      string // sync_cursor; Sync writes it back itself, in its own transaction
+	sealed      []byte // credentials_enc as read: a reconnect meanwhile changes it
 }
 
 const (
@@ -70,8 +72,9 @@ func (a *App) syncDue(ctx context.Context, now time.Time) error {
 // error is only one recording that failed.
 func (a *App) syncIntegration(ctx context.Context, id int64) error {
 	// One sync of an integration at a time: each writes back the cursor it read.
-	a.syncMu.Lock()
-	defer a.syncMu.Unlock()
+	mu, _ := a.syncLocks.LoadOrStore(id, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
 	var typ, cursor string
 	var enc []byte
 	var interval, failures int64
@@ -80,7 +83,7 @@ func (a *App) syncIntegration(ctx context.Context, id int64) error {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, syncTimeout)
-	err := a.runSync(ctx, typ, enc, integrationRow{id: id, cursor: cursor})
+	err := a.runSync(ctx, typ, enc, integrationRow{id: id, cursor: cursor, sealed: enc})
 	cancel()
 	now := a.Now()
 	if err == nil {
@@ -97,6 +100,7 @@ func (a *App) syncIntegration(ctx context.Context, id int64) error {
 	msg := []rune(err.Error())
 	_, err = a.DB.ExecContext(context.WithoutCancel(ctx), `UPDATE integrations SET last_sync_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ?, next_sync_at = ? WHERE id = ?`,
 		now.Unix(), string(msg[:min(len(msg), 500)]), now.Add(delay).Unix(), id)
+	a.publish("updated", "integration", id) // an open calendar page may now show a stale-sync notice
 	return err
 }
 
@@ -163,7 +167,11 @@ func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
+	back := r.PostFormValue("back")
+	if !strings.HasPrefix(back, "/calendar?") { // only back to a calendar view, never off-site
+		back = "/calendar"
+	}
+	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
 // feeds is the iCal feeds as Settings shows them.

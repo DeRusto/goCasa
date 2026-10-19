@@ -29,8 +29,9 @@ const (
 )
 
 var (
-	errReconnect  = errors.New("Google withdrew GoCasa's access: reconnect the account in Settings")
-	errGoogleGone = errors.New("Google expired the sync token")
+	errReconnect    = errors.New("Google withdrew GoCasa's access: reconnect the account in Settings")
+	errGoogleGone   = errors.New("Google expired the sync token")
+	errCalendarGone = errors.New("Google has no such calendar for this account")
 )
 
 // transientError is a failure that retries on the normal schedule, without
@@ -87,7 +88,8 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 	json.Unmarshal(in.credentials, &tok)
 	access, err := a.googleAccess(ctx, tok.RefreshToken)
 	if errors.Is(err, errReconnect) {
-		if _, uerr := a.DB.ExecContext(ctx, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ?", in.id); uerr != nil {
+		// Unless reconnected meanwhile: then this refusal was of the old token.
+		if _, uerr := a.DB.ExecContext(ctx, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc = ?", in.id, in.sealed); uerr != nil {
 			return uerr
 		}
 	}
@@ -131,6 +133,15 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 		if errors.Is(err, errGoogleGone) {
 			token = ""
 			items, zone, next, err = a.googleEvents(ctx, access, c.external, "", now)
+		}
+		if errors.Is(err, errCalendarGone) {
+			// Removed or unshared in Google: hide it, keeping its events and Members, and sync the rest.
+			a.Log.Warn("hiding a google calendar google no longer has", "calendar", c.id)
+			if _, err := a.DB.ExecContext(ctx, "UPDATE source_calendars SET enabled = 0 WHERE id = ?", c.id); err != nil {
+				return err
+			}
+			a.publish("updated", "calendar", c.id)
+			continue
 		}
 		if err != nil {
 			return err
@@ -208,6 +219,8 @@ func (a *App) googleEvents(ctx context.Context, access, cal, token string, now t
 		switch {
 		case res.StatusCode == http.StatusGone:
 			return nil, "", "", errGoogleGone
+		case res.StatusCode == http.StatusNotFound:
+			return nil, "", "", errCalendarGone
 		case res.StatusCode != http.StatusOK:
 			return nil, "", "", googleFailed(res.StatusCode, fmt.Errorf("Google wouldn't list a calendar's events (%s)", res.Status))
 		case err != nil:
@@ -407,7 +420,10 @@ func (a *App) getSynced(w http.ResponseWriter, r *http.Request) {
 // which later syncs keep and which is never written back.
 func (a *App) saveSynced(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil { // a cut-off form mustn't clear the Members
+		http.Error(w, "That form didn't arrive whole. Try again.", http.StatusBadRequest)
+		return
+	}
 	found := true
 	err := a.inTx(r.Context(), func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(r.Context(), "UPDATE events AS e SET local_override = 1 WHERE e.id = ? AND "+googleEventRows, id)

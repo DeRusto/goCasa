@@ -21,6 +21,13 @@ func gAllDay(id, summary, first, end string) map[string]any {
 
 func gCancelled(id string) map[string]any { return map[string]any{"id": id, "status": "cancelled"} }
 
+// gOccurrence is an occurrence of Google series series.
+func gOccurrence(series, id, summary, start, end string) map[string]any {
+	e := gTimed(id, summary, start, end)
+	e["recurringEventId"] = series
+	return e
+}
+
 // syncedGoogle connects Alice's Google account with her calendar shown and
 // Bob (Member 2) as its default Member. It returns the calendar's id.
 func syncedGoogle(t *testing.T, g *fakeGoogle) (*apptest.Harness, int64) {
@@ -71,17 +78,21 @@ func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
 		gTimed("lastin", "Ends just inside", "2025-12-15T08:00:00Z", "2025-12-15T09:01:00Z"),
 		gTimed("ahead", "Starts just inside", "2027-03-15T08:59:00Z", "2027-03-15T10:00:00Z"),
 		gTimed("toofar", "Starts as the window ends", "2027-03-15T09:00:00Z", "2027-03-15T10:00:00Z"),
+		gOccurrence("swim", "swim_1", "Swim", "2026-03-21T10:00:00Z", "2026-03-21T11:00:00Z"),
+		gOccurrence("swim", "swim_2", "Swim", "2026-03-28T10:00:00Z", "2026-03-28T11:00:00Z"),
+		gOccurrence("yoga", "yoga_1", "Yoga", "2026-03-22T10:00:00Z", "2026-03-22T11:00:00Z"),
+		gOccurrence("yoga", "yoga_2", "Yoga", "2026-03-29T10:00:00Z", "2026-03-29T11:00:00Z"),
 	}
 	h, alice := syncedGoogle(t, g)
 	h.RunDue()
 
 	// First import: every page, windowed by Google and again by GoCasa.
-	if got := stored(t, h, alice); got != "ahead,camp,dentist,lastin" {
+	if got := stored(t, h, alice); got != "ahead,camp,dentist,lastin,swim_1,swim_2,yoga_1,yoga_2" {
 		t.Fatalf("first import stored %q", got)
 	}
 	reqs := g.requests()
-	if len(reqs) != 3 {
-		t.Fatalf("%d list requests for 3 pages", len(reqs))
+	if len(reqs) != 5 {
+		t.Fatalf("%d list requests for 5 pages", len(reqs))
 	}
 	if q := reqs[0]; q.Get("singleEvents") != "true" || q.Get("timeMin") != "2025-12-15T09:00:00Z" || q.Get("timeMax") != "2027-03-15T09:00:00Z" || q.Has("syncToken") {
 		t.Fatalf("full import asked %v", q)
@@ -108,11 +119,14 @@ func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
 		t.Fatalf("changing its Members = %d", code)
 	}
 
-	// Incremental: an edit, a cancelled instance, one moved out of the window; and the window slides past lastin.
+	// Incremental: an edit, a cancelled occurrence, a whole series deleted by its
+	// own id, one moved out of the window; and the window slides past lastin.
 	g.set(func(g *fakeGoogle) {
 		g.changes["alice@example.com"] = []map[string]any{
 			gTimed("dentist", "Dentist (moved)", "2026-03-16T14:00:00Z", "2026-03-16T15:00:00Z"),
 			gCancelled("camp"),
+			gCancelled("swim_1"),
+			gCancelled("yoga"),
 			gTimed("ahead", "Moved past the window", "2028-01-01T10:00:00Z", "2028-01-01T11:00:00Z"),
 			gTimed("new", "New", "2026-03-20T10:00:00Z", "2026-03-20T11:00:00Z"),
 		}
@@ -120,10 +134,10 @@ func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
 	h.Clock.Advance(2 * time.Minute)
 	h.RunDue()
 	reqs = g.requests()
-	if q := reqs[len(reqs)-1]; q.Get("syncToken") != "token-3" || q.Get("singleEvents") != "true" || q.Has("timeMin") {
+	if q := reqs[len(reqs)-1]; q.Get("syncToken") != "token-5" || q.Get("singleEvents") != "true" || q.Has("timeMin") {
 		t.Fatalf("incremental sync asked %v", q)
 	}
-	if got := stored(t, h, alice); got != "dentist,new" {
+	if got := stored(t, h, alice); got != "dentist,new,swim_2" {
 		t.Fatalf("after the incremental sync %q", got)
 	}
 	page = agendaPage(t, h)
@@ -181,6 +195,9 @@ func TestGoogleFullReimports(t *testing.T) {
 	if got := stored(t, h, alice); got != "dentist,swim" {
 		t.Fatalf("after the re-import %q", got)
 	}
+	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(d, "10:00–11:00 Dentist") {
+		t.Fatalf("the unreadable copy replaced the dentist: %q", d)
+	}
 
 	// Once a day, a full re-import moves the window.
 	g.set(func(g *fakeGoogle) { g.gone = false })
@@ -234,8 +251,8 @@ func TestGoogleReconnectNeededAndStaleNotice(t *testing.T) {
 	if !strings.Contains(page, "Reconnect needed") || !strings.Contains(page, "Alice: last updated 15 Mar 2026 09:10") || !strings.Contains(page, "Dentist") {
 		t.Fatalf("after invalid_grant:\n%s", page)
 	}
-	if !strings.Contains(settings(t, h), "Reconnect needed") {
-		t.Fatal("Settings doesn't say it needs reconnecting")
+	if page := settings(t, h); !strings.Contains(page, "Reconnect needed") || strings.Contains(page, "Sync failing") {
+		t.Fatalf("Settings for an account needing a reconnect:\n%s", page)
 	}
 	tokens := g.tokens()
 	h.Clock.Advance(time.Hour)
@@ -263,8 +280,18 @@ func TestGoogleReconnectNeededAndStaleNotice(t *testing.T) {
 func TestSyncNowAndTheTwelveMonthNotice(t *testing.T) {
 	g := newGoogle(t)
 	h, _ := syncedGoogle(t, g)
-	if code, _ := h.Post(t, "/calendar/sync", nil); code != http.StatusOK || len(g.requests()) != 1 {
-		t.Fatalf("Sync now = %d, %d requests", code, len(g.requests()))
+	res, err := h.Client.Do(func() *http.Request {
+		req, _ := http.NewRequest(http.MethodPost, h.Server.URL+"/calendar/sync", strings.NewReader(url.Values{"back": {"/calendar?view=week&date=2026-03-20"}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		return req
+	}())
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.Request.URL.RequestURI() != "/calendar?view=week&date=2026-03-20" || len(g.requests()) != 1 {
+		t.Fatalf("Sync now landed on %s after %d requests", res.Request.URL, len(g.requests()))
 	}
 	h.Post(t, "/calendar/sync", nil)
 	if len(g.requests()) != 2 {
@@ -276,5 +303,32 @@ func TestSyncNowAndTheTwelveMonthNotice(t *testing.T) {
 	}
 	if _, page := h.Get(t, "/calendar?view=month&date=2027-02-01"); strings.Contains(page, notice) {
 		t.Fatal("the notice shows within 12 months")
+	}
+}
+
+// A calendar Google no longer has is hidden, and the account's others still sync.
+func TestGoogleCalendarGoneIsHidden(t *testing.T) {
+	g := newGoogle(t)
+	g.list(cal("alice@example.com", "Alice", "#9fc6e7", "owner"), cal("club", "Club", "#f59e0b", "reader"))
+	h := googleHousehold(t, g)
+	h.Post(t, "/integrations/google/connect", nil)
+	var alice, club int64
+	h.App.DB.QueryRow("SELECT id FROM source_calendars WHERE external_id = 'alice@example.com'").Scan(&alice)
+	h.App.DB.QueryRow("SELECT id FROM source_calendars WHERE external_id = 'club'").Scan(&club)
+	for _, id := range []int64{club, alice} {
+		h.Post(t, fmt.Sprintf("/settings/google-calendars/%d", id), url.Values{"enabled": {"on"}})
+	}
+	g.events["alice@example.com"] = []map[string]any{gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z")}
+	g.missing = "club"
+	h.RunDue()
+	if got := stored(t, h, alice); got != "dentist" {
+		t.Fatalf("the other calendar stored %q", got)
+	}
+	var enabled bool
+	var failures int
+	h.App.DB.QueryRow("SELECT enabled FROM source_calendars WHERE id = ?", club).Scan(&enabled)
+	h.App.DB.QueryRow("SELECT consecutive_failures FROM integrations WHERE type = 'google_calendar'").Scan(&failures)
+	if enabled || failures != 0 {
+		t.Fatalf("the gone calendar: enabled %v, account failures %d", enabled, failures)
 	}
 }
