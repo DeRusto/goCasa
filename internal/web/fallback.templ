@@ -1,0 +1,22 @@
+package web
+
+import "strconv"
+
+// Fallback is the Fallback folder section of Settings.
+type Fallback struct {
+	Enabled bool
+	Images  int // JPEG, PNG and WebP images found by the last scan
+}
+
+templ fallbackSection(f Fallback) {
+	<h2>Fallback folder</h2>
+	<p>When Immich has no photos to show, the screensaver shows the images in the photos folder of the data volume (subfolders included; JPEG, PNG and WebP).</p>
+	<p role="status">{ strconv.Itoa(f.Images) } images in the Fallback folder.</p>
+	<form method="post" action="/settings/fallback-folder">
+		<label><input type="checkbox" name="enabled" checked?={ f.Enabled }/> Use the Fallback folder</label>
+		<button>Save Fallback folder</button>
+	</form>
+	<form method="post" action="/settings/fallback-folder/refresh">
+		<button>Refresh now</button>
+	</form>
+}
