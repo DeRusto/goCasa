@@ -62,14 +62,17 @@ type googleCursor struct {
 }
 
 type googleEvent struct {
-	ID               string     `json:"id"`
-	Status           string     `json:"status"`
-	Summary          string     `json:"summary"`
-	Description      string     `json:"description"`
-	Location         string     `json:"location"`
-	RecurringEventID string     `json:"recurringEventId"`
-	Start            googleTime `json:"start"`
-	End              googleTime `json:"end"`
+	ID                string     `json:"id"`
+	Etag              string     `json:"etag"`
+	Status            string     `json:"status"`
+	Summary           string     `json:"summary"`
+	Description       string     `json:"description"`
+	Location          string     `json:"location"`
+	RecurringEventID  string     `json:"recurringEventId"`
+	Start             googleTime `json:"start"`
+	End               googleTime `json:"end"`
+	OriginalStartTime googleTime `json:"originalStartTime"` // an occurrence's
+	Recurrence        []string   `json:"recurrence"`        // a series' RRULE, EXDATE and RDATE lines
 }
 
 type googleTime struct {
@@ -258,14 +261,14 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 			}
 			var row int64
 			err := tx.QueryRowContext(ctx, `INSERT INTO events (calendar_id, external_id, external_series_id, title, location, description, all_day,
-					start_utc, end_utc, start_tzid, all_day_date, all_day_end_date, updated_at)
-				VALUES (?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					start_utc, end_utc, start_tzid, all_day_date, all_day_end_date, etag, updated_at)
+				VALUES (?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, nullif(?, ''), ?)
 				ON CONFLICT (calendar_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET external_series_id = excluded.external_series_id,
 					title = excluded.title, location = excluded.location, description = excluded.description, all_day = excluded.all_day,
 					start_utc = excluded.start_utc, end_utc = excluded.end_utc, start_tzid = excluded.start_tzid,
-					all_day_date = excluded.all_day_date, all_day_end_date = excluded.all_day_end_date, status = 'confirmed', updated_at = excluded.updated_at
+					all_day_date = excluded.all_day_date, all_day_end_date = excluded.all_day_end_date, etag = excluded.etag, status = 'confirmed', updated_at = excluded.updated_at
 				RETURNING id`,
-				cal, e.ID, e.RecurringEventID, c.title, c.location, c.description, c.allDay, c.start, c.end, c.tzid, c.date, c.endDate, now.Unix()).Scan(&row)
+				cal, e.ID, e.RecurringEventID, c.title, c.location, c.description, c.allDay, c.start, c.end, c.tzid, c.date, c.endDate, e.Etag, now.Unix()).Scan(&row)
 			if err != nil {
 				return err
 			}
@@ -380,10 +383,14 @@ func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.Stale
 // googleEventRows limits a query on events e to Google calendars' events.
 const googleEventRows = "e.calendar_id IN (SELECT c.id FROM source_calendars c JOIN integrations i ON i.id = c.integration_id WHERE i.type = '" + googleType + "')"
 
-// getSynced shows a Google event with its Members, the one thing GoCasa
-// changes on it until write-back.
+// getSynced shows a Google event: in the event dialog, or on a read-only
+// calendar with only its Members to change.
 func (a *App) getSynced(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if row, err := a.loadGoogleRow(r.Context(), id); err == nil && !row.readOnly {
+		a.googlePage(w, r, http.StatusOK, id, "")
+		return
+	}
 	s := web.SyncedEvent{ID: id, Members: map[int64]bool{}}
 	var allDay bool
 	var start, end sql.NullInt64
@@ -440,16 +447,7 @@ func (a *App) saveSynced(w http.ResponseWriter, r *http.Request) {
 			found = false
 			return nil
 		}
-		// The form lists only active Members: an archived one stays on the event.
-		if _, err := tx.ExecContext(r.Context(), "DELETE FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", id); err != nil {
-			return err
-		}
-		for _, m := range parseIDs(r.PostForm["members"]) {
-			if _, err := tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO event_members (event_id, member_id) SELECT ?, id FROM members WHERE id = ? AND NOT archived", id, m); err != nil {
-				return err
-			}
-		}
-		return nil
+		return setMembers(r.Context(), tx, id, parseIDs(r.PostForm["members"]))
 	})
 	switch {
 	case err != nil:

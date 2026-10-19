@@ -139,6 +139,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /calendar/event/{id}/delete", a.deleteEvent)
 	mux.HandleFunc("GET /calendar/synced/{id}", a.getSynced)
 	mux.HandleFunc("POST /calendar/synced/{id}", a.saveSynced)
+	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.saveGoogle)
+	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.deleteGoogle)
 	mux.HandleFunc("POST /calendar/sync", a.syncNow)
 
 	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
