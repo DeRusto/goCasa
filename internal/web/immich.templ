@@ -1,0 +1,65 @@
+package web
+
+import "strconv"
+
+// Immich is the Immich section of Settings.
+type Immich struct {
+	URL           string
+	LastSuccess   string
+	Failures      int
+	LastError     string
+	Albums        []ImmichPick
+	People        []ImmichPick
+	NothingPicked bool
+	Photos        int // in the rotation list
+}
+
+// ImmichPick is an album or person that can be picked for the screensaver.
+type ImmichPick struct {
+	ID, Name string
+	Picked   bool
+}
+
+templ immichSection(m *Immich) {
+	<h2>Immich photos</h2>
+	if m == nil {
+		<p>The screensaver shows no photos: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p>
+		<form method="post" action="/settings/immich">
+			<label>Address <input name="url" type="text" inputmode="url" required placeholder="https://photos.example.com"/></label>
+			<label>API key <input name="key" type="password" required autocomplete="off"/></label>
+			<button>Connect Immich</button>
+		</form>
+	} else {
+		<p>Connected to { m.URL }. The screensaver shows photos from any album or person picked here.</p>
+		@syncStatus(m.LastSuccess, m.Failures, m.LastError)
+		switch  {
+			case m.NothingPicked:
+				<p role="status">No photos show: pick at least one album or person.</p>
+			case m.Photos == 0:
+				<p role="status">No photos show: the picked albums and people have no photos.</p>
+			default:
+				<p role="status">{ strconv.Itoa(m.Photos) } photos in the rotation.</p>
+		}
+		<form method="post" action="/settings/immich/picks">
+			<fieldset>
+				<legend>Albums</legend>
+				for _, p := range m.Albums {
+					<label><input type="checkbox" name="album" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+				}
+			</fieldset>
+			<fieldset>
+				<legend>People</legend>
+				for _, p := range m.People {
+					<label><input type="checkbox" name="person" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+				}
+			</fieldset>
+			<button>Save photos</button>
+		</form>
+		<form method="post" action="/settings/immich/refresh">
+			<button>Refresh now</button>
+		</form>
+		<form method="post" action="/settings/immich/delete">
+			<button>Disconnect Immich</button>
+		</form>
+	}
+}

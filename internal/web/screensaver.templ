@@ -2,10 +2,11 @@ package web
 
 import "strconv"
 
-// Screensaver is what an idle Wall display shows: for now the clock and
-// today's agenda on dark. The whole screen is one link to "/", so the first
-// touch only wakes it, back to the Default view at today.
-templ Screensaver(p TodayPage) {
+// Screensaver is what an idle Wall display shows: the clock and today's
+// agenda over photo (a proxied address; "" for plain dark), which changes
+// after photoSeconds. The whole screen is one link to "/", so the first touch
+// only wakes it, back to the Default view at today.
+templ Screensaver(p TodayPage, photo string, photoSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -15,7 +16,10 @@ templ Screensaver(p TodayPage) {
 			<title>Screensaver</title>
 		</head>
 		<body style="margin:0;background:#000;color:#ddd">
-			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none">
+			if photo != "" {
+				<img id="photo" src={ photo } alt="" onerror="this.remove()" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
+			}
+			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
 				<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
 				<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 				<ul style="font-size:1.5rem;list-style:none;padding:0">
@@ -30,9 +34,12 @@ templ Screensaver(p TodayPage) {
 			if device(ctx).MotionWake {
 				@motionWake()
 			}
-			<script>
-			// Reload on the next minute so the clock and agenda stay current.
-			setTimeout(() => location.reload(), 60000 - Date.now() % 60000);
+			<script data-photo-seconds={ strconv.Itoa(photoSeconds) }>
+			// Reload on the next minute so the clock and agenda stay current, or sooner for the next photo.
+			(() => {
+				const photo = Number(document.currentScript.dataset.photoSeconds) * 1000;
+				setTimeout(() => location.reload(), Math.min(60000 - Date.now() % 60000, photo || Infinity));
+			})();
 			</script>
 		</body>
 	</html>
