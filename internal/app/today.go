@@ -7,7 +7,7 @@ import (
 )
 
 // getToday shows the Today page: the weather header, today's and tomorrow's
-// agenda for everyone, and open to-dos due today or overdue.
+// agenda for everyone, today's Chores, and open to-dos due today or overdue.
 func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
 	now := a.Now().In(a.Config.Location)
 	today := dayAt(now, 0)
@@ -22,6 +22,16 @@ func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Weather, err = a.weatherHeader(r.Context()); err != nil {
 		a.Log.Error("reading cached weather", "err", err) // the page still renders, without weather
+	}
+	cs, err := a.chores(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	for _, c := range cs {
+		if len(c.Rounds) > 0 {
+			p.Chores = append(p.Chores, c)
+		}
 	}
 	ds := today.Format(dateLayout)
 	rows, err := a.DB.QueryContext(r.Context(), "SELECT id, title, due_date FROM todos WHERE completed_at IS NULL AND due_date <= ? ORDER BY due_date, position, id", ds)
