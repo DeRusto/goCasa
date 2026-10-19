@@ -1,0 +1,64 @@
+package web
+
+type ShoppingItem struct {
+	ID      int64
+	Note    string
+	Checked bool
+}
+
+type ShoppingList struct {
+	ID    int64
+	Name  string
+	Items []ShoppingItem
+}
+
+// shortcut: reorder is up/down buttons; drag (SortableJS, spec §14) once it is vendored.
+templ Lists(lists []ShoppingList) {
+	@layout("Lists") {
+		<main>
+			<h1>Lists</h1>
+			for _, l := range lists {
+				<section data-list={ id(l.ID) }>
+					<h2>{ l.Name }</h2>
+					<ul>
+						for i, it := range l.Items {
+							<li>
+								<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } style="display:inline">
+									if it.Checked {
+										<input type="hidden" name="checked" value="false"/>
+										<button aria-label={ "Uncheck " + it.Note }>☑</button>
+									} else {
+										<input type="hidden" name="checked" value="true"/>
+										<button aria-label={ "Check " + it.Note }>☐</button>
+									}
+								</form>
+								<span data-item={ id(it.ID) } data-checked?={ it.Checked } style={ templ.KV("text-decoration:line-through", it.Checked) }>{ it.Note }</span>
+								if i > 0 {
+									@moveButton(l.ID, it, i-1, "↑", "Move up ")
+								}
+								if i < len(l.Items)-1 {
+									@moveButton(l.ID, it, i+1, "↓", "Move down ")
+								}
+							</li>
+						}
+					</ul>
+					<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items") }>
+						<input name="note" required maxlength="200" aria-label={ "Add to " + l.Name }/>
+						<button>Add</button>
+					</form>
+				</section>
+			}
+			<form method="post" action="/lists">
+				<input name="name" required maxlength="50" aria-label="New list name"/>
+				<button>New list</button>
+			</form>
+		</main>
+	}
+}
+
+templ moveButton(list int64, it ShoppingItem, to int, arrow, label string) {
+	<form method="post" action={ templ.SafeURL("/lists/" + id(list) + "/items/" + id(it.ID) + "/move") } style="display:inline">
+		<input type="hidden" name="position" value={ id(int64(to)) }/>
+		<button aria-label={ label + it.Note }>{ arrow }</button>
+	</form>
+}

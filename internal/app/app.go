@@ -142,6 +142,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.saveGoogle)
 	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.deleteGoogle)
 	mux.HandleFunc("POST /calendar/sync", a.syncNow)
+	mux.HandleFunc("GET /lists", a.getLists)
+	mux.HandleFunc("POST /lists", a.createList)
+	mux.HandleFunc("POST /lists/{id}/items", a.addItem)
+	mux.HandleFunc("POST /lists/{list}/items/{id}", a.checkItem)
+	mux.HandleFunc("POST /lists/{list}/items/{id}/move", a.moveItem)
 
 	// CSRF: refuse cross-site unsafe requests by Sec-Fetch-Site/Origin (no tokens to thread through forms or htmx).
 	csrf := http.NewCrossOriginProtection()
