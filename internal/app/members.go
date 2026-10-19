@@ -142,7 +142,42 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, wx, errMsg))
+	var l web.Locks
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT lock_calendar, lock_todos FROM household_settings").Scan(&l.Calendar, &l.Todos); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, errMsg))
+}
+
+// saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
+func (a *App) saveLocks(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET lock_calendar = ?, lock_todos = ?",
+		r.PostForm.Has("lock_calendar"), r.PostForm.Has("lock_todos")); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// requireLock wraps an action behind the Lock in column: while that Lock is on,
+// a locked device goes to the PIN pad. One unlock covers every Lock (spec §9).
+func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if unlockedAdmin(r.Context()) == 0 {
+			var on bool
+			if err := a.DB.QueryRowContext(r.Context(), "SELECT "+column+" FROM household_settings").Scan(&on); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+			if on {
+				http.Redirect(w, r, "/lock", http.StatusSeeOther)
+				return
+			}
+		}
+		h(w, r)
+	}
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
