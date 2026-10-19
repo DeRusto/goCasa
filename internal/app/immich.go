@@ -27,9 +27,11 @@ import (
 type immich struct{}
 
 const (
-	immichType     = "immich"
-	immichRelist   = 3600 // seconds between re-lists
-	immichPrefetch = 3    // photos fetched ahead of the screensaver
+	immichType        = "immich"
+	photoSourceImmich = "immich" // photos_cache.source
+	photoSourceFolder = "folder"
+	immichRelist      = 3600 // seconds between re-lists
+	immichPrefetch    = 3    // photos fetched ahead of the screensaver
 )
 
 var (
@@ -120,7 +122,7 @@ func (immich) Sync(ctx context.Context, a *App, in integrationRow) error {
 			return err
 		}
 	}
-	return a.replacePhotos(ctx, "immich", assets)
+	return a.replacePhotos(ctx, photoSourceImmich, assets)
 }
 
 // pickable is the albums and named people the key's user can see.
@@ -294,22 +296,15 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	key := strings.TrimSpace(r.PostFormValue("key"))
-	u, err := url.Parse(raw)
 	switch {
-	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
+	case parseUpstreamURL(raw) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "Immich's address starts with https:// or http://.")
 		return
 	case key == "":
 		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API key from Immich (Account Settings > API Keys).")
 		return
 	}
-	var exists bool
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM integrations WHERE type = ?)", immichType).Scan(&exists); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	if exists {
-		a.settingsPage(w, r, http.StatusBadRequest, "Immich is already connected. Disconnect it first.")
+	if a.alreadyConnected(w, r, immichType, "Immich") {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -328,23 +323,7 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, "Immich didn't take that API key: "+err.Error())
 		return
 	}
-	enc, err := a.seal([]byte(key))
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	cfg, _ := json.Marshal(immichConfig{URL: raw})
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO integrations (type, name, config_json, credentials_enc, sync_interval_seconds, next_sync_at)
-		VALUES (?, 'Immich', ?, ?, ?, ?) RETURNING id`, immichType, string(cfg), enc, immichRelist, a.Now().Add(syncTimeout).Unix()).Scan(&id); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	if err := a.syncIntegration(r.Context(), id); err != nil { // its outcome shows in Settings
-		a.serverError(w, r, err)
-		return
-	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	a.addIntegration(w, r, immichType, "Immich", immichConfig{URL: raw}, key, immichRelist)
 }
 
 // disconnectImmich removes Immich, its photo list and their cached bytes.
@@ -353,7 +332,7 @@ func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	if err := a.replacePhotos(r.Context(), "immich", nil); err != nil {
+	if err := a.replacePhotos(r.Context(), photoSourceImmich, nil); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

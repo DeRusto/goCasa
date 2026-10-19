@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -204,7 +206,7 @@ func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			if on {
-				http.Redirect(w, r, "/lock", http.StatusSeeOther)
+				toLock(w, r)
 				return
 			}
 		}
@@ -220,11 +222,36 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *App) requireUnlock(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if unlockedAdmin(r.Context()) == 0 {
-			http.Redirect(w, r, "/lock", http.StatusSeeOther)
+			toLock(w, r)
 			return
 		}
 		h(w, r)
 	}
+}
+
+// toLock sends a locked device to the PIN pad, remembering the page it was on
+// (a GET's own URL, or a POST's Referer) so unlocking returns there.
+func toLock(w http.ResponseWriter, r *http.Request) {
+	next := r.URL.RequestURI()
+	if r.Method != http.MethodGet {
+		next = ""
+		if u, err := url.Parse(r.Referer()); err == nil && r.Referer() != "" {
+			next = u.RequestURI()
+		}
+	}
+	to := "/lock"
+	if next = safeNext(next); next != "" {
+		to += "?next=" + url.QueryEscape(next)
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// safeNext is next if it is a path on this site, else "": no open redirect.
+func safeNext(next string) string {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, `/\`) {
+		return ""
+	}
+	return next
 }
 
 // postSetup creates the first Admin, only while there are no Members, and
@@ -269,7 +296,7 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 		http.Redirect(w, r, "/settings", http.StatusSeeOther) // first run
 		return
 	}
-	a.render(w, r, status, web.Lock(admins, errMsg))
+	a.render(w, r, status, web.Lock(admins, errMsg, safeNext(r.FormValue("next"))))
 }
 
 // Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
@@ -322,7 +349,7 @@ func (a *App) postLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setUnlock(w, id)
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, cmp.Or(safeNext(r.PostFormValue("next")), "/settings"), http.StatusSeeOther)
 }
 
 func (a *App) postLockNow(w http.ResponseWriter, r *http.Request) {

@@ -95,7 +95,7 @@ type calendarEvent struct {
 }
 
 func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
-	loc := a.Config.Location
+	loc := a.location(r.Context())
 	q := r.URL.Query()
 	view := q.Get("view")
 	if view != "week" && view != "day" && view != "agenda" {
@@ -413,7 +413,7 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 		return f, e, "That time doesn't exist in " + f.TZ + ": the clocks change then."
 	}
 	e.start, e.end, e.tzid = t0.Unix(), t1.Unix(), f.TZ
-	e.firstDay = t0.In(a.Config.Location).Format(dateLayout)
+	e.firstDay = t0.In(a.location(r.Context())).Format(dateLayout)
 	return f, e, ""
 }
 
@@ -436,7 +436,7 @@ func (a *App) eventPage(w http.ResponseWriter, r *http.Request, status int, f we
 }
 
 func (a *App) newEvent(w http.ResponseWriter, r *http.Request) {
-	loc := a.Config.Location
+	loc := a.location(r.Context())
 	date, err := time.ParseInLocation(dateLayout, r.URL.Query().Get("date"), loc)
 	if err != nil {
 		date = dayAt(a.Now().In(loc), 0)

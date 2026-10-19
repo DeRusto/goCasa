@@ -17,7 +17,7 @@ import (
 // range (a preset, or from/to dates that override it), in manual or due order.
 func (a *App) getTodos(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	today := dayAt(a.Now().In(a.Config.Location), 0)
+	today := dayAt(a.Now().In(a.location(r.Context())), 0)
 	p := web.TodosPage{Status: q.Get("status"), Due: q.Get("due"), Sort: q.Get("sort")}
 	where, args := []string{"1"}, []any{}
 	switch p.Status {
@@ -176,7 +176,7 @@ func (a *App) completeTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	var next int64
 	if rule.Valid {
-		nextDue, err := nextTodoDue(rule.String, fromCompletion, due, dayAt(now.In(a.Config.Location), 0))
+		nextDue, err := nextTodoDue(rule.String, fromCompletion, due, dayAt(now.In(a.location(r.Context())), 0))
 		if err != nil {
 			a.serverError(w, r, err)
 			return
@@ -378,7 +378,7 @@ func nullable(s string) any {
 const appendPosition = "(SELECT coalesce(max(position) + 1, 0) FROM todos WHERE column_id = ?)"
 
 func (a *App) createTodo(w http.ResponseWriter, r *http.Request) {
-	t, rule, msg := todoFields(r, a.Now().In(a.Config.Location))
+	t, rule, msg := todoFields(r, a.Now().In(a.location(r.Context())))
 	if msg != "" {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
@@ -433,7 +433,7 @@ func (a *App) getTodo(w http.ResponseWriter, r *http.Request) {
 
 // updateTodo saves the form; a to-do moved to another column goes last there.
 func (a *App) updateTodo(w http.ResponseWriter, r *http.Request) {
-	t, rule, msg := todoFields(r, a.Now().In(a.Config.Location))
+	t, rule, msg := todoFields(r, a.Now().In(a.location(r.Context())))
 	if msg != "" {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
@@ -444,6 +444,15 @@ func (a *App) updateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if !exists {
 		http.Error(w, "Pick a column.", http.StatusBadRequest)
+		return
+	}
+	// Completed copies are never touched (spec §8).
+	var done bool
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT completed_at IS NOT NULL FROM todos WHERE id = ?", r.PathValue("id")).Scan(&done); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		a.serverError(w, r, err)
+		return
+	} else if done {
+		http.Error(w, "A completed to-do can't be edited; reopen it first.", http.StatusConflict)
 		return
 	}
 	a.todoExec(w, r, "updated", "todo", `UPDATE todos SET title = ?1, notes = ?2, due_date = ?3,

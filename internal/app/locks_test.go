@@ -1,6 +1,8 @@
 package app_test
 
 import (
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -134,5 +136,58 @@ func TestOneUnlockCoversEveryLockUntilFiveIdleMinutes(t *testing.T) {
 	}
 	if !asksForPIN(t, other, "/calendar/event/1/delete", nil) {
 		t.Fatal("calendar Lock did not relock after 5 idle minutes")
+	}
+}
+
+// postFrom submits form to path as a same-origin browser would from the page at referer.
+func postFrom(t *testing.T, h *apptest.Harness, referer, path string, f url.Values) string {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, h.Server.URL+path, strings.NewReader(f.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", h.Server.URL+referer)
+	res, err := h.Client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return string(b)
+}
+
+func TestUnlockingReturnsToThePageYouWereOn(t *testing.T) {
+	h := household(t)
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", todo("1", "Fix tap", ""))
+	post(t, h, "/settings/locks", url.Values{"lock_todos": {"on"}})
+
+	other := h.Device()
+	body := postFrom(t, other, "/todos", "/todos/1/complete", nil)
+	if !strings.Contains(body, lockPage) || !strings.Contains(body, `name="next" value="/todos"`) {
+		t.Fatalf("PIN pad did not carry the page: %q", body)
+	}
+	_, body = other.Post(t, "/lock", url.Values{"member_id": {"1"}, "pin": {"1234"}, "next": {"/todos"}})
+	if !strings.Contains(body, "Fix tap") || strings.Contains(body, "<h1>Settings</h1>") {
+		t.Fatalf("unlock did not return to To-dos: %q", body)
+	}
+}
+
+func TestUnlockNeverRedirectsOffSite(t *testing.T) {
+	h := household(t)
+	other := h.Device()
+	other.Client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	for _, next := range []string{"//evil.example", "https://evil.example/", "/\\evil.example", "todos"} {
+		h.App.DB.Exec("UPDATE members SET pin_failures = 0")
+		req, _ := http.NewRequest(http.MethodPost, other.Server.URL+"/lock", strings.NewReader(url.Values{"member_id": {"1"}, "pin": {"1234"}, "next": {next}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		res, err := other.Client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if loc := res.Header.Get("Location"); loc != "/settings" {
+			t.Errorf("next=%q redirected to %q, want /settings", next, loc)
+		}
 	}
 }

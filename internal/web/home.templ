@@ -26,6 +26,7 @@ type Household struct {
 	NightMode       string // "off", "black" or "dim_clock"
 	NightStart      int    // hour 0-23
 	NightEnd        int    // hour 0-23
+	Timezone        string // IANA name; "" is the server's
 }
 
 type deviceKey struct{}
@@ -65,6 +66,14 @@ templ page(title string, pill bool) {
 			<title>{ title }</title>
 		</head>
 		<body>
+			<nav>
+				<a href="/today">Today</a>
+				<a href="/calendar">Calendar</a>
+				<a href="/todos">To-dos</a>
+				<a href="/lists">Lists</a>
+				<a href="/chores">Chores</a>
+				<a href="/settings">Settings</a>
+			</nav>
 			if pill {
 				@weatherPill()
 			}
@@ -130,6 +139,10 @@ templ householdSection(h Household) {
 		<label>
 			to hour
 			<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
+		</label>
+		<label>
+			Timezone (IANA name, e.g. Europe/London; blank uses the server's)
+			<input name="timezone" value={ h.Timezone } maxlength="64"/>
 		</label>
 		<button>Save household</button>
 	</form>

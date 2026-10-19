@@ -159,3 +159,18 @@ func TestToDosSortAndFilterByDueRangeAndStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletedToDosCannotBeEdited(t *testing.T) {
+	h := household(t)
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", todo("1", "Fix tap", ""))
+	post(t, h, "/todos/1/complete", nil)
+	if code, _ := h.Post(t, "/todos/1", todo("1", "Changed", "")); code != http.StatusConflict {
+		t.Fatalf("editing a completed to-do = %d, want 409", code)
+	}
+	var title string
+	h.App.DB.QueryRow("SELECT title FROM todos WHERE id = 1").Scan(&title)
+	if title != "Fix tap" {
+		t.Fatalf("completed to-do was edited to %q", title)
+	}
+}

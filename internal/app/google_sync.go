@@ -469,7 +469,7 @@ func (a *App) getSynced(w http.ResponseWriter, r *http.Request) {
 			s.When += " – " + last.Format("2 Jan 2006")
 		}
 	} else {
-		loc, layout := a.Config.Location, "2 Jan 2006 "+a.clock(r.Context())
+		loc, layout := a.location(r.Context()), "2 Jan 2006 "+a.clock(r.Context())
 		s.When = time.Unix(start.Int64, 0).In(loc).Format(layout) + " – " + time.Unix(end.Int64, 0).In(loc).Format(layout)
 	}
 	ms, err := a.activeMembers(r)

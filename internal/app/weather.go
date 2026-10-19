@@ -119,7 +119,7 @@ func (a *App) weatherHeader(ctx context.Context) (*web.WeatherHeader, error) {
 		unit = "F"
 	}
 	h := &web.WeatherHeader{WeatherPill: web.WeatherPill{Current: int(math.Round(f.Current.Temperature)), Unit: unit}, Conditions: conditions(f.Current.Code)}
-	today := a.Now().In(a.Config.Location).Format(dateLayout)
+	today := a.Now().In(a.location(ctx)).Format(dateLayout)
 	for i, d := range f.Daily.Time {
 		if d < today || i >= len(f.Daily.Max) || i >= len(f.Daily.Min) {
 			continue

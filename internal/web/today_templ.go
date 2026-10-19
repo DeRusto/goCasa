@@ -24,7 +24,7 @@ type TodayPage struct {
 	Todos   []Todo         // open, due today or overdue, oldest due first
 }
 
-// Today is the at-a-glance home page (spec §8).
+// Today is the at-a-glance page of the day (spec §8).
 func Today(p TodayPage) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context

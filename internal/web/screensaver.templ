@@ -3,9 +3,10 @@ package web
 import "strconv"
 
 // Screensaver is what an idle Wall display shows: the clock and today's
-// agenda over photo (a proxied address; "" for plain dark), which changes
-// after photoSeconds. The whole screen is one link to "/", so the first touch
-// only wakes it, back to the Default view at today.
+// agenda over photo (a proxied address; "" for plain dark), which changes in
+// place after photoSeconds, so the page and its camera stay up. The whole
+// screen is one link to "/", so the first touch only wakes it, back to the
+// Default view at today.
 templ Screensaver(p TodayPage, photo string, photoSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -16,18 +17,19 @@ templ Screensaver(p TodayPage, photo string, photoSeconds int) {
 			<title>Screensaver</title>
 		</head>
 		<body style="margin:0;background:#000;color:#ddd">
-			if photo != "" {
-				<img id="photo" src={ photo } alt="" onerror="this.remove()" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
-			}
+			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
-				<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
-				<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
-				<ul style="font-size:1.5rem;list-style:none;padding:0">
-					for _, e := range p.Days[0].Events {
-						<li style={ templ.KV("opacity:.5", e.Past) }>{ e.Time } { e.Title }</li>
-					}
-				</ul>
+				<div id="live">
+					<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
+					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
+					<ul style="font-size:1.5rem;list-style:none;padding:0">
+						for _, e := range p.Days[0].Events {
+							<li style={ templ.KV("opacity:.5", e.Past) }>{ e.Time } { e.Title }</li>
+						}
+					</ul>
+				</div>
 			</a>
+			@liveUpdates()
 			if device(ctx).WallDisplay {
 				@wallDisplay(0)
 			}
@@ -35,10 +37,27 @@ templ Screensaver(p TodayPage, photo string, photoSeconds int) {
 				@motionWake()
 			}
 			<script data-photo-seconds={ strconv.Itoa(photoSeconds) }>
-			// Reload on the next minute so the clock and agenda stay current, or sooner for the next photo.
 			(() => {
-				const photo = Number(document.currentScript.dataset.photoSeconds) * 1000;
-				setTimeout(() => location.reload(), Math.min(60000 - Date.now() % 60000, photo || Infinity));
+				// Each minute refetch the clock and agenda in place (changes arrive live too);
+				// reload on the hour so Night mode, which starts on an hour, takes over.
+				const tick = () => {
+					if (new Date().getMinutes() === 0) return location.reload();
+					document.dispatchEvent(new Event("refresh-live"));
+					setTimeout(tick, 60000 - Date.now() % 60000);
+				};
+				setTimeout(tick, 60000 - Date.now() % 60000);
+				const img = document.getElementById("photo");
+				const next = async () => {
+					let wait = 60;
+					try {
+						const p = await (await fetch("/screensaver/photo")).json();
+						if (!p.src) img.hidden = true;
+						else if (img.getAttribute("src") !== p.src) img.src = p.src;
+						wait = p.seconds || 60;
+					} catch {}
+					setTimeout(next, wait * 1000);
+				};
+				setTimeout(next, (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);
 			})();
 			</script>
 		</body>

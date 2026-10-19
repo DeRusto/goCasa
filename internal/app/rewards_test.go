@@ -113,8 +113,8 @@ func TestOnlyAnAdminDecidesAndAdjusts(t *testing.T) {
 		t.Fatalf("a pet asking for a Reward = %d, want 400", code)
 	}
 	post(t, h, "/settings/locks", url.Values{"lock_chores": {"on"}})
-	if !asksForPIN(t, kid, "/rewards/1/redeem", url.Values{"member_id": {"2"}}) {
-		t.Fatal("the chore Lock doesn't gate asking for a Reward")
+	if asksForPIN(t, kid, "/rewards/1/redeem", url.Values{"member_id": {"2"}}) {
+		t.Fatal("the chore Lock gates asking for a Reward; it gates completing only")
 	}
 }
 

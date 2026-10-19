@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -87,9 +88,22 @@ func deviceOf(r *http.Request) web.Device {
 // household is the household settings the pages follow.
 func (a *App) household(ctx context.Context) (web.Household, error) {
 	var h web.Household
-	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, night_mode, night_start, night_end FROM household_settings").
-		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.NightMode, &h.NightStart, &h.NightEnd)
+	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, night_mode, night_start, night_end, timezone FROM household_settings").
+		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.NightMode, &h.NightStart, &h.NightEnd, &h.Timezone)
 	return h, err
+}
+
+// location is the Household's timezone, else the server's (TZ). An unreadable
+// setting falls back too rather than failing the page.
+func (a *App) location(ctx context.Context) *time.Location {
+	var tz string
+	if err := a.DB.QueryRowContext(ctx, "SELECT timezone FROM household_settings").Scan(&tz); err != nil {
+		a.Log.Error("reading household timezone", "err", err)
+	}
+	if loc, err := time.LoadLocation(tz); tz != "" && err == nil {
+		return loc
+	}
+	return a.Config.Location
 }
 
 // clockLayout is how times show under the Household's 12/24-hour setting.
@@ -116,23 +130,15 @@ func (a *App) clock(ctx context.Context) string {
 func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	view := r.PostFormValue("default_view")
 	start, err := strconv.Atoi(r.PostFormValue("week_start"))
-	var idle *int
-	if v := r.PostFormValue("screensaver_idle_seconds"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 10 {
-			a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is at least 10 seconds.")
-			return
-		}
-		idle = &n
+	idle, ok := optInt(r, "screensaver_idle_seconds", 10)
+	if !ok {
+		a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is at least 10 seconds.")
+		return
 	}
-	var perPhoto *int
-	if v := r.PostFormValue("seconds_per_photo"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 5 {
-			a.settingsPage(w, r, http.StatusBadRequest, "Each photo shows for at least 5 seconds.")
-			return
-		}
-		perPhoto = &n
+	perPhoto, ok := optInt(r, "seconds_per_photo", 5)
+	if !ok {
+		a.settingsPage(w, r, http.StatusBadRequest, "Each photo shows for at least 5 seconds.")
+		return
 	}
 	var night *string
 	var nightStart, nightEnd *int
@@ -145,18 +151,42 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		}
 		night, nightStart, nightEnd = &v, &s, &e
 	}
+	var tz *string
+	if r.PostForm.Has("timezone") {
+		v := strings.TrimSpace(r.PostFormValue("timezone"))
+		if _, err := time.LoadLocation(v); err != nil || strings.EqualFold(v, "local") {
+			a.settingsPage(w, r, http.StatusBadRequest, "Pick a timezone by its IANA name, like Europe/London, or leave it blank for the server's.")
+			return
+		}
+		tz = &v
+	}
 	if _, ok := defaultViews[view]; !ok || err != nil || start < 0 || start > 6 {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a default view and the day weeks start on.")
 		return
 	}
 	if _, err := a.DB.ExecContext(r.Context(), `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
 		screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo),
-		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end)`,
-		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, night, nightStart, nightEnd); err != nil {
+		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end),
+		timezone = coalesce(?, timezone)`,
+		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, night, nightStart, nightEnd, tz); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// optInt is form field name as a number of at least min, nil when not sent;
+// ok is false when it was sent but isn't one.
+func optInt(r *http.Request, name string, min int) (n *int, ok bool) {
+	v := r.PostFormValue(name)
+	if v == "" {
+		return nil, true
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil || i < min {
+		return nil, false
+	}
+	return &i, true
 }
 
 // getRoot sends the browser to this device's Default view, else the Household's.
@@ -211,7 +241,7 @@ func (a *App) setMotionWake(w http.ResponseWriter, r *http.Request) {
 // view at today.
 func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 	a.clearUnlock(w) // after withUnlock's refresh, so this later Set-Cookie wins
-	now := a.Now().In(a.Config.Location)
+	now := a.Now().In(a.location(r.Context()))
 	today := dayAt(now, 0)
 	hh, err := a.household(r.Context())
 	if err != nil {
@@ -228,19 +258,45 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	photo, left, err := a.currentPhoto(r.Context(), now, time.Duration(hh.SecondsPerPhoto)*time.Second)
+	src, left, err := a.photoNow(r.Context(), now, hh)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	var src string
-	if photo != 0 {
-		src = "/screensaver/photos/" + strconv.FormatInt(photo, 10)
-	}
 	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
 		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
-	}, src, int(left.Seconds()+.999)))
+	}, src, left))
+}
+
+// photoNow is the screensaver photo's address ("" for none) and the seconds it has left.
+func (a *App) photoNow(ctx context.Context, now time.Time, hh web.Household) (string, int, error) {
+	photo, left, err := a.currentPhoto(ctx, now, time.Duration(hh.SecondsPerPhoto)*time.Second)
+	if err != nil || photo == 0 {
+		return "", int(left.Seconds() + .999), err
+	}
+	return "/screensaver/photos/" + strconv.FormatInt(photo, 10), int(left.Seconds() + .999), nil
+}
+
+// getScreensaverPhoto tells an open screensaver its current photo, so it
+// swaps the image in place and its camera (motion-wake) stays up.
+func (a *App) getScreensaverPhoto(w http.ResponseWriter, r *http.Request) {
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	src, left, err := a.photoNow(r.Context(), a.Now(), hh)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(struct {
+		Src     string `json:"src"`
+		Seconds int    `json:"seconds"`
+	}{src, left})
 }
 
 // nightModeAt is the Night mode in force at hour (0-23): the household's

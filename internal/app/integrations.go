@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -201,7 +202,6 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	color := strings.ToLower(r.PostFormValue("color"))
 	raw := strings.TrimSpace(r.PostFormValue("url"))
-	u, err := url.Parse(feedURL(raw))
 	switch {
 	case name == "" || len([]rune(name)) > 50:
 		a.settingsPage(w, r, http.StatusBadRequest, "A feed's name is 1 to 50 characters.")
@@ -209,7 +209,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 	case !colorRE.MatchString(color):
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a colour.")
 		return
-	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
+	case parseUpstreamURL(feedURL(raw)) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "A feed's address starts with webcal://, https:// or http://.")
 		return
 	}
@@ -245,5 +245,50 @@ func (a *App) removeFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.publish("deleted", "calendar", id)
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// parseUpstreamURL is raw parsed when it is an http(s) address with a host, else nil.
+func parseUpstreamURL(raw string) *url.URL {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil
+	}
+	return u
+}
+
+// alreadyConnected answers with a Settings error, and reports true, when an
+// integration of typ (shown as name) exists: each connects only once.
+func (a *App) alreadyConnected(w http.ResponseWriter, r *http.Request, typ, name string) bool {
+	var exists bool
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM integrations WHERE type = ?)", typ).Scan(&exists); err != nil {
+		a.serverError(w, r, err)
+		return true
+	}
+	if exists {
+		a.settingsPage(w, r, http.StatusBadRequest, name+" is already connected. Disconnect it first.")
+	}
+	return exists
+}
+
+// addIntegration stores a just-checked integration with its secret sealed,
+// syncs it once (its outcome shows in Settings) and returns to Settings.
+func (a *App) addIntegration(w http.ResponseWriter, r *http.Request, typ, name string, cfg any, secret string, intervalSeconds int) {
+	enc, err := a.seal([]byte(secret))
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	cfgJSON, _ := json.Marshal(cfg)
+	var id int64
+	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO integrations (type, name, config_json, credentials_enc, sync_interval_seconds, next_sync_at)
+		VALUES (?, ?, ?, ?, ?, ?) RETURNING id`, typ, name, string(cfgJSON), enc, intervalSeconds, a.Now().Add(syncTimeout).Unix()).Scan(&id); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if err := a.syncIntegration(r.Context(), id); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
