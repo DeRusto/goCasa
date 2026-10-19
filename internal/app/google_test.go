@@ -33,12 +33,18 @@ type fakeGoogle struct {
 	fail      int                         // when set, events lists answer it
 	missing   string                      // a calendar whose events list answers 404
 	pageSize  int
-	lists     []url.Values // each events list's query, with its calendar as "cal"
+	lists     []url.Values              // each events list's query, with its calendar as "cal"
+	writes    []gWrite                  // each request to one event, and each insert
+	got       map[string]map[string]any // event id → what a GET of it answers
+	etags     map[string]string         // event id → its etag now: an If-Match of another answers 412
+	writeFail int                       // when set, writes answer it
+	failOn    string                    // the methods writeFail applies to, e.g. "PATCH DELETE"; "" is every write
 	*httptest.Server
 }
 
 func newGoogle(t *testing.T) *fakeGoogle {
-	g := &fakeGoogle{login: "sub-alice", access: map[string]string{}, events: map[string][]map[string]any{}, changes: map[string][]map[string]any{}, pageSize: 2}
+	g := &fakeGoogle{login: "sub-alice", access: map[string]string{}, events: map[string][]map[string]any{}, changes: map[string][]map[string]any{}, pageSize: 2,
+		got: map[string]map[string]any{}, etags: map[string]string{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /o/oauth2/v2/auth", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
@@ -129,6 +135,41 @@ func newGoogle(t *testing.T) *fakeGoogle {
 		}
 		json.NewEncoder(w).Encode(body)
 	})
+	event := func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if _, ok := g.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]; !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		id := r.PathValue("id")
+		if r.Method == http.MethodGet {
+			if e, ok := g.got[id]; ok {
+				json.NewEncoder(w).Encode(e)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+			return
+		}
+		wr := gWrite{method: r.Method, cal: r.PathValue("cal"), id: id, ifMatch: r.Header.Get("If-Match")}
+		json.NewDecoder(r.Body).Decode(&wr.body)
+		g.writes = append(g.writes, wr)
+		switch {
+		case g.writeFail != 0 && (g.failOn == "" || strings.Contains(g.failOn, r.Method)):
+			w.WriteHeader(g.writeFail)
+		case wr.ifMatch != "" && g.etags[id] != "" && wr.ifMatch != g.etags[id]:
+			w.WriteHeader(http.StatusPreconditionFailed)
+			w.Write([]byte(`{"error":{"code":412,"errors":[{"reason":"conditionNotMet"}]}}`))
+		case r.Method == http.MethodPost:
+			json.NewEncoder(w).Encode(map[string]any{"id": fmt.Sprintf("new%d", len(g.writes))})
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			json.NewEncoder(w).Encode(map[string]any{"id": id})
+		}
+	}
+	mux.HandleFunc("/calendar/v3/calendars/{cal}/events/{id}", event)
+	mux.HandleFunc("POST /calendar/v3/calendars/{cal}/events", event)
 	mux.HandleFunc("POST /revoke", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -137,6 +178,19 @@ func newGoogle(t *testing.T) *fakeGoogle {
 	g.Server = httptest.NewServer(mux)
 	t.Cleanup(g.Close)
 	return g
+}
+
+// gWrite is a write to Google's events API, as the fake got it.
+type gWrite struct {
+	method, cal, id, ifMatch string
+	body                     map[string]any
+}
+
+// sent is the writes Google got, oldest first.
+func (g *fakeGoogle) sent() []gWrite {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]gWrite(nil), g.writes...)
 }
 
 func (g *fakeGoogle) signInAs(sub string) { g.mu.Lock(); g.login = sub; g.mu.Unlock() }

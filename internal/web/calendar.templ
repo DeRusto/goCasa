@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"strconv"
 	"strings"
 	"time"
@@ -76,7 +77,12 @@ type EventForm struct {
 	Interval                     string
 	ByDay                        map[string]bool // weekly: MO…SU
 	Custom                       string          // RRULE, EXDATE and RDATE lines
+	Synced                       bool            // a Google event: changes go to Google first
+	InSeries                     bool            // a Google occurrence, with edit scopes
 }
+
+// scoped reports whether f edits an Occurrence of a Series, in an edit scope.
+func (f EventForm) scoped() bool { return f.Occurrence != 0 || f.InSeries }
 
 // occurrenceQuery is the ?occurrence= an Occurrence's links carry.
 func occurrenceQuery(original int64) string {
@@ -101,8 +107,11 @@ func calendarTitle(p CalendarPage) string {
 }
 
 func eventURL(f EventForm, action string) templ.SafeURL {
-	if f.ID == 0 {
+	switch {
+	case f.ID == 0:
 		return "/calendar/event"
+	case f.Synced:
+		return templ.SafeURL("/calendar/synced/" + id(f.ID) + cmp.Or(action, "/edit"))
 	}
 	return templ.SafeURL("/calendar/event/" + id(f.ID) + action + occurrenceQuery(f.Occurrence))
 }
@@ -131,7 +140,7 @@ templ calendarDay(d CalendarDay, heading string) {
 				<li>
 					@swatches(e.Colors)
 					if e.Synced {
-						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google: change its Members here">{ e.Time } { e.Title }</a>
+						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google">{ e.Time } { e.Title }</a>
 					} else if e.ReadOnly {
 						<span title="From a calendar feed: read-only">{ e.Time } { e.Title }</span>
 					} else {
@@ -327,7 +336,7 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 			}
 			<form method="post" action={ eventURL(f, "") }>
 				<label>Title <input name="title" value={ f.Title } required maxlength="200"/></label>
-				if f.Occurrence == 0 {
+				if !f.scoped() && !f.Synced {
 					<label>
 						Calendar
 						<select name="calendar_id" required>
@@ -359,26 +368,30 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 					<label>First day <input type="date" name="start_date" value={ f.StartDate }/></label>
 					<label>Last day <input type="date" name="end_date" value={ f.EndDate }/></label>
 				</fieldset>
-				<fieldset>
-					<legend>Repeats</legend>
-					<select name="repeat">
-						for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}, {"custom", "Custom (advanced)"}} {
-							<option value={ o[0] } selected?={ o[0] == f.Repeat }>{ o[1] }</option>
+				if f.Synced {
+					<p>From Google: repeat changes are made in Google.</p>
+				} else {
+					<fieldset>
+						<legend>Repeats</legend>
+						<select name="repeat">
+							for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}, {"custom", "Custom (advanced)"}} {
+								<option value={ o[0] } selected?={ o[0] == f.Repeat }>{ o[1] }</option>
+							}
+						</select>
+						<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1"/></label>
+						<span>On (weekly)</span>
+						for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+							<label><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
 						}
-					</select>
-					<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1"/></label>
-					<span>On (weekly)</span>
-					for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
-						<label><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
-					}
-					<details open?={ f.Repeat == "custom" }>
-						<summary>Advanced</summary>
-						<label>RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
-					</details>
-				</fieldset>
+						<details open?={ f.Repeat == "custom" }>
+							<summary>Advanced</summary>
+							<label>RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
+						</details>
+					</fieldset>
+				}
 				<label>Location <input name="location" value={ f.Location } maxlength="200"/></label>
 				<label>Description <textarea name="description" maxlength="5000">{ f.Description }</textarea></label>
-				if f.Occurrence != 0 {
+				if f.scoped() {
 					<fieldset>
 						<legend>Change</legend>
 						for _, s := range scopes {
@@ -392,20 +405,32 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 					@scopePicker()
 				}
 				<button>Save</button>
+				@savingLabel()
 			</form>
 			if f.ID != 0 {
 				<form method="post" action={ eventURL(f, "/delete") }>
-					if f.Occurrence != 0 {
+					if f.scoped() {
 						for _, s := range scopes {
 							<button name="scope" value={ s[0] }>Delete { strings.ToLower(s[1]) }</button>
 						}
 					} else {
 						<button>Delete event</button>
 					}
+					@savingLabel()
 				</form>
 			}
 		</main>
 	}
+}
+
+// savingLabel shows "Saving…" on its form's buttons while it is sent: a
+// Google event's change waits for Google and the sync after it.
+templ savingLabel() {
+	<script>
+	document.currentScript.closest("form").addEventListener("submit", e => {
+		for (const b of e.target.querySelectorAll("button")) b.textContent = "Saving…";
+	});
+	</script>
 }
 
 var scopes = [][2]string{{"this", "This event"}, {"following", "This and following events"}, {"all", "All events"}}

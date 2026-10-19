@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
@@ -39,14 +40,27 @@ type eventChange struct {
 
 // refusal is a change the module won't make, with a message for the person.
 // conflict marks one that may succeed when redone; reset is the One-off edits
-// a This and following change would reset, to confirm.
+// a This and following change would reset, to confirm; status, if set, is
+// the answer's (e.g. when Google refused it).
 type refusal struct {
 	msg      string
 	conflict bool
 	reset    int
+	status   int
 }
 
 func (r *refusal) Error() string { return r.msg }
+
+// code is the HTTP status that answers r.
+func (r *refusal) code() int {
+	switch {
+	case r.status != 0:
+		return r.status
+	case r.conflict:
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
 
 var errSeriesChanged = &refusal{msg: "This Series changed while you were editing it. Open it again and redo your change.", conflict: true}
 

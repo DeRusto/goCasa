@@ -21,10 +21,13 @@ const (
 	agendaDays  = 30
 )
 
-// localCalendars is the ids of the calendars GoCasa owns; localCalendar limits a query on events to them.
+// localCalendars is the ids of the calendars GoCasa owns; localCalendar limits
+// a query on events to them. writableCalendars adds the shown Google
+// calendars an event can be created on.
 const (
-	localCalendars = "SELECT c.id FROM source_calendars c JOIN integrations i ON i.id = c.integration_id WHERE i.type = 'local'"
-	localCalendar  = "calendar_id IN (" + localCalendars + ")"
+	localCalendars    = "SELECT c.id FROM source_calendars c JOIN integrations i ON i.id = c.integration_id WHERE i.type = 'local'"
+	localCalendar     = "calendar_id IN (" + localCalendars + ")"
+	writableCalendars = localCalendars + " OR i.type = '" + googleType + "' AND c.enabled AND NOT c.read_only AND i.status = 'ok'"
 )
 
 // dayAt is local midnight i days after day; time.Date keeps it midnight across DST.
@@ -172,7 +175,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	if p.Calendars, err = a.calendars(r); err != nil {
+	if p.Calendars, err = a.calendars(r, localCalendars); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -190,8 +193,9 @@ func (a *App) activeMembers(r *http.Request) ([]web.Member, error) {
 	return active, err
 }
 
-func (a *App) calendars(r *http.Request) ([]web.CalendarInfo, error) {
-	rows, err := a.DB.QueryContext(r.Context(), "SELECT id, name, color FROM source_calendars WHERE id IN ("+localCalendars+") ORDER BY name, id")
+// calendars is the calendars whose ids query selects.
+func (a *App) calendars(r *http.Request, query string) ([]web.CalendarInfo, error) {
+	rows, err := a.DB.QueryContext(r.Context(), "SELECT id, name, color FROM source_calendars WHERE id IN ("+query+") ORDER BY name, id")
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +392,11 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 }
 
 func (a *App) eventPage(w http.ResponseWriter, r *http.Request, status int, f web.EventForm, errMsg string) {
-	cals, err := a.calendars(r)
+	query := localCalendars // a local event stays on a local calendar
+	if f.ID == 0 {
+		query = writableCalendars
+	}
+	cals, err := a.calendars(r, query)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -505,16 +513,15 @@ func (a *App) saveEvent(w http.ResponseWriter, r *http.Request) {
 		a.eventPage(w, r, http.StatusBadRequest, f, msg)
 		return
 	}
+	if id == 0 && a.createGoogle(w, r, f, c) {
+		return
+	}
 	_, err := a.writeEvent(r.Context(), id, occurrence, sc, c)
 	var no *refusal
 	switch {
 	case errors.As(err, &no):
-		status := http.StatusBadRequest
-		if no.conflict {
-			status = http.StatusConflict
-		}
 		f.Reset = no.reset
-		a.eventPage(w, r, status, f, no.msg)
+		a.eventPage(w, r, no.code(), f, no.msg)
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
 	case err != nil:
@@ -533,11 +540,7 @@ func (a *App) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
 	case errors.As(err, &no):
-		status := http.StatusBadRequest
-		if no.conflict {
-			status = http.StatusConflict
-		}
-		http.Error(w, no.msg, status)
+		http.Error(w, no.msg, no.code())
 	case err != nil:
 		a.serverError(w, r, err)
 	default:
