@@ -126,31 +126,9 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		p.Users[id] = true
 	}
 	for i := range n {
-		d0, d1 := dayAt(first, i), dayAt(first, i+1)
-		ds := d0.Format(dateLayout)
-		day := web.CalendarDay{Date: d0, Today: d0.Equal(today), Faded: view == "month" && d0.Month() != date.Month()}
-		for _, e := range evs {
-			ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly, Synced: e.synced}
-			if e.allDay {
-				if e.date > ds || e.endDate <= ds {
-					continue
-				}
-				ev.Time = "All day"
-			} else {
-				if e.start >= d1.Unix() || e.end <= d0.Unix() {
-					continue
-				}
-				from, to := "…", "…"
-				if e.start >= d0.Unix() {
-					from = time.Unix(e.start, 0).In(loc).Format("15:04")
-				}
-				if e.end <= d1.Unix() {
-					to = time.Unix(e.end, 0).In(loc).Format("15:04")
-				}
-				ev.Time = from + "–" + to
-			}
-			day.Events = append(day.Events, ev)
-		}
+		d0 := dayAt(first, i)
+		day := calendarDay(evs, d0, today, 0)
+		day.Faded = view == "month" && d0.Month() != date.Month()
 		if view != "agenda" || len(day.Events) > 0 {
 			p.Days = append(p.Days, day)
 		}
@@ -180,6 +158,39 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, web.Calendar(p))
+}
+
+// calendarDay is the events of evs on day d0 (local midnight); timed events
+// that ended by now (unix seconds; 0: never) are Past.
+func calendarDay(evs []calendarEvent, d0, today time.Time, now int64) web.CalendarDay {
+	loc := d0.Location()
+	d1 := dayAt(d0, 1)
+	ds := d0.Format(dateLayout)
+	day := web.CalendarDay{Date: d0, Today: d0.Equal(today)}
+	for _, e := range evs {
+		ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly, Synced: e.synced}
+		if e.allDay {
+			if e.date > ds || e.endDate <= ds {
+				continue
+			}
+			ev.Time = "All day"
+		} else {
+			if e.start >= d1.Unix() || e.end <= d0.Unix() {
+				continue
+			}
+			from, to := "…", "…"
+			if e.start >= d0.Unix() {
+				from = time.Unix(e.start, 0).In(loc).Format("15:04")
+			}
+			if e.end <= d1.Unix() {
+				to = time.Unix(e.end, 0).In(loc).Format("15:04")
+			}
+			ev.Time = from + "–" + to
+			ev.Past = e.end <= now
+		}
+		day.Events = append(day.Events, ev)
+	}
+	return day
 }
 
 func (a *App) activeMembers(r *http.Request) ([]web.Member, error) {

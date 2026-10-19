@@ -109,6 +109,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		a.render(w, r, http.StatusOK, web.Home())
 	})
+	mux.HandleFunc("GET /today", a.getToday)
 	mux.HandleFunc("GET /settings", a.getSettings)
 	mux.HandleFunc("POST /setup", a.postSetup)
 	mux.HandleFunc("GET /lock", a.getLock)
