@@ -74,8 +74,8 @@ templ TodosBoard(p TodosPage) {
 				for _, c := range p.Columns {
 					<section data-column={ strconv.FormatInt(c.ID, 10) }>
 						<h2>{ c.Name }</h2>
-						<ul class="todos">
-							for _, t := range c.Todos {
+						<ul class="todos" data-drag="todos">
+							for i, t := range c.Todos {
 								<li data-todo={ strconv.FormatInt(t.ID, 10) }>
 									<a href={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>{ t.Title }</a>
 									if t.Due != "" {
@@ -92,7 +92,13 @@ templ TodosBoard(p TodosPage) {
 										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/complete") }><button>Done</button></form>
 									}
 									if p.Draggable {
-										<span class="handle" aria-label="Drag to reorder">⠿</span>
+										<span class="handle" aria-hidden="true">⠿</span>
+										if i > 0 {
+											@todoMove(c, i, i-1, "↑", "Move up ")
+										}
+										if i < len(c.Todos)-1 {
+											@todoMove(c, i, i+1, "↓", "Move down ")
+										}
 									}
 								</li>
 							}
@@ -139,11 +145,35 @@ templ option(value, label, selected string) {
 	<option value={ value } selected?={ value == selected }>{ label }</option>
 }
 
-// dragReorder lets a to-do be dragged by its handle within or across columns,
-// with pointer events so it works on touch screens too; on drop it posts the
-// order of each column it changed.
+// todoMove is a keyboard-operable button moving column c's to-do i to j.
+templ todoMove(c TodoColumn, i, j int, arrow, label string) {
+	<form method="post" action="/todos/reorder" style="display:inline">
+		<input type="hidden" name="column_id" value={ strconv.FormatInt(c.ID, 10) }/>
+		for _, id := range swapped(c.Todos, i, j) {
+			<input type="hidden" name="ids" value={ id }/>
+		}
+		<button aria-label={ label + c.Todos[i].Title }>{ arrow }</button>
+	</form>
+}
+
+// swapped is the ids of todos with i and j swapped.
+func swapped(todos []Todo, i, j int) []string {
+	ids := make([]string, len(todos))
+	for k, t := range todos {
+		ids[k] = strconv.FormatInt(t.ID, 10)
+	}
+	ids[i], ids[j] = ids[j], ids[i]
+	return ids
+}
+
+// dragReorder lets an item be dragged by its handle within its list, or
+// across lists sharing a data-drag group, with pointer events so it works on
+// touch screens too. On drop, to-do columns post their whole order; any other
+// item posts its new position to its data-move address. Up/down buttons are
+// the keyboard way.
 // shortcut: hand-rolled instead of vendored SortableJS (no network to vendor it); swap in SortableJS for animation and auto-scroll.
 templ dragReorder() {
+	<style>.handle { touch-action: none; cursor: grab; }</style>
 	<script>
 	(() => {
 		let item, from;
@@ -152,31 +182,39 @@ templ dragReorder() {
 			if (!h) return;
 			e.preventDefault();
 			item = h.closest("li");
-			from = item.closest("section");
+			from = item.closest("ul");
 			item.style.opacity = "0.5";
 		});
 		document.addEventListener("pointermove", e => {
 			if (!item) return;
 			const over = document.elementFromPoint(e.clientX, e.clientY);
-			const li = over?.closest("li[data-todo]"), ul = over?.closest("section[data-column]")?.querySelector("ul.todos");
+			const ul = over?.closest("section")?.querySelector("ul[data-drag]");
+			if (!ul || ul.dataset.drag !== from.dataset.drag) return;
+			const li = over.closest("ul[data-drag] > li");
 			if (li && li !== item) {
 				const r = li.getBoundingClientRect();
 				li.parentNode.insertBefore(item, e.clientY < r.top + r.height / 2 ? li : li.nextSibling);
-			} else if (!li && ul && !ul.contains(item)) {
+			} else if (!li && !ul.contains(item)) {
 				ul.appendChild(item);
 			}
 		});
-		document.addEventListener("pointerup", () => {
+		const drop = () => {
 			if (!item) return;
 			item.style.opacity = "";
-			const to = item.closest("section");
-			for (const s of new Set([from, to])) {
-				const body = new URLSearchParams({ column_id: s.dataset.column });
-				s.querySelectorAll("li[data-todo]").forEach(li => body.append("ids", li.dataset.todo));
-				fetch("/todos/reorder", { method: "POST", body });
+			const to = item.closest("ul");
+			if (item.dataset.move) {
+				fetch(item.dataset.move, { method: "POST", redirect: "manual", body: new URLSearchParams({ position: [...to.children].indexOf(item) }) });
+			} else {
+				for (const ul of new Set([from, to])) {
+					const body = new URLSearchParams({ column_id: ul.closest("section").dataset.column });
+					ul.querySelectorAll("li[data-todo]").forEach(li => body.append("ids", li.dataset.todo));
+					fetch("/todos/reorder", { method: "POST", redirect: "manual", body });
+				}
 			}
 			item = null;
-		});
+		};
+		document.addEventListener("pointerup", drop);
+		document.addEventListener("pointercancel", drop); // what shows is what's kept
 	})();
 	</script>
 }

@@ -7,8 +7,8 @@ import (
 
 // TodayPage is the Today page: always the whole Household, no Member filter.
 type TodayPage struct {
-	Now     time.Time      // in the household's timezone
-	Clock   string         // Now's time, 12- or 24-hour as the Household has it
+	Now     time.Time // in the household's timezone
+	Clock   string    // Now's time, 12- or 24-hour as the Household has it
 	Clock24 bool
 	Weather *WeatherHeader // nil: no cached weather
 	Days    [2]CalendarDay // today and tomorrow

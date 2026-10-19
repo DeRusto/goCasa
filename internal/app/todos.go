@@ -529,5 +529,5 @@ func (a *App) reorderTodos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.publish("updated", "todo_column", col)
-	w.WriteHeader(http.StatusOK)
+	http.Redirect(w, r, "/todos", http.StatusSeeOther) // for the up/down buttons; a drag's fetch doesn't follow it
 }
