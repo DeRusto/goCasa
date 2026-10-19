@@ -1,0 +1,69 @@
+package web
+
+import "strconv"
+
+// Screensaver is what an idle Wall display shows: for now the clock and
+// today's agenda on dark. The whole screen is one link to "/", so the first
+// touch only wakes it, back to the Default view at today.
+templ Screensaver(p TodayPage) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content="dark"/>
+			<title>Screensaver</title>
+		</head>
+		<body style="margin:0;background:#000;color:#ddd">
+			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none">
+				<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
+				<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
+				<ul style="font-size:1.5rem;list-style:none;padding:0">
+					for _, e := range p.Days[0].Events {
+						<li style={ templ.KV("opacity:.5", e.Past) }>{ e.Time } { e.Title }</li>
+					}
+				</ul>
+			</a>
+			if device(ctx).WallDisplay {
+				@wallDisplay(0)
+			}
+			<script>
+			// Reload on the next minute so the clock and agenda stay current.
+			setTimeout(() => location.reload(), 60000 - Date.now() % 60000);
+			</script>
+		</body>
+	</html>
+}
+
+// wallDisplay holds a Screen Wake Lock where the browser allows it, showing
+// its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
+// screensaver after that long with no touch, pointer or key input.
+templ wallDisplay(idleSeconds int) {
+	<script data-idle-seconds={ strconv.Itoa(idleSeconds) }>
+	(() => {
+		const idle = Number(document.currentScript.dataset.idleSeconds);
+		const status = s => { const el = document.getElementById("wake-lock"); if (el) el.textContent = s; };
+		let lock;
+		const hold = async () => {
+			if (!window.isSecureContext) return status("needs HTTPS");
+			if (!("wakeLock" in navigator)) return status("not supported by this browser");
+			if (document.visibilityState !== "visible" || (lock && !lock.released)) return;
+			try {
+				lock = await navigator.wakeLock.request("screen");
+				status("held");
+				lock.addEventListener("release", () => status("released"));
+			} catch (e) {
+				status("not allowed: " + e.message);
+			}
+		};
+		document.addEventListener("visibilitychange", hold); // the browser drops the lock when the page hides
+		hold();
+		if (idle > 0) {
+			let timer;
+			const reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign("/screensaver"), idle * 1000); };
+			for (const e of ["pointerdown", "pointermove", "touchstart", "keydown", "wheel"]) addEventListener(e, reset, { capture: true, passive: true });
+			reset();
+		}
+	})();
+	</script>
+}

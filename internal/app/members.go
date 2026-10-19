@@ -98,9 +98,17 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, c templ
 	if err != nil {
 		a.Log.Error("reading cached weather", "err", err) // the page still renders, without its pill
 	}
+	d := deviceOf(r)
+	if d.WallDisplay {
+		if h, err := a.household(r.Context()); err == nil {
+			d.IdleSeconds = h.IdleSeconds
+		} else {
+			a.Log.Error("reading household settings", "err", err) // the page falls back to the default idle time
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := c.Render(web.WithDevice(web.WithWeatherPill(r.Context(), pill), deviceOf(r)), w); err != nil {
+	if err := c.Render(web.WithDevice(web.WithWeatherPill(r.Context(), pill), d), w); err != nil {
 		a.Log.Error("render failed", "path", r.URL.Path, "err", err)
 	}
 }
