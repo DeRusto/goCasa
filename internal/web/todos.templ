@@ -10,6 +10,13 @@ type Todo struct {
 	Due      string // YYYY-MM-DD or ""
 	Done     bool
 	Overdue  bool
+
+	// Repeat is "" or a preset (daily, weekly, monthly, yearly), every Interval,
+	// weekly on ByDay (MO…SU); its next due date counts from the schedule
+	// unless FromCompletion.
+	Repeat, Interval string
+	ByDay            map[string]bool
+	FromCompletion   bool
 }
 
 type TodoColumn struct {
@@ -120,6 +127,13 @@ templ TodosBoard(p TodosPage) {
 	}
 }
 
+func repeatFrom(t Todo) string {
+	if t.FromCompletion {
+		return "completion"
+	}
+	return ""
+}
+
 templ option(value, label, selected string) {
 	<option value={ value } selected?={ value == selected }>{ label }</option>
 }
@@ -182,6 +196,25 @@ templ TodoEditPage(t Todo, columns []TodoColumn) {
 					</select>
 				</label>
 				<label>Due <input type="date" name="due_date" value={ t.Due }/></label>
+				<fieldset>
+					<legend>Repeats</legend>
+					<select name="repeat">
+						for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}} {
+							<option value={ o[0] } selected?={ o[0] == t.Repeat }>{ o[1] }</option>
+						}
+					</select>
+					<label>Every <input type="number" name="interval" min="1" max="999" value={ t.Interval } placeholder="1"/></label>
+					for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+						<label><input type="checkbox" name="byday" value={ d } checked?={ t.ByDay[d] }/> { d }</label>
+					}
+					<label>
+						Next due counts from
+						<select name="repeat_from">
+							@option("", "the schedule", repeatFrom(t))
+							@option("completion", "completion", repeatFrom(t))
+						</select>
+					</label>
+				</fieldset>
 				<label>Notes <textarea name="notes" maxlength="5000">{ t.Notes }</textarea></label>
 				<button>Save</button>
 			</form>
