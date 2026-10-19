@@ -149,6 +149,7 @@ func TestToDosSortAndFilterByDueRangeAndStatus(t *testing.T) {
 		"?due=today":                     "Overdue|Today",
 		"?due=week&sort=due":             "Overdue|Today|Soon",
 		"?due=none":                      "Undated",
+		"?due=none&from=2026-03-15":      "Later|Today|Soon",
 		"?from=2026-03-15&to=2026-03-18": "Today|Soon",
 		"?status=all&to=2026-03-12":      "Overdue|Done early",
 		"?due=nonsense&status=nonsense":  "Later|Undated|Overdue|Today|Soon",
@@ -168,9 +169,7 @@ func TestCompletedToDosCannotBeEdited(t *testing.T) {
 	if code, _ := h.Post(t, "/todos/1", todo("1", "Changed", "")); code != http.StatusConflict {
 		t.Fatalf("editing a completed to-do = %d, want 409", code)
 	}
-	var title string
-	h.App.DB.QueryRow("SELECT title FROM todos WHERE id = 1").Scan(&title)
-	if title != "Fix tap" {
-		t.Fatalf("completed to-do was edited to %q", title)
+	if _, page := h.Get(t, "/todos?status=done"); strings.Join(column(t, page, "1"), "|") != "Fix tap" {
+		t.Fatalf("completed to-do was edited: %q", column(t, page, "1"))
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DeRusto/goCasa/internal/apptest"
 )
@@ -118,6 +119,40 @@ func TestEditsCarryForwardAndCompletedCopiesAreKept(t *testing.T) {
 	post(t, h, "/todos/3", todo("1", "Last glass", "2026-03-24"))              // repeat off ends the chain
 	post(t, h, "/todos/3/complete", nil)
 	if got, want := board(t, h, "status=all"), "Recycling 2026-03-16|Glass 2026-03-23|Last glass 2026-03-24"; got != want {
+		t.Fatalf("all = %q, want %q", got, want)
+	}
+}
+
+// A month from January 31 is February's last day, not early March.
+func TestRepeatFromCompletionClampsToTheMonthsLastDay(t *testing.T) {
+	h := apptest.New(t)
+	h.Clock.Set(time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC))
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", recurringTodo("Filter", "2026-01-31", "monthly", url.Values{"repeat_from": {"completion"}}))
+	post(t, h, "/todos", recurringTodo("Boiler", "2026-01-31", "yearly", url.Values{"repeat_from": {"completion"}}))
+	post(t, h, "/todos/1/complete", nil)
+	h.Clock.Set(time.Date(2028, 2, 29, 12, 0, 0, 0, time.UTC))
+	post(t, h, "/todos/2", recurringTodo("Boiler", "2028-02-29", "yearly", url.Values{"repeat_from": {"completion"}}))
+	post(t, h, "/todos/2/complete", nil)
+	if got, want := board(t, h, ""), "Filter 2026-02-28|Boiler 2029-02-28"; got != want {
+		t.Fatalf("open = %q, want %q", got, want)
+	}
+}
+
+// Deleting a copy whose completion made the next one would cut the chain and
+// let re-opening its predecessor leave two open copies.
+func TestACompletedCopyWithANextCopyCannotBeDeleted(t *testing.T) {
+	h := apptest.New(t)
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", recurringTodo("Bins", "2026-03-16", "weekly", nil))
+	post(t, h, "/todos/1/complete", nil) // creates 2
+	post(t, h, "/todos/2/complete", nil) // creates 3
+	if code, _ := h.Post(t, "/todos/2/delete", nil); code != http.StatusConflict {
+		t.Fatalf("deleting a copy with a next copy = %d, want 409", code)
+	}
+	post(t, h, "/todos/3/delete", nil)
+	post(t, h, "/todos/2/delete", nil) // no next copy any more
+	if got, want := board(t, h, "status=all"), "Bins 2026-03-16"; got != want {
 		t.Fatalf("all = %q, want %q", got, want)
 	}
 }
