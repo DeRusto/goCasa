@@ -140,7 +140,7 @@ templ memberFields(m Member) {
 }
 
 // Settings is the unlocked Settings page.
-templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
+templ Settings(members []Member, feeds []Feed, google Google, weather Weather, errMsg string) {
 	@layout("Settings") {
 		<main>
 			<h1>Settings</h1>
@@ -230,6 +230,7 @@ templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
 				<button>Add feed</button>
 			</form>
 			@googleSection(google, members)
+			@weatherSection(weather)
 		</main>
 	}
 }

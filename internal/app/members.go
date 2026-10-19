@@ -90,9 +90,13 @@ func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, status int, c templ.Component) {
+	pill, err := a.weatherPill(r.Context())
+	if err != nil {
+		a.Log.Error("reading cached weather", "err", err) // the page still renders, without its pill
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := c.Render(r.Context(), w); err != nil {
+	if err := c.Render(web.WithWeatherPill(r.Context(), pill), w); err != nil {
 		a.Log.Error("render failed", "path", r.URL.Path, "err", err)
 	}
 }
@@ -133,7 +137,12 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, errMsg))
+	wx, err := a.weatherSettings(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, status, web.Settings(ms, fs, g, wx, errMsg))
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {

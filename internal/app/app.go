@@ -107,7 +107,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", a.healthz)
 	mux.HandleFunc("GET /events/stream", a.eventStream)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		web.Home().Render(r.Context(), w)
+		a.render(w, r, http.StatusOK, web.Home())
 	})
 	mux.HandleFunc("GET /settings", a.getSettings)
 	mux.HandleFunc("POST /setup", a.postSetup)
@@ -120,6 +120,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/members/{id}/avatar", a.requireUnlock(a.uploadAvatar))
 	mux.HandleFunc("POST /settings/members/{id}/avatar/delete", a.requireUnlock(a.deleteAvatar))
 	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
+	mux.HandleFunc("POST /settings/weather", a.requireUnlock(a.saveWeather))
 	mux.HandleFunc("POST /settings/feeds", a.requireUnlock(a.addFeed))
 	mux.HandleFunc("POST /settings/feeds/{id}/delete", a.requireUnlock(a.removeFeed))
 	mux.HandleFunc("POST /integrations/google/connect", a.requireUnlock(a.connectGoogle))
