@@ -201,7 +201,12 @@ func (a *App) getChores(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, web.ChoresBoard(cs, ps))
+	pts, err := a.points(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, http.StatusOK, web.ChoresBoard(cs, ps, pts))
 }
 
 // choreForm reads and checks the Chore form, or returns a message for the person.
