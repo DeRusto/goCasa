@@ -592,7 +592,7 @@ func Settings(members []Member, feeds []Feed, google Google, weather Weather, lo
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "> Completing chores and asking for Rewards</label> <label><input type=\"checkbox\" name=\"lock_todos\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "> Completing chores</label> <label><input type=\"checkbox\" name=\"lock_todos\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -189,7 +189,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /rewards", a.requireUnlock(a.createReward))
 	mux.HandleFunc("POST /rewards/{id}/archive", a.requireUnlock(a.setRewardArchived(true)))
 	mux.HandleFunc("POST /rewards/{id}/restore", a.requireUnlock(a.setRewardArchived(false)))
-	mux.HandleFunc("POST /rewards/{id}/redeem", a.requireLock("lock_chores", a.redeem))
+	mux.HandleFunc("POST /rewards/{id}/redeem", a.redeem)
 	mux.HandleFunc("POST /redemptions/{id}/approve", a.requireUnlock(a.decide("approved")))
 	mux.HandleFunc("POST /redemptions/{id}/decline", a.requireUnlock(a.decide("declined")))
 	mux.HandleFunc("POST /adjustments", a.requireUnlock(a.adjust))
