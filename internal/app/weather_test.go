@@ -12,10 +12,12 @@ import (
 	"github.com/DeRusto/goCasa/internal/apptest"
 )
 
-// fakeMeteo is Open-Meteo's forecast endpoint; it records each query.
+// fakeMeteo is Open-Meteo's forecast endpoint; it records each query, and
+// answers 503 while down.
 type fakeMeteo struct {
 	mu      sync.Mutex
 	queries []url.Values
+	down    bool
 	*httptest.Server
 }
 
@@ -27,7 +29,12 @@ func newMeteo(t *testing.T) *fakeMeteo {
 	m.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.mu.Lock()
 		m.queries = append(m.queries, r.URL.Query())
+		down := m.down
 		m.mu.Unlock()
+		if down {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
 		if r.URL.Path != "/v1/forecast" {
 			http.NotFound(w, r)
 			return
@@ -62,10 +69,12 @@ func TestWeatherPillRendersFromCacheEvenOffline(t *testing.T) {
 	}
 	h.RunDue()
 	q := m.calls()
-	if len(q) != 1 || q[0].Get("latitude") != "51.5" || q[0].Get("longitude") != "-0.12" || q[0].Get("temperature_unit") != "" {
+	if len(q) != 1 || q[0].Get("latitude") != "51.5" || q[0].Get("longitude") != "-0.12" || q[0].Get("temperature_unit") != "" || q[0].Get("timezone") != "UTC" {
 		t.Fatalf("queries = %v", q)
 	}
-	m.Close() // the internet goes down
+	m.mu.Lock()
+	m.down = true // the internet goes down; the fake still counts attempts
+	m.mu.Unlock()
 	for _, path := range []string{"/calendar", "/settings", "/"} {
 		_, page := h.Get(t, path)
 		if !strings.Contains(page, "12°C") || !strings.Contains(page, "H 16° L 8°") {
