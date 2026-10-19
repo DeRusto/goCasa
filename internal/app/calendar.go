@@ -89,6 +89,7 @@ type calendarEvent struct {
 	colors        []string // its Members' colours, else its calendar's
 	shown         bool     // passes the Member filter; eventsIn returns only these
 	readOnly      bool     // on a feed's calendar
+	synced        bool     // from Google: only its Members change here
 }
 
 func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +115,10 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}, ICS: a.icsURL()}
+	if p.Stale, p.BeyondGoogle, err = a.syncNotices(r.Context(), end); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	for _, id := range users {
 		p.Users[id] = true
 	}
@@ -122,7 +127,7 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		ds := d0.Format(dateLayout)
 		day := web.CalendarDay{Date: d0, Today: d0.Equal(today), Faded: view == "month" && d0.Month() != date.Month()}
 		for _, e := range evs {
-			ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly}
+			ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly, Synced: e.synced}
 			if e.allDay {
 				if e.date > ds || e.endDate <= ds {
 					continue

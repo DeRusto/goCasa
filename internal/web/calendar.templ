@@ -17,10 +17,26 @@ type CalendarInfo struct {
 type CalendarEvent struct {
 	ID       int64 // a Series' for its Occurrences
 	Original int64 // an Occurrence's key; 0 for a single event
-	Title  string
-	Time   string   // "09:00–10:00", "22:00–…" or "All day"
-	Colors []string // its Members', else its calendar's
-	ReadOnly bool // from a calendar feed: no edit link
+	Title    string
+	Time     string   // "09:00–10:00", "22:00–…" or "All day"
+	Colors   []string // its Members', else its calendar's
+	ReadOnly bool     // from a calendar feed: no edit link
+	Synced   bool     // from Google: links to its Members
+}
+
+// StaleCalendar is a shown calendar that isn't syncing.
+type StaleCalendar struct {
+	Name        string
+	LastUpdated string // when it last synced, or "never"
+	Reconnect   bool   // its Google account needs reconnecting
+}
+
+// SyncedEvent is a Google event as its Members page shows it.
+type SyncedEvent struct {
+	ID      int64
+	Title   string
+	When    string
+	Members map[int64]bool
 }
 
 type CalendarDay struct {
@@ -40,6 +56,8 @@ type CalendarPage struct {
 	Prev, Next, Today string
 	ViewLinks         map[string]string
 	ICS               string // the absolute ICS export URL, for all calendars
+	Stale             []StaleCalendar
+	BeyondGoogle      bool // the view reaches past the 12 months of Google events kept
 }
 
 // EventForm is the event dialog's fields; ID 0 is a new event.
@@ -112,7 +130,9 @@ templ calendarDay(d CalendarDay, heading string) {
 			for _, e := range d.Events {
 				<li>
 					@swatches(e.Colors)
-					if e.ReadOnly {
+					if e.Synced {
+						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google: change its Members here">{ e.Time } { e.Title }</a>
+					} else if e.ReadOnly {
 						<span title="From a calendar feed: read-only">{ e.Time } { e.Title }</span>
 					} else {
 						<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) }>{ e.Time } { e.Title }</a>
@@ -145,6 +165,7 @@ templ Calendar(p CalendarPage) {
 				|
 				<a href={ newEventURL(p.Date) }>New event</a>
 			</nav>
+			<form method="post" action="/calendar/sync"><button>Sync now</button></form>
 			<form method="get" action="/calendar">
 				<input type="hidden" name="view" value={ p.View }/>
 				<input type="hidden" name="date" value={ p.Date.Format("2006-01-02") }/>
@@ -161,6 +182,19 @@ templ Calendar(p CalendarPage) {
 				</fieldset>
 			</form>
 			<div id="live">
+				for _, s := range p.Stale {
+					<p role="status">
+						{ s.Name }: last updated { s.LastUpdated }.
+						if s.Reconnect {
+							Reconnect needed: an Admin reconnects its Google account in Settings.
+						} else {
+							Syncing keeps failing; Settings has the details.
+						}
+					</p>
+				}
+				if p.BeyondGoogle {
+					<p role="status">Google events more than 12 months ahead aren't shown.</p>
+				}
 				if p.View == "month" {
 					<table>
 						<thead>
@@ -244,6 +278,32 @@ templ liveUpdates() {
 		};
 	})();
 	</script>
+}
+
+// SyncedEventPage shows a Google event and changes its Members. Changing them
+// here keeps them through later syncs and never reaches Google.
+templ SyncedEventPage(e SyncedEvent, members []Member) {
+	@layout("Event") {
+		<main>
+			<h1>{ e.Title }</h1>
+			<p><a href="/calendar">Back to the calendar</a></p>
+			<p>{ e.When }</p>
+			<p>From Google: change it there. Its Members are GoCasa's own.</p>
+			<form method="post" action={ templ.SafeURL("/calendar/synced/" + id(e.ID)) }>
+				<fieldset>
+					<legend>Members (none: a Household event)</legend>
+					for _, m := range members {
+						<label>
+							<input type="checkbox" name="members" value={ id(m.ID) } checked?={ e.Members[m.ID] }/>
+							@avatar(m)
+							{ m.Name }
+						</label>
+					}
+				</fieldset>
+				<button>Save</button>
+			</form>
+		</main>
+	}
 }
 
 // EventPage is the event dialog: create, edit or delete a single event.

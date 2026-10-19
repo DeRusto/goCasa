@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -25,11 +26,18 @@ type fakeGoogle struct {
 	access    map[string]string // access token → sub
 	revoked   []string
 	issued    int
+	events    map[string][]map[string]any // calendar id → what a full list returns
+	changes   map[string][]map[string]any // calendar id → what the next token sync returns
+	gone      bool                        // token syncs answer 410
+	withdrawn bool                        // refreshes answer invalid_grant
+	fail      int                         // when set, events lists answer it
+	pageSize  int
+	lists     []url.Values // each events list's query, with its calendar as "cal"
 	*httptest.Server
 }
 
 func newGoogle(t *testing.T) *fakeGoogle {
-	g := &fakeGoogle{login: "sub-alice", access: map[string]string{}}
+	g := &fakeGoogle{login: "sub-alice", access: map[string]string{}, events: map[string][]map[string]any{}, changes: map[string][]map[string]any{}, pageSize: 2}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /o/oauth2/v2/auth", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
@@ -42,6 +50,20 @@ func newGoogle(t *testing.T) *fakeGoogle {
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
+		if r.PostFormValue("grant_type") == "refresh_token" {
+			tok := strings.TrimPrefix(r.PostFormValue("refresh_token"), "refresh-")
+			i := strings.LastIndex(tok, "-")
+			if i < 0 || g.withdrawn {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":"invalid_grant"}`))
+				return
+			}
+			g.issued++
+			access := fmt.Sprintf("access-%d", g.issued)
+			g.access[access] = tok[:i]
+			json.NewEncoder(w).Encode(map[string]string{"access_token": access})
+			return
+		}
 		sub, ok := strings.CutPrefix(r.PostFormValue("code"), "code-")
 		if !ok || r.PostFormValue("client_id") != "client-id" || r.PostFormValue("client_secret") != "client-secret" || r.PostFormValue("grant_type") != "authorization_code" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -52,7 +74,7 @@ func newGoogle(t *testing.T) *fakeGoogle {
 		access := fmt.Sprintf("access-%d", g.issued)
 		g.access[access] = sub
 		claims, _ := json.Marshal(map[string]any{"sub": sub, "email": strings.TrimPrefix(sub, "sub-") + "@example.com", "aud": "client-id",
-			"iss": "https://accounts.google.com", "exp": apptest.Start.Add(time.Hour).Unix()})
+			"iss": "https://accounts.google.com", "exp": apptest.Start.Add(24 * time.Hour).Unix()})
 		json.NewEncoder(w).Encode(map[string]string{
 			"access_token":  access,
 			"refresh_token": fmt.Sprintf("refresh-%s-%d", sub, g.issued),
@@ -67,6 +89,41 @@ func newGoogle(t *testing.T) *fakeGoogle {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"items": g.calendars})
+	})
+	mux.HandleFunc("GET /calendar/v3/calendars/{cal}/events", func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if _, ok := g.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]; !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		q := r.URL.Query()
+		q.Set("cal", r.PathValue("cal"))
+		g.lists = append(g.lists, q)
+		cal := r.PathValue("cal")
+		items := g.events[cal]
+		switch {
+		case g.fail != 0:
+			w.WriteHeader(g.fail)
+			return
+		case q.Has("syncToken") && g.gone:
+			w.WriteHeader(http.StatusGone)
+			return
+		case q.Has("syncToken"):
+			items = g.changes[cal]
+		}
+		from, _ := strconv.Atoi(q.Get("pageToken"))
+		to := min(from+g.pageSize, len(items))
+		body := map[string]any{"items": items[from:to], "timeZone": "America/New_York"}
+		if to < len(items) {
+			body["nextPageToken"] = strconv.Itoa(to)
+		} else {
+			if q.Has("syncToken") {
+				delete(g.changes, cal)
+			}
+			body["nextSyncToken"] = fmt.Sprintf("token-%d", len(g.lists))
+		}
+		json.NewEncoder(w).Encode(body)
 	})
 	mux.HandleFunc("POST /revoke", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
