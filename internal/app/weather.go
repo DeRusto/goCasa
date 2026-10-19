@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
 )
@@ -77,17 +78,29 @@ func (openMeteo) Sync(ctx context.Context, a *App, _ integrationRow) error {
 type forecast struct {
 	Current struct {
 		Temperature float64 `json:"temperature_2m"`
+		Code        int     `json:"weather_code"`
 	} `json:"current"`
 	Daily struct {
 		Time []string  `json:"time"` // YYYY-MM-DD in the location's timezone
 		Max  []float64 `json:"temperature_2m_max"`
 		Min  []float64 `json:"temperature_2m_min"`
+		Code []int     `json:"weather_code"`
 	} `json:"daily"`
 }
 
 // weatherPill is the cached weather as the slim pill shows it; nil when there
 // is none for the current location and units.
 func (a *App) weatherPill(ctx context.Context) (*web.WeatherPill, error) {
+	h, err := a.weatherHeader(ctx)
+	if h == nil {
+		return nil, err
+	}
+	return &h.WeatherPill, nil
+}
+
+// weatherHeader is the cached weather as Today's header shows it: today and up
+// to 5 days ahead. nil when there is none for the current location and units.
+func (a *App) weatherHeader(ctx context.Context) (*web.WeatherHeader, error) {
 	var units, body string
 	err := a.DB.QueryRowContext(ctx, `SELECT w.units, w.body FROM weather_cache w JOIN household_settings h
 		ON w.lat = h.weather_lat AND w.lon = h.weather_lon AND w.units = h.units`).Scan(&units, &body)
@@ -105,14 +118,49 @@ func (a *App) weatherPill(ctx context.Context) (*web.WeatherPill, error) {
 	if units == "imperial" {
 		unit = "F"
 	}
-	p := &web.WeatherPill{Current: int(math.Round(f.Current.Temperature)), Unit: unit}
-	today := a.Now().In(a.Config.Location).Format("2006-01-02")
+	h := &web.WeatherHeader{WeatherPill: web.WeatherPill{Current: int(math.Round(f.Current.Temperature)), Unit: unit}, Conditions: conditions(f.Current.Code)}
+	today := a.Now().In(a.Config.Location).Format(dateLayout)
 	for i, d := range f.Daily.Time {
-		if d == today && i < len(f.Daily.Max) && i < len(f.Daily.Min) {
-			p.HasToday, p.High, p.Low = true, int(math.Round(f.Daily.Max[i])), int(math.Round(f.Daily.Min[i]))
+		if d < today || i >= len(f.Daily.Max) || i >= len(f.Daily.Min) {
+			continue
+		}
+		hi, lo := int(math.Round(f.Daily.Max[i])), int(math.Round(f.Daily.Min[i]))
+		day, err := time.Parse(dateLayout, d)
+		switch {
+		case d == today:
+			h.HasToday, h.High, h.Low = true, hi, lo
+		case err == nil && len(h.Ahead) < 5:
+			wd := web.WeatherDay{Day: day.Format("Mon"), High: hi, Low: lo}
+			if i < len(f.Daily.Code) {
+				wd.Conditions = conditions(f.Daily.Code[i])
+			}
+			h.Ahead = append(h.Ahead, wd)
 		}
 	}
-	return p, nil
+	return h, nil
+}
+
+// conditions names a WMO weather code as Open-Meteo reports it.
+func conditions(code int) string {
+	switch {
+	case code == 0:
+		return "Clear"
+	case code <= 2:
+		return "Partly cloudy"
+	case code == 3:
+		return "Overcast"
+	case code <= 48:
+		return "Fog"
+	case code <= 57:
+		return "Drizzle"
+	case code <= 67, code >= 80 && code <= 82:
+		return "Rain"
+	case code <= 77, code == 85, code == 86:
+		return "Snow"
+	case code >= 95:
+		return "Thunderstorm"
+	}
+	return ""
 }
 
 // weatherSettings is the Weather section of Settings.
