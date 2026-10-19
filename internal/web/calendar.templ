@@ -79,6 +79,7 @@ type EventForm struct {
 	Custom                       string          // RRULE, EXDATE and RDATE lines
 	Synced                       bool            // a Google event: changes go to Google first
 	InSeries                     bool            // a Google occurrence, with edit scopes
+	Etag                         string          // a Google event's version as shown, to refuse a stale change
 }
 
 // scoped reports whether f edits an Occurrence of a Series, in an edit scope.
@@ -404,6 +405,9 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 					}
 					@scopePicker()
 				}
+				if f.Synced {
+					<input type="hidden" name="etag" value={ f.Etag }/>
+				}
 				<button>Save</button>
 				@savingLabel()
 			</form>
@@ -416,6 +420,9 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 					} else {
 						<button>Delete event</button>
 					}
+					if f.Synced {
+						<input type="hidden" name="etag" value={ f.Etag }/>
+					}
 					@savingLabel()
 				</form>
 			}
@@ -423,13 +430,27 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 	}
 }
 
-// savingLabel shows "Saving…" on its form's buttons while it is sent: a
-// Google event's change waits for Google and the sync after it.
+// savingLabel shows "Saving…" on its form's buttons while it is sent, and
+// sends it once: a Google event's change waits for Google and the sync after
+// it, and a second click could create the event twice. Buttons aren't
+// disabled, which would drop the clicked one's scope.
 templ savingLabel() {
 	<script>
-	document.currentScript.closest("form").addEventListener("submit", e => {
-		for (const b of e.target.querySelectorAll("button")) b.textContent = "Saving…";
-	});
+	(() => {
+		const form = document.currentScript.closest("form");
+		const labels = [...form.querySelectorAll("button")].map(b => b.textContent);
+		let sent = false;
+		form.addEventListener("submit", e => {
+			if (sent) return e.preventDefault();
+			sent = true;
+			for (const b of form.querySelectorAll("button")) b.textContent = "Saving…";
+		});
+		// Back from the next page, the form is usable again.
+		addEventListener("pageshow", () => {
+			sent = false;
+			form.querySelectorAll("button").forEach((b, i) => b.textContent = labels[i]);
+		});
+	})();
 	</script>
 }
 

@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -29,6 +30,8 @@ var (
 	errUnreachable = &refusal{msg: "GoCasa couldn't reach Google, so nothing changed. Try again.", status: http.StatusBadGateway}
 	errStale       = &refusal{msg: "This event changed in Google. This is its current version: redo your change.", conflict: true}
 	errReadOnly    = &refusal{msg: "That Google calendar is read-only."}
+	// An event synced before etags were kept has none to send as If-Match; the full re-import migration 0009 starts fills it.
+	errNoVersion = &refusal{msg: "GoCasa hasn't synced this event's version from Google yet. Sync now, then try again.", conflict: true}
 )
 
 // googleRow is a Google event as a write needs it.
@@ -39,12 +42,15 @@ type googleRow struct {
 }
 
 // googleResult is what a write leaves for the sync after it: the Google id
-// whose event or series rows the change's Members go on, whether those rows
-// are new (their Members start as the calendar's defaults), and whether a
-// series' rule changed, so its calendar re-imports in full.
+// whose event or series rows the change's Members go on (only those from
+// event row from on, if set), whether those rows are new (their Members start
+// as the calendar's defaults), whether a series' rule changed, so its
+// calendar re-imports in full, and whether Google was left alone (local), so
+// there is nothing to sync.
 type googleResult struct {
-	target      string
-	fresh, full bool
+	target             string
+	from               int64
+	fresh, full, local bool
 }
 
 // googleAPI is a Google calendar's events, with an access token.
@@ -229,6 +235,61 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 	return old, from, nil
 }
 
+// shiftExdates is recurrence lines with their EXDATEs moved as a Split moves Series master's
+// Occurrence o to c's start, in c's kind of time and zone, so they keep
+// excluding the same Occurrences.
+func (a *App) shiftExdates(lines []string, master googleEvent, o int64, c eventChange) []string {
+	oldZone := a.Config.Location
+	if z, err := time.LoadLocation(master.Start.TimeZone); master.Start.TimeZone != "" && err == nil {
+		oldZone = z
+	}
+	// Wall times as UTC (see floating), so a shift keeps 10:00 at 10:00 across DST; all-day keys are midnights already.
+	oldWall := time.Unix(o, 0).UTC()
+	if master.Start.Date == "" {
+		oldWall = floating(oldWall.In(oldZone))
+	}
+	param, layout := ";VALUE=DATE:", "20060102"
+	newWall, _ := time.Parse(dateLayout, fmt.Sprint(c.date))
+	if !c.allDay {
+		zone, _ := time.LoadLocation(c.tzid.(string))
+		newWall = floating(time.Unix(c.start.(int64), 0).In(zone))
+		param, layout = ";TZID="+c.tzid.(string)+":", "20060102T150405"
+	}
+	delta := newWall.Sub(oldWall)
+	var out []string
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "EXDATE") {
+			out = append(out, line)
+			continue
+		}
+		head, values, _ := strings.Cut(line, ":")
+		zone := oldZone
+		if _, tz, ok := strings.Cut(head, "TZID="); ok {
+			if z, err := time.LoadLocation(strings.Split(tz, ";")[0]); err == nil {
+				zone = z
+			}
+		}
+		var vs []string
+		for _, v := range strings.Split(values, ",") {
+			t, err := time.Parse("20060102T150405", v)
+			switch {
+			case strings.HasSuffix(v, "Z"):
+				t, err = time.Parse("20060102T150405Z", v)
+				t = floating(t.In(zone))
+			case len(v) == len("20060102"):
+				t, err = time.Parse("20060102", v)
+			}
+			if err == nil {
+				vs = append(vs, t.Add(delta).Format(layout))
+			}
+		}
+		if len(vs) > 0 {
+			out = append(out, "EXDATE"+param+strings.Join(vs, ","))
+		}
+	}
+	return out
+}
+
 // untilBefore is rule ending just before Occurrence o. Its own COUNT or UNTIL
 // went past o, else o wouldn't exist, and RFC 5545 allows only one of them.
 func untilBefore(rule string, o int64, allDay bool) string {
@@ -285,10 +346,16 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 	}
 	if c.title == was.title && c.location == was.location && c.description == was.description && c.allDay == was.allDay && shownTimes(c) == shownTimes(was) {
 		// Only the Members, which are GoCasa's own: Google isn't asked.
-		if row.series == "" || sc == scopeThis {
-			return googleResult{target: row.external}, nil
+		switch {
+		case row.series == "" || sc == scopeThis:
+			return googleResult{target: row.external, local: true}, nil
+		case sc == scopeFollowing:
+			return googleResult{target: row.series, from: row.id, local: true}, nil
 		}
-		return googleResult{target: row.series}, nil
+		return googleResult{target: row.series, local: true}, nil
+	}
+	if row.etag == "" {
+		return googleResult{}, errNoVersion
 	}
 	g, err := a.googleCalendarAPI(ctx, row.account, row.calendar)
 	if err != nil {
@@ -322,7 +389,7 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		return googleResult{}, err
 	}
 	body := googleBody(c)
-	body["recurrence"] = from
+	body["recurrence"] = a.shiftExdates(from, master, o, c)
 	var made googleEvent
 	if err := g.call(ctx, http.MethodPost, "", "", body, &made); err != nil {
 		return googleResult{}, err
@@ -346,6 +413,8 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 		return googleResult{}, errReadOnly
 	case row.series != "" && sc != scopeThis && sc != scopeAll && sc != scopeFollowing:
 		return googleResult{}, &refusal{msg: "Pick which events to delete."}
+	case row.etag == "":
+		return googleResult{}, errNoVersion
 	}
 	g, err := a.googleCalendarAPI(ctx, row.account, row.calendar)
 	if err != nil {
@@ -373,13 +442,20 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 // returns once it's done, so the page that follows shows the change.
 func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResult, members, base []int64) error {
 	if res.full {
-		if _, err := a.DB.ExecContext(ctx, `UPDATE integrations SET sync_cursor = json_remove(sync_cursor, '$.tokens.' || json_quote((SELECT external_id FROM source_calendars WHERE id = ?)))
-			WHERE id = ? AND json_valid(sync_cursor)`, cal, account); err != nil {
+		// Under the sync's lock: a sync running now would write back the token it read.
+		mu, _ := a.syncLocks.LoadOrStore(account, &sync.Mutex{})
+		mu.(*sync.Mutex).Lock()
+		_, err := a.DB.ExecContext(ctx, `UPDATE integrations SET sync_cursor = json_remove(sync_cursor, '$.tokens.' || json_quote((SELECT external_id FROM source_calendars WHERE id = ?)))
+			WHERE id = ? AND json_valid(sync_cursor)`, cal, account)
+		mu.(*sync.Mutex).Unlock()
+		if err != nil {
 			return err
 		}
 	}
-	if err := a.syncIntegration(ctx, account); err != nil {
-		return err
+	if !res.local {
+		if err := a.syncIntegration(ctx, account); err != nil {
+			return err
+		}
 	}
 	if res.target == "" {
 		return nil
@@ -393,7 +469,9 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 	}
 	var ids []int64
 	err = a.inTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "UPDATE events SET local_override = 1 WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2) RETURNING id", cal, res.target)
+		rows, err := tx.QueryContext(ctx, `UPDATE events SET local_override = 1 WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2)
+				AND (?3 = 0 OR coalesce(start_utc, unixepoch(all_day_date)) >= (SELECT coalesce(start_utc, unixepoch(all_day_date)) FROM events WHERE id = ?3))
+			RETURNING id`, cal, res.target, res.from)
 		if err != nil {
 			return err
 		}
@@ -456,7 +534,7 @@ func (a *App) googlePage(w http.ResponseWriter, r *http.Request, status int, id 
 		a.serverError(w, r, err)
 		return
 	}
-	f.ID, f.Synced, f.InSeries, f.Scope = id, true, row.series != "", string(scopeThis)
+	f.ID, f.Synced, f.InSeries, f.Scope, f.Etag = id, true, row.series != "", string(scopeThis), row.etag
 	a.eventPage(w, r, status, f, msg)
 }
 
@@ -491,7 +569,11 @@ func (a *App) saveGoogle(w http.ResponseWriter, r *http.Request) {
 	}
 	f, c, msg := a.parseEventForm(r, false)
 	sc := scope(cmp.Or(r.PostFormValue("scope"), string(scopeThis)))
-	f.ID, f.CalendarID, f.Synced, f.InSeries, f.Scope = id, row.calendarID, true, row.series != "", string(sc)
+	f.ID, f.CalendarID, f.Synced, f.InSeries, f.Scope, f.Etag = id, row.calendarID, true, row.series != "", string(sc), r.PostFormValue("etag")
+	if f.Etag != row.etag { // a sync since the dialog opened brought a newer version
+		a.googleAnswer(w, r, row, f, errStale)
+		return
+	}
 	if msg != "" {
 		a.eventPage(w, r, http.StatusBadRequest, f, msg)
 		return
@@ -531,7 +613,10 @@ func (a *App) deleteGoogle(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	res, err := a.removeGoogle(r.Context(), row, scope(cmp.Or(r.PostFormValue("scope"), string(scopeThis))))
+	res, err := googleResult{}, error(errStale) // a sync since the dialog opened brought a newer version
+	if r.PostFormValue("etag") == row.etag {
+		res, err = a.removeGoogle(r.Context(), row, scope(cmp.Or(r.PostFormValue("scope"), string(scopeThis))))
+	}
 	var no *refusal
 	switch {
 	case errors.Is(err, errStale):
