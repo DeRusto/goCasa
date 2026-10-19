@@ -143,6 +143,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.saveGoogle)
 	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.deleteGoogle)
 	mux.HandleFunc("POST /calendar/sync", a.syncNow)
+	mux.HandleFunc("GET /lists", a.getLists)
+	mux.HandleFunc("POST /lists", a.createList)
+	mux.HandleFunc("POST /lists/{id}/items", a.addItem)
+	mux.HandleFunc("POST /lists/{list}/items/{id}", a.checkItem)
+	mux.HandleFunc("POST /lists/{list}/items/{id}/move", a.moveItem)
 	// shortcut: completing to-dos ignores the to-do Lock until Locks land (#40).
 	mux.HandleFunc("GET /todos", a.getTodos)
 	mux.HandleFunc("POST /todos", a.createTodo)
