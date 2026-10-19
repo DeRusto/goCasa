@@ -7,7 +7,7 @@ import "strconv"
 // place after photoSeconds, so the page and its camera stay up. The whole
 // screen is one link to "/", so the first touch only wakes it, back to the
 // Default view at today.
-templ Screensaver(p TodayPage, photo string, photoSeconds int) {
+templ Screensaver(p TodayPage, photo string, photoSeconds, reloadSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -36,12 +36,12 @@ templ Screensaver(p TodayPage, photo string, photoSeconds int) {
 			if device(ctx).MotionWake {
 				@motionWake()
 			}
-			<script data-photo-seconds={ strconv.Itoa(photoSeconds) }>
+			<script data-photo-seconds={ strconv.Itoa(photoSeconds) } data-reload-seconds={ strconv.Itoa(reloadSeconds) }>
 			(() => {
 				// Each minute refetch the clock and agenda in place (changes arrive live too);
-				// reload on the hour so Night mode, which starts on an hour, takes over.
+				// reload on the household's next hour so Night mode, which starts on an hour, takes over.
+				setTimeout(() => location.reload(), Number(document.currentScript.dataset.reloadSeconds) * 1000);
 				const tick = () => {
-					if (new Date().getMinutes() === 0) return location.reload();
 					document.dispatchEvent(new Event("refresh-live"));
 					setTimeout(tick, 60000 - Date.now() % 60000);
 				};
@@ -50,7 +50,7 @@ templ Screensaver(p TodayPage, photo string, photoSeconds int) {
 				const next = async () => {
 					let wait = 60;
 					try {
-						const p = await (await fetch("/screensaver/photo")).json();
+						const p = await (await fetch("/screensaver/photo", { headers: { "X-Background": "1" } })).json();
 						if (!p.src) img.hidden = true;
 						else if (img.getAttribute("src") !== p.src) img.src = p.src;
 						wait = p.seconds || 60;

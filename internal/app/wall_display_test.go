@@ -126,6 +126,15 @@ func TestBlackNightModeReleasesTheWakeLockBetweenItsHours(t *testing.T) {
 	}
 }
 
+func TestTheScreensaverReloadsOnTheHouseholdsHour(t *testing.T) {
+	h := household(t)
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "timezone": {"Asia/Kolkata"}})
+	h.Clock.Set(time.Date(2026, 3, 15, 9, 10, 0, 0, time.UTC)) // 14:40 in Kolkata
+	if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, `data-reload-seconds="1200"`) {
+		t.Fatalf("the screensaver doesn't reload at 15:00 Kolkata time, when Night mode may start: %q", body)
+	}
+}
+
 func TestDimClockNightModeKeepsTheWakeLockAndShowsTheTime(t *testing.T) {
 	h := household(t)
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})

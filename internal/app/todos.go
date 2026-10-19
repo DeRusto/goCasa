@@ -446,19 +446,30 @@ func (a *App) updateTodo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Pick a column.", http.StatusBadRequest)
 		return
 	}
-	// Completed copies are never touched (spec §8).
-	var done bool
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT completed_at IS NOT NULL FROM todos WHERE id = ?", r.PathValue("id")).Scan(&done); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	// Completed copies are never touched (spec §8): the WHERE checks it in the
+	// same statement, so a completion racing this edit can't be overwritten.
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE todos SET title = ?1, notes = ?2, due_date = ?3,
+		position = CASE WHEN column_id = ?4 THEN position ELSE (SELECT coalesce(max(position) + 1, 0) FROM todos WHERE column_id = ?4) END,
+		column_id = ?4, repeat_rule = ?5, repeat_from_completion = ?6 WHERE id = ?7 AND completed_at IS NULL`,
+		t.Title, t.Notes, nullable(t.Due), t.ColumnID, nullable(rule), t.FromCompletion, id)
+	if err != nil {
 		a.serverError(w, r, err)
 		return
-	} else if done {
-		http.Error(w, "A completed to-do can't be edited; reopen it first.", http.StatusConflict)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var found bool
+		if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM todos WHERE id = ?)", id).Scan(&found); err != nil {
+			a.serverError(w, r, err)
+		} else if found {
+			http.Error(w, "A completed to-do can't be edited; reopen it first.", http.StatusConflict)
+		} else {
+			http.NotFound(w, r)
+		}
 		return
 	}
-	a.todoExec(w, r, "updated", "todo", `UPDATE todos SET title = ?1, notes = ?2, due_date = ?3,
-		position = CASE WHEN column_id = ?4 THEN position ELSE (SELECT coalesce(max(position) + 1, 0) FROM todos WHERE column_id = ?4) END,
-		column_id = ?4, repeat_rule = ?5, repeat_from_completion = ?6 WHERE id = ?7`,
-		t.Title, t.Notes, nullable(t.Due), t.ColumnID, nullable(rule), t.FromCompletion)
+	a.publish("updated", "todo", id)
+	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
 // reorderTodos sets column_id's order to ids, moving in any to-do dragged from

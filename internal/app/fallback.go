@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io/fs"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -84,10 +85,11 @@ func (a *App) screensaverPhotos(ctx context.Context) (map[int64]bool, error) {
 		if err := a.DB.QueryRowContext(ctx, "SELECT consecutive_failures > 0 FROM integrations WHERE type = ?", immichType).Scan(&failing); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
-		for _, c := range im {
-			if c || !failing {
-				return im, nil
-			}
+		if failing { // only cached bytes can show, so rotate through just those
+			maps.DeleteFunc(im, func(_ int64, c bool) bool { return !c })
+		}
+		if len(im) > 0 {
+			return im, nil
 		}
 	}
 	var on bool
