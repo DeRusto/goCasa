@@ -114,6 +114,11 @@ func TestFeedImportUpdateAndSoftDelete(t *testing.T) {
 	if !strings.Contains(settings(t, h), "Last synced: 15 Mar 2026 09:00") {
 		t.Fatal("Settings doesn't show the sync")
 	}
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "clock_24h": {"on"}, "timezone": {"Asia/Kolkata"}})
+	if !strings.Contains(settings(t, h), "Last synced: 15 Mar 2026 14:30") {
+		t.Fatal("Settings doesn't show the sync in the household timezone")
+	}
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "clock_24h": {"on"}, "timezone": {""}})
 
 	// Unchanged: a 304, after the sync interval.
 	h.Clock.Advance(14 * time.Minute)

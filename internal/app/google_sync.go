@@ -419,7 +419,7 @@ func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.Stale
 		if err := rows.Scan(&s.Name, &ok, &s.Reconnect); err != nil {
 			return nil, false, err
 		}
-		s.LastUpdated = a.lastSync(ok, clock)
+		s.LastUpdated = a.lastSync(ctx, ok, clock)
 		stale = append(stale, s)
 	}
 	if err := rows.Err(); err != nil {

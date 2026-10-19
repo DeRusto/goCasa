@@ -173,7 +173,7 @@ func (a *App) weatherSettings(ctx context.Context) (web.Weather, error) {
 	if lat.Valid && lon.Valid {
 		w.Lat, w.Lon = strconv.FormatFloat(lat.Float64, 'f', -1, 64), strconv.FormatFloat(lon.Float64, 'f', -1, 64)
 	}
-	w.LastSuccess = a.lastSync(ok, a.clock(ctx))
+	w.LastSuccess = a.lastSync(ctx, ok, a.clock(ctx))
 	return w, err
 }
 

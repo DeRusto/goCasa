@@ -262,6 +262,9 @@ func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 	case parseUpstreamURL(raw) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "Mealie's address starts with https:// or http://.")
 		return
+	case parseUpstreamURL(raw).User != nil: // the address is stored unsealed
+		a.settingsPage(w, r, http.StatusBadRequest, "Leave the user name and password out of Mealie's address.")
+		return
 	case token == "":
 		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API token from Mealie (Profile > API Tokens).")
 		return
@@ -322,7 +325,7 @@ func (a *App) mealieSettings(ctx context.Context) (*web.Mealie, error) {
 	}
 	var c mealieConfig
 	json.Unmarshal([]byte(cfg), &c)
-	m.URL, m.LastSuccess = c.URL, a.lastSync(ok, a.clock(ctx))
+	m.URL, m.LastSuccess = c.URL, a.lastSync(ctx, ok, a.clock(ctx))
 	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, hidden FROM shopping_lists WHERE integration_id = ? ORDER BY position, id", m.ID)
 	if err != nil {
 		return nil, err
