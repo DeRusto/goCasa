@@ -156,3 +156,43 @@ func TestNightModeSettingsAreValidated(t *testing.T) {
 		}
 	}
 }
+
+const watchesMotion = `getUserMedia`
+
+func TestAnAdminTurnsOnMotionWakeWhichRunsOnlyOnTheScreensaverAndDimClock(t *testing.T) {
+	h := household(t) // unlocked as Ada at 09:00
+	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
+	if _, body := h.Get(t, "/settings"); !strings.Contains(body, `name="motion_wake"`) || strings.Contains(body, `name="motion_wake" checked`) {
+		t.Fatalf("This device doesn't offer motion-wake, off by default: %q", body)
+	}
+	if !asksForPIN(t, h.Device(), "/device/motion-wake", url.Values{"motion_wake": {"on"}}) {
+		t.Fatal("a locked device turned on motion-wake")
+	}
+	nightMode(t, h, "dim_clock")
+	post(t, h, "/device/motion-wake", url.Values{"motion_wake": {"on"}})
+	if _, body := h.Get(t, "/settings"); !strings.Contains(body, `name="motion_wake" checked`) || !strings.Contains(body, `id="motion-wake"`) {
+		t.Fatalf("This device doesn't show motion-wake on with its camera status: %q", body)
+	}
+	if _, body := h.Get(t, "/today"); strings.Contains(body, watchesMotion) {
+		t.Fatal("motion-wake runs during active use")
+	}
+	for _, at := range []int{9, 23} { // the screensaver, then Dim clock
+		h.Clock.Set(time.Date(2026, 3, 15, at, 0, 0, 0, time.UTC))
+		if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, watchesMotion) || !strings.Contains(body, `id="camera"`) {
+			t.Fatalf("at %02d:00 motion-wake doesn't run with its camera icon: %q", at, body)
+		}
+	}
+
+	unlock(t, h, 1, "1234")
+	nightMode(t, h, "black")
+	if _, body := h.Get(t, "/screensaver"); strings.Contains(body, watchesMotion) {
+		t.Fatal("motion-wake runs during Black Night mode")
+	}
+
+	h.Clock.Set(time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC))
+	unlock(t, h, 1, "1234")
+	post(t, h, "/device/wall-display", nil)
+	if _, body := h.Get(t, "/screensaver"); strings.Contains(body, watchesMotion) {
+		t.Fatal("motion-wake runs on a browser that isn't a Wall display")
+	}
+}

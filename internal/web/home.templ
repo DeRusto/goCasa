@@ -12,6 +12,7 @@ type Device struct {
 	Theme       string // "light", "dark" or "auto"
 	DefaultView string // "" uses the Household's
 	WallDisplay bool
+	MotionWake  bool // camera motion-wake, only ever on for a Wall display
 	IdleSeconds int // a Wall display's screensaver_idle_seconds; 0 when unknown
 }
 
@@ -171,4 +172,35 @@ templ thisDevice() {
 			}
 		</span>
 	</p>
+	<form method="post" action="/device/motion-wake">
+		<label><input type="checkbox" name="motion_wake" checked?={ device(ctx).MotionWake }/> Camera motion-wake (a Wall display's screensaver or Dim clock wakes when someone walks up; frames never leave this device; Admin PIN needed)</label>
+		<button>Save</button>
+	</form>
+	<p>
+		Camera:
+		<span id="motion-wake">
+			if device(ctx).MotionWake {
+				checking…
+			} else {
+				off
+			}
+		</span>
+	</p>
+	if device(ctx).MotionWake {
+		<script>
+		// Ask for the camera here, while an Admin is at the device, so the screensaver never waits on a prompt.
+		(async () => {
+			const status = s => document.getElementById("motion-wake").textContent = s;
+			if (!window.isSecureContext) return status("needs HTTPS");
+			if (!navigator.mediaDevices) return status("not supported by this browser");
+			try {
+				const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+				stream.getTracks().forEach(t => t.stop());
+				status("allowed; runs on the screensaver and Dim clock");
+			} catch (e) {
+				status("not allowed: " + e.message);
+			}
+		})();
+		</script>
+	}
 }
