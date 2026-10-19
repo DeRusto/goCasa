@@ -7,6 +7,7 @@ type TodayPage struct {
 	Now     time.Time      // in the household's timezone
 	Weather *WeatherHeader // nil: no cached weather
 	Days    [2]CalendarDay // today and tomorrow
+	Chores  []Chore        // with a Round that can be claimed today
 	Todos   []Todo         // open, due today or overdue, oldest due first
 }
 
@@ -34,6 +35,16 @@ templ Today(p TodayPage) {
 			<main>
 				@calendarDay(p.Days[0], "Today")
 				@calendarDay(p.Days[1], "Tomorrow")
+				<section id="today-chores">
+					<h2><a href="/chores">Chores</a></h2>
+					if len(p.Chores) == 0 {
+						<p>No chores today.</p>
+					}
+					for _, c := range p.Chores {
+						<h3>{ c.Name }</h3>
+						@choreRounds(c, "/today")
+					}
+				</section>
 				<section id="today-todos">
 					<h2><a href="/todos">To-dos</a></h2>
 					if len(p.Todos) == 0 {

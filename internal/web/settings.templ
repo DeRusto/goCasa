@@ -13,6 +13,7 @@ type Member struct {
 	Role      string // "admin" or "member"
 	Archived  bool
 	HasAvatar bool // else initials on colour
+	Pet       bool // can't be an Admin or do Chores
 }
 
 // Feed is an iCal feed as Settings shows it.
@@ -26,7 +27,7 @@ type Feed struct {
 
 // Locks are which kinds of action need an Admin's PIN (spec §9).
 type Locks struct {
-	Calendar, Todos bool
+	Calendar, Chores, Todos bool
 }
 
 // Google is the Google accounts section of Settings.
@@ -142,6 +143,7 @@ templ memberFields(m Member) {
 			<option value="admin" selected?={ m.Role == "admin" }>Admin</option>
 		</select>
 	</label>
+	<label><input type="checkbox" name="pet" checked?={ m.Pet }/> Pet</label>
 }
 
 // Settings is the unlocked Settings page.
@@ -155,6 +157,7 @@ templ Settings(members []Member, feeds []Feed, google Google, weather Weather, l
 			<p>Settings always needs an Admin's PIN. A Lock makes one more kind of action need it too. Viewing and shopping lists are never locked.</p>
 			<form method="post" action="/settings/locks">
 				<label><input type="checkbox" name="lock_calendar" checked?={ locks.Calendar }/> Changing the calendar</label>
+				<label><input type="checkbox" name="lock_chores" checked?={ locks.Chores }/> Completing chores</label>
 				<label><input type="checkbox" name="lock_todos" checked?={ locks.Todos }/> Completing to-dos</label>
 				<button>Save Locks</button>
 			</form>
