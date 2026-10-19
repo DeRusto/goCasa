@@ -229,6 +229,31 @@ func (a *App) createCalendar(w http.ResponseWriter, r *http.Request) {
 
 var weekdays = map[string]bool{"MO": true, "TU": true, "WE": true, "TH": true, "FR": true, "SA": true, "SU": true}
 
+// presetRule reads the repeat, interval and byday fields of a preset (daily,
+// weekly on days, monthly or yearly, every N) into a rule, marking the days in
+// byDay, or returns a message for the person.
+func presetRule(r *http.Request, byDay map[string]bool) (rule, msg string) {
+	n := 1
+	if v := r.PostFormValue("interval"); v != "" {
+		var err error
+		if n, err = strconv.Atoi(v); err != nil || n < 1 || n > 999 {
+			return "", "Repeat every 1 to 999 days, weeks, months or years."
+		}
+	}
+	repeat := r.PostFormValue("repeat")
+	rule = "FREQ=" + strings.ToUpper(repeat) + ";INTERVAL=" + strconv.Itoa(n)
+	if repeat == "weekly" && len(r.PostForm["byday"]) > 0 {
+		for _, d := range r.PostForm["byday"] {
+			if !weekdays[d] {
+				return "", "Pick days of the week."
+			}
+			byDay[d] = true
+		}
+		rule += ";BYDAY=" + strings.Join(r.PostForm["byday"], ",")
+	}
+	return rule, ""
+}
+
 // parseRepeat reads the dialog's repeat fields into a rule and its EXDATEs and
 // RDATEs (as stored), or a message for the person.
 func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdates []string, msg string) {
@@ -238,22 +263,8 @@ func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdate
 	case "":
 		return "", nil, nil, ""
 	case "daily", "weekly", "monthly", "yearly":
-		n := 1
-		if f.Interval != "" {
-			var err error
-			if n, err = strconv.Atoi(f.Interval); err != nil || n < 1 || n > 999 {
-				return "", nil, nil, "Repeat every 1 to 999 days, weeks, months or years."
-			}
-		}
-		rule = "FREQ=" + strings.ToUpper(f.Repeat) + ";INTERVAL=" + strconv.Itoa(n)
-		if f.Repeat == "weekly" && len(r.PostForm["byday"]) > 0 {
-			for _, d := range r.PostForm["byday"] {
-				if !weekdays[d] {
-					return "", nil, nil, "Pick days of the week."
-				}
-				f.ByDay[d] = true
-			}
-			rule += ";BYDAY=" + strings.Join(r.PostForm["byday"], ",")
+		if rule, msg = presetRule(r, f.ByDay); msg != "" {
+			return "", nil, nil, msg
 		}
 	case "custom":
 		layout, basic := localLayout, "20060102T150405"
