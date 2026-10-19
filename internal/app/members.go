@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,6 +38,7 @@ const keepsAnAdmin = "(role != 'admin' OR archived OR (SELECT count(*) FROM memb
 // PIN (bcrypt hash, nil when the PIN field was blank).
 type memberForm struct {
 	name, color, role string
+	pet               bool
 	pinHash           []byte
 }
 
@@ -44,6 +47,7 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 		name:  strings.TrimSpace(r.PostFormValue("name")),
 		color: strings.ToLower(r.PostFormValue("color")),
 		role:  r.PostFormValue("role"),
+		pet:   r.PostFormValue("pet") != "",
 	}
 	pin := r.PostFormValue("pin")
 	switch {
@@ -53,6 +57,8 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 		return f, "Pick a colour."
 	case f.role != "admin" && f.role != "member":
 		return f, "Pick a role."
+	case f.pet && f.role == "admin":
+		return f, "A pet can't be an Admin."
 	case pin != "" && f.role != "admin":
 		return f, "Only Admins have a PIN."
 	case pin != "" && !pinRE.MatchString(pin):
@@ -69,7 +75,7 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 }
 
 func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
-	q := "SELECT id, name, color, role, archived, avatar IS NOT NULL FROM members"
+	q := "SELECT id, name, color, role, archived, avatar IS NOT NULL, pet FROM members"
 	if adminsOnly {
 		q += " WHERE role = 'admin' AND NOT archived"
 	}
@@ -81,7 +87,7 @@ func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
 	var ms []web.Member
 	for rows.Next() {
 		var m web.Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.Role, &m.Archived, &m.HasAvatar); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.Role, &m.Archived, &m.HasAvatar, &m.Pet); err != nil {
 			return nil, err
 		}
 		ms = append(ms, m)
@@ -90,9 +96,21 @@ func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, status int, c templ.Component) {
+	pill, err := a.weatherPill(r.Context())
+	if err != nil {
+		a.Log.Error("reading cached weather", "err", err) // the page still renders, without its pill
+	}
+	d := deviceOf(r)
+	if d.WallDisplay {
+		if h, err := a.household(r.Context()); err == nil {
+			d.IdleSeconds = h.IdleSeconds
+		} else {
+			a.Log.Error("reading household settings", "err", err) // the page falls back to the default idle time
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := c.Render(r.Context(), w); err != nil {
+	if err := c.Render(web.WithDevice(web.WithWeatherPill(r.Context(), pill), d), w); err != nil {
 		a.Log.Error("render failed", "path", r.URL.Path, "err", err)
 	}
 }
@@ -133,7 +151,67 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, errMsg))
+	wx, err := a.weatherSettings(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	var l web.Locks
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT lock_calendar, lock_chores, lock_todos FROM household_settings").Scan(&l.Calendar, &l.Chores, &l.Todos); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	ml, err := a.mealieSettings(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	im, err := a.immichSettings(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	fb, err := a.fallbackSettings(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, ml, im, fb, hh, errMsg))
+}
+
+// saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
+func (a *App) saveLocks(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
+		r.PostForm.Has("lock_calendar"), r.PostForm.Has("lock_chores"), r.PostForm.Has("lock_todos")); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// requireLock wraps an action behind the Lock in column: while that Lock is on,
+// a locked device goes to the PIN pad. One unlock covers every Lock (spec §9).
+func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if unlockedAdmin(r.Context()) == 0 {
+			var on bool
+			if err := a.DB.QueryRowContext(r.Context(), "SELECT "+column+" FROM household_settings").Scan(&on); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+			if on {
+				toLock(w, r)
+				return
+			}
+		}
+		h(w, r)
+	}
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -144,11 +222,39 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *App) requireUnlock(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if unlockedAdmin(r.Context()) == 0 {
-			http.Redirect(w, r, "/lock", http.StatusSeeOther)
+			toLock(w, r)
 			return
 		}
 		h(w, r)
 	}
+}
+
+// toLock sends a locked device to the PIN pad, remembering the page it was on
+// (a GET's own URL, or a POST's Referer) so unlocking returns there.
+func toLock(w http.ResponseWriter, r *http.Request) {
+	next := r.URL.RequestURI()
+	if r.Method != http.MethodGet {
+		next = ""
+		if u, err := url.Parse(r.Referer()); err == nil && r.Referer() != "" {
+			next = u.RequestURI()
+		}
+	}
+	to := "/lock"
+	if next = safeNext(next); next != "" {
+		to += "?next=" + url.QueryEscape(next)
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// safeNext is next if it is a path on this site, else "": no open redirect.
+func safeNext(next string) string {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsFunc(next, func(r rune) bool { return r == '\\' || r < 0x20 || r == 0x7f }) {
+		return ""
+	}
+	if u, err := url.Parse(next); err != nil || u.Scheme != "" || u.Host != "" {
+		return ""
+	}
+	return next
 }
 
 // postSetup creates the first Admin, only while there are no Members, and
@@ -193,7 +299,7 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 		http.Redirect(w, r, "/settings", http.StatusSeeOther) // first run
 		return
 	}
-	a.render(w, r, status, web.Lock(admins, errMsg))
+	a.render(w, r, status, web.Lock(admins, errMsg, safeNext(r.FormValue("next"))))
 }
 
 // Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
@@ -246,7 +352,7 @@ func (a *App) postLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setUnlock(w, id)
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, cmp.Or(safeNext(r.PostFormValue("next")), "/settings"), http.StatusSeeOther)
 }
 
 func (a *App) postLockNow(w http.ResponseWriter, r *http.Request) {
@@ -264,8 +370,8 @@ func (a *App) createMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO members (name, color, role, pin_hash, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
-		f.name, f.color, f.role, f.pinHash, a.Now().Unix()).Scan(&id); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO members (name, color, role, pin_hash, created_at, pet) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+		f.name, f.color, f.role, f.pinHash, a.Now().Unix(), f.pet).Scan(&id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -294,22 +400,33 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 	// One guarded statement, so another device's change between the read above
 	// and this write can't demote the last Admin or leave an Admin without a PIN.
-	res, err := a.DB.ExecContext(r.Context(), `UPDATE members SET name = ?1, color = ?2, role = ?3,
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6,
 			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END,
 			-- A new PIN clears a wrong-PIN block: this is how an Admin resets another's.
 			pin_failures = CASE WHEN ?4 IS NULL THEN pin_failures ELSE 0 END,
 			pin_blocked_until = CASE WHEN ?4 IS NULL THEN pin_blocked_until END
 		WHERE id = ?5
 			AND (?3 = 'admin' OR `+keepsAnAdmin+`)
-			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)`,
-		f.name, f.color, f.role, f.pinHash, id)
+			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)
+			AND (NOT ?6 OR NOT EXISTS (SELECT 1 FROM chore_assignees WHERE member_id = ?5))`,
+		f.name, f.color, f.role, f.pinHash, id, f.pet)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		msg := errLastAdmin
-		if f.role == "admin" && f.pinHash == nil {
+		var assigned bool
+		if f.pet {
+			if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM chore_assignees WHERE member_id = ?)", id).Scan(&assigned); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+		}
+		switch {
+		case assigned:
+			msg = "Pets can't be assigned Chores: take " + f.name + " off their Chores first."
+		case f.role == "admin" && f.pinHash == nil:
 			msg = f.name + " is no longer an Admin; making them one needs a PIN."
 		}
 		a.settingsPage(w, r, http.StatusConflict, msg)

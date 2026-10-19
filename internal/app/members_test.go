@@ -147,6 +147,24 @@ func TestUnlockLastsFiveIdleMinutesOnThatDeviceOnly(t *testing.T) {
 	}
 }
 
+func TestBackgroundRefreshesDontKeepTheUnlockAlive(t *testing.T) {
+	h := apptest.New(t)
+	setup(t, h)
+	for range 6 {
+		h.Clock.Advance(time.Minute)
+		req, _ := http.NewRequest(http.MethodGet, h.Server.URL+"/", nil)
+		req.Header.Set("X-Background", "1") // the live-update and clock scripts' refetch
+		res, err := h.Client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+	}
+	if _, body := h.Get(t, "/settings"); !strings.Contains(body, lockPage) {
+		t.Fatal("background refreshes kept the unlock alive past 5 idle minutes")
+	}
+}
+
 func TestUnlockCookieFlags(t *testing.T) {
 	for _, scheme := range []string{"http", "https"} {
 		h := apptest.New(t, func(o *app.Options) { o.Config.BaseURL.Scheme = scheme })

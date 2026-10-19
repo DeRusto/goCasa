@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,7 +25,7 @@ type Integration interface {
 	Sync(ctx context.Context, a *App, in integrationRow) error
 }
 
-var integrationTypes = map[string]Integration{"ical": icalFeed{}, googleType: googleSync{}}
+var integrationTypes = map[string]Integration{"ical": icalFeed{}, googleType: googleSync{}, openMeteoType: openMeteo{}, mealieType: mealie{}, immichType: immich{}}
 
 // integrationRow is what Sync gets from its row.
 type integrationRow struct {
@@ -152,12 +153,12 @@ func (a *App) gcm() (cipher.AEAD, error) {
 	return cipher.NewGCMWithRandomNonce(block)
 }
 
-// lastSync is when an integration last synced, as the pages show it.
-func (a *App) lastSync(at sql.NullInt64) string {
+// lastSync is when an integration last synced, as the pages show it; clock is a clockLayout.
+func (a *App) lastSync(ctx context.Context, at sql.NullInt64, clock string) string {
 	if !at.Valid {
 		return "never"
 	}
-	return time.Unix(at.Int64, 0).In(a.Config.Location).Format("2 Jan 2006 15:04")
+	return time.Unix(at.Int64, 0).In(a.location(ctx)).Format("2 Jan 2006 " + clock)
 }
 
 // syncNow syncs every integration that can sync, due or not.
@@ -176,6 +177,7 @@ func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 
 // feeds is the iCal feeds as Settings shows them.
 func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
+	clock := a.clock(ctx)
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.color, i.last_success_at, i.consecutive_failures, i.last_error
 		FROM integrations i JOIN source_calendars c ON c.integration_id = i.id WHERE i.type = 'ical' ORDER BY i.name, i.id`)
 	if err != nil {
@@ -189,7 +191,7 @@ func (a *App) feeds(ctx context.Context) ([]web.Feed, error) {
 		if err := rows.Scan(&f.ID, &f.Name, &f.Color, &ok, &f.Failures, &f.LastError); err != nil {
 			return nil, err
 		}
-		f.LastSuccess = a.lastSync(ok)
+		f.LastSuccess = a.lastSync(ctx, ok, clock)
 		fs = append(fs, f)
 	}
 	return fs, rows.Err()
@@ -200,7 +202,6 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	color := strings.ToLower(r.PostFormValue("color"))
 	raw := strings.TrimSpace(r.PostFormValue("url"))
-	u, err := url.Parse(feedURL(raw))
 	switch {
 	case name == "" || len([]rune(name)) > 50:
 		a.settingsPage(w, r, http.StatusBadRequest, "A feed's name is 1 to 50 characters.")
@@ -208,7 +209,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 	case !colorRE.MatchString(color):
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a colour.")
 		return
-	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
+	case parseUpstreamURL(feedURL(raw)) == nil:
 		a.settingsPage(w, r, http.StatusBadRequest, "A feed's address starts with webcal://, https:// or http://.")
 		return
 	}
@@ -244,5 +245,56 @@ func (a *App) removeFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.publish("deleted", "calendar", id)
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// parseUpstreamURL is raw parsed when it is an http(s) address with a host, else nil.
+func parseUpstreamURL(raw string) *url.URL {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil
+	}
+	return u
+}
+
+// alreadyConnected answers with a Settings error, and reports true, when an
+// integration of typ (shown as name) exists: each connects only once.
+func (a *App) alreadyConnected(w http.ResponseWriter, r *http.Request, typ, name string) bool {
+	var exists bool
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM integrations WHERE type = ?)", typ).Scan(&exists); err != nil {
+		a.serverError(w, r, err)
+		return true
+	}
+	if exists {
+		a.settingsPage(w, r, http.StatusBadRequest, name+" is already connected. Disconnect it first.")
+	}
+	return exists
+}
+
+// addIntegration stores a just-checked integration, one per typ, with its secret sealed,
+// syncs it once (its outcome shows in Settings) and returns to Settings.
+func (a *App) addIntegration(w http.ResponseWriter, r *http.Request, typ, name string, cfg any, secret string, intervalSeconds int) {
+	enc, err := a.seal([]byte(secret))
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	cfgJSON, _ := json.Marshal(cfg)
+	var id int64
+	// One statement, so a connect racing this one since alreadyConnected can't add a second.
+	err = a.DB.QueryRowContext(r.Context(), `INSERT INTO integrations (type, name, config_json, credentials_enc, sync_interval_seconds, next_sync_at)
+		SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM integrations WHERE type = ?1) RETURNING id`,
+		typ, name, string(cfgJSON), enc, intervalSeconds, a.Now().Add(syncTimeout).Unix()).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		a.settingsPage(w, r, http.StatusBadRequest, name+" is already connected. Disconnect it first.")
+		return
+	} else if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if err := a.syncIntegration(r.Context(), id); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

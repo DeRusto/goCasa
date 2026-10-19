@@ -1,0 +1,94 @@
+package web
+
+type ShoppingItem struct {
+	ID      int64
+	Note    string
+	Checked bool
+}
+
+type ShoppingList struct {
+	ID       int64
+	Name     string
+	Mirrored bool // lives in Mealie: reordered there, not here
+	ReadOnly bool // GoCasa can't reach Mealie
+	Items    []ShoppingItem
+}
+
+// Local list items reorder by drag (dragReorder) or, from the keyboard, up/down buttons.
+templ Lists(lists []ShoppingList, msg string) {
+	@layout("Lists") {
+		<main>
+			<h1>Lists</h1>
+			@defaultViewButton("/lists")
+			@formError(msg)
+			<div id="live">
+				for _, l := range lists {
+					<section data-list={ id(l.ID) }>
+						<h2>{ l.Name }</h2>
+						if l.ReadOnly {
+							<p role="status">GoCasa can't reach Mealie, so this list shows its last contents and can't be changed until Mealie answers again.</p>
+						}
+						<ul data-drag={ "list-" + id(l.ID) }>
+							for i, it := range l.Items {
+								<li
+									if !l.Mirrored {
+										data-move={ "/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/move" }
+									}
+								>
+									if !l.ReadOnly {
+										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } style="display:inline">
+											if it.Checked {
+												<input type="hidden" name="checked" value="false"/>
+												<button aria-label={ "Uncheck " + it.Note }>☑</button>
+											} else {
+												<input type="hidden" name="checked" value="true"/>
+												<button aria-label={ "Check " + it.Note }>☐</button>
+											}
+										</form>
+									}
+									<span data-item={ id(it.ID) } data-checked?={ it.Checked } style={ templ.KV("text-decoration:line-through", it.Checked) }>{ it.Note }</span>
+									if !l.Mirrored {
+										<span class="handle" aria-hidden="true">⠿</span>
+									}
+									if !l.Mirrored && i > 0 {
+										@moveButton(l.ID, it, i-1, "↑", "Move up ")
+									}
+									if !l.Mirrored && i < len(l.Items)-1 {
+										@moveButton(l.ID, it, i+1, "↓", "Move down ")
+									}
+									if !l.ReadOnly {
+										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/delete") } style="display:inline">
+											<button aria-label={ "Delete " + it.Note }>✕</button>
+										</form>
+									}
+								</li>
+							}
+						</ul>
+						if !l.ReadOnly {
+							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items") }>
+								<input name="note" required maxlength="200" aria-label={ "Add to " + l.Name }/>
+								<button>Add</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/clear") }>
+								<button>Clear checked from { l.Name }</button>
+							</form>
+						}
+					</section>
+				}
+			</div>
+			<form method="post" action="/lists">
+				<input name="name" required maxlength="50" aria-label="New list name"/>
+				<button>New list</button>
+			</form>
+		</main>
+		@dragReorder()
+		@liveUpdates()
+	}
+}
+
+templ moveButton(list int64, it ShoppingItem, to int, arrow, label string) {
+	<form method="post" action={ templ.SafeURL("/lists/" + id(list) + "/items/" + id(it.ID) + "/move") } style="display:inline">
+		<input type="hidden" name="position" value={ id(int64(to)) }/>
+		<button aria-label={ label + it.Note }>{ arrow }</button>
+	</form>
+}

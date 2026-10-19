@@ -30,15 +30,24 @@ func unlockedAdmin(ctx context.Context) int64 {
 // A valid one counts as activity and is re-issued with the current time, so
 // the unlock lasts until unlockIdle passes with no request from that browser.
 // The Member must still be an active Admin, so a demoted, archived or deleted
-// Admin is locked out.
+// Admin is locked out. Automatic requests aren't activity: page scripts mark
+// their refetches with X-Background, and the change stream can't set headers.
 func (a *App) withUnlock(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id := a.checkUnlock(r); id != 0 {
-			a.setUnlock(w, id)
+			if !background(r) {
+				a.setUnlock(w, id)
+			}
 			r = r.WithContext(context.WithValue(r.Context(), adminKey{}, id))
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// background reports a request no one asked for: a page's live refresh, clock
+// tick or photo poll, or the change stream.
+func background(r *http.Request) bool {
+	return r.Header.Get("X-Background") != "" || r.URL.Path == "/events/stream"
 }
 
 func (a *App) checkUnlock(r *http.Request) int64 {

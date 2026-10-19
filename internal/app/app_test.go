@@ -12,14 +12,6 @@ import (
 	"github.com/DeRusto/goCasa/internal/apptest"
 )
 
-func TestHomePageRenders(t *testing.T) {
-	h := apptest.New(t)
-	code, body := h.Get(t, "/")
-	if code != http.StatusOK || !strings.Contains(body, "<h1>GoCasa</h1>") {
-		t.Fatalf("GET / = %d %q", code, body)
-	}
-}
-
 func TestUnknownPathIs404(t *testing.T) {
 	h := apptest.New(t)
 	if code, _ := h.Get(t, "/nope"); code != http.StatusNotFound {

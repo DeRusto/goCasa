@@ -1,0 +1,266 @@
+package web
+
+import "strconv"
+
+type Todo struct {
+	ID       int64
+	ColumnID int64
+	Title    string
+	Notes    string
+	Due      string // YYYY-MM-DD or ""
+	Done     bool
+	Overdue  bool
+
+	// Repeat is "" or a preset (daily, weekly, monthly, yearly), every Interval,
+	// weekly on ByDay (MO…SU); its next due date counts from the schedule
+	// unless FromCompletion.
+	Repeat, Interval string
+	ByDay            map[string]bool
+	FromCompletion   bool
+}
+
+type TodoColumn struct {
+	ID    int64
+	Name  string
+	Todos []Todo
+}
+
+// TodosPage is the to-do board with its filter. Dragging is offered only on
+// the plain board (manual order, open to-dos, no due filter), where a column
+// shows every to-do whose place it would set.
+type TodosPage struct {
+	Columns                     []TodoColumn
+	Status, Due, From, To, Sort string
+	Draggable                   bool
+}
+
+templ TodosBoard(p TodosPage) {
+	@layout("To-dos") {
+		<main>
+			<h1>To-dos</h1>
+			<p><a href="/">Home</a></p>
+			@defaultViewButton("/todos")
+			<form method="get" action="/todos">
+				<label>
+					Show
+					<select name="status">
+						@option("open", "Open", p.Status)
+						@option("done", "Completed", p.Status)
+						@option("all", "All", p.Status)
+					</select>
+				</label>
+				<label>
+					Due
+					<select name="due">
+						@option("", "Any time", p.Due)
+						@option("overdue", "Overdue", p.Due)
+						@option("today", "Today or earlier", p.Due)
+						@option("week", "Within 7 days", p.Due)
+						@option("none", "No due date", p.Due)
+					</select>
+				</label>
+				<label>From <input type="date" name="from" value={ p.From }/></label>
+				<label>To <input type="date" name="to" value={ p.To }/></label>
+				<label>
+					Sort
+					<select name="sort">
+						@option("", "My order", p.Sort)
+						@option("due", "Due date", p.Sort)
+					</select>
+				</label>
+				<button>Apply</button>
+			</form>
+			<div id="live">
+				for _, c := range p.Columns {
+					<section data-column={ strconv.FormatInt(c.ID, 10) }>
+						<h2>{ c.Name }</h2>
+						<ul class="todos" data-drag="todos">
+							for i, t := range c.Todos {
+								<li data-todo={ strconv.FormatInt(t.ID, 10) }>
+									<a href={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>{ t.Title }</a>
+									if t.Due != "" {
+										<span>
+											due { t.Due }
+											if t.Overdue {
+												(overdue)
+											}
+										</span>
+									}
+									if t.Done {
+										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/reopen") }><button>Re-open</button></form>
+									} else {
+										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/complete") }><button>Done</button></form>
+									}
+									if p.Draggable {
+										<span class="handle" aria-hidden="true">⠿</span>
+										if i > 0 {
+											@todoMove(c, i, i-1, "↑", "Move up ")
+										}
+										if i < len(c.Todos)-1 {
+											@todoMove(c, i, i+1, "↓", "Move down ")
+										}
+									}
+								</li>
+							}
+						</ul>
+						<form method="post" action="/todos">
+							<input type="hidden" name="column_id" value={ strconv.FormatInt(c.ID, 10) }/>
+							<label>New to-do <input name="title" required maxlength="200"/></label>
+							<label>Due <input type="date" name="due_date"/></label>
+							<button>Add</button>
+						</form>
+						<details>
+							<summary>Column</summary>
+							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10)) }>
+								<label>Name <input name="name" required maxlength="50" value={ c.Name }/></label>
+								<button>Rename</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10) + "/delete") } onsubmit="return confirm('Delete this column and all its to-dos?')">
+								<button>Delete column</button>
+							</form>
+						</details>
+					</section>
+				}
+			</div>
+			<form method="post" action="/todo-columns">
+				<label>Column name <input name="name" required maxlength="50"/></label>
+				<button>Add column</button>
+			</form>
+		</main>
+		if p.Draggable {
+			@dragReorder()
+		}
+		@liveUpdates()
+	}
+}
+
+func repeatFrom(t Todo) string {
+	if t.FromCompletion {
+		return "completion"
+	}
+	return ""
+}
+
+templ option(value, label, selected string) {
+	<option value={ value } selected?={ value == selected }>{ label }</option>
+}
+
+// todoMove is a keyboard-operable button moving column c's to-do i to j.
+templ todoMove(c TodoColumn, i, j int, arrow, label string) {
+	<form method="post" action="/todos/reorder" style="display:inline">
+		<input type="hidden" name="column_id" value={ strconv.FormatInt(c.ID, 10) }/>
+		for _, id := range swapped(c.Todos, i, j) {
+			<input type="hidden" name="ids" value={ id }/>
+		}
+		<button aria-label={ label + c.Todos[i].Title }>{ arrow }</button>
+	</form>
+}
+
+// swapped is the ids of todos with i and j swapped.
+func swapped(todos []Todo, i, j int) []string {
+	ids := make([]string, len(todos))
+	for k, t := range todos {
+		ids[k] = strconv.FormatInt(t.ID, 10)
+	}
+	ids[i], ids[j] = ids[j], ids[i]
+	return ids
+}
+
+// dragReorder lets an item be dragged by its handle within its list, or
+// across lists sharing a data-drag group, with pointer events so it works on
+// touch screens too. On drop, to-do columns post their whole order; any other
+// item posts its new position to its data-move address. Up/down buttons are
+// the keyboard way.
+// shortcut: hand-rolled instead of vendored SortableJS (no network to vendor it); swap in SortableJS for animation and auto-scroll.
+templ dragReorder() {
+	<style>.handle { touch-action: none; cursor: grab; }</style>
+	<script>
+	(() => {
+		let item, from;
+		document.addEventListener("pointerdown", e => {
+			const h = e.target.closest(".handle");
+			if (!h) return;
+			e.preventDefault();
+			item = h.closest("li");
+			from = item.closest("ul");
+			item.style.opacity = "0.5";
+		});
+		document.addEventListener("pointermove", e => {
+			if (!item) return;
+			const over = document.elementFromPoint(e.clientX, e.clientY);
+			const ul = over?.closest("section")?.querySelector("ul[data-drag]");
+			if (!ul || ul.dataset.drag !== from.dataset.drag) return;
+			const li = over.closest("ul[data-drag] > li");
+			if (li && li !== item) {
+				const r = li.getBoundingClientRect();
+				li.parentNode.insertBefore(item, e.clientY < r.top + r.height / 2 ? li : li.nextSibling);
+			} else if (!li && !ul.contains(item)) {
+				ul.appendChild(item);
+			}
+		});
+		const drop = () => {
+			if (!item) return;
+			item.style.opacity = "";
+			const to = item.closest("ul");
+			if (item.dataset.move) {
+				fetch(item.dataset.move, { method: "POST", redirect: "manual", body: new URLSearchParams({ position: [...to.children].indexOf(item) }) });
+			} else {
+				for (const ul of new Set([from, to])) {
+					const body = new URLSearchParams({ column_id: ul.closest("section").dataset.column });
+					ul.querySelectorAll("li[data-todo]").forEach(li => body.append("ids", li.dataset.todo));
+					fetch("/todos/reorder", { method: "POST", redirect: "manual", body });
+				}
+			}
+			item = null;
+		};
+		document.addEventListener("pointerup", drop);
+		document.addEventListener("pointercancel", drop); // what shows is what's kept
+	})();
+	</script>
+}
+
+// TodoEditPage edits one to-do; it can move to another column.
+templ TodoEditPage(t Todo, columns []TodoColumn) {
+	@layout("To-do") {
+		<main>
+			<h1>To-do</h1>
+			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>
+				<label>Title <input name="title" required maxlength="200" value={ t.Title }/></label>
+				<label>
+					Column
+					<select name="column_id">
+						for _, c := range columns {
+							<option value={ strconv.FormatInt(c.ID, 10) } selected?={ c.ID == t.ColumnID }>{ c.Name }</option>
+						}
+					</select>
+				</label>
+				<label>Due <input type="date" name="due_date" value={ t.Due }/></label>
+				<fieldset>
+					<legend>Repeats</legend>
+					<select name="repeat">
+						for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}} {
+							<option value={ o[0] } selected?={ o[0] == t.Repeat }>{ o[1] }</option>
+						}
+					</select>
+					<label>Every <input type="number" name="interval" min="1" max="999" value={ t.Interval } placeholder="1"/></label>
+					for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+						<label><input type="checkbox" name="byday" value={ d } checked?={ t.ByDay[d] }/> { d }</label>
+					}
+					<label>
+						Next due counts from
+						<select name="repeat_from">
+							@option("", "the schedule", repeatFrom(t))
+							@option("completion", "completion", repeatFrom(t))
+						</select>
+					</label>
+				</fieldset>
+				<label>Notes <textarea name="notes" maxlength="5000">{ t.Notes }</textarea></label>
+				<button>Save</button>
+			</form>
+			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/delete") } onsubmit="return confirm('Delete this to-do?')">
+				<button>Delete</button>
+			</form>
+			<p><a href="/todos">Back</a></p>
+		</main>
+	}
+}

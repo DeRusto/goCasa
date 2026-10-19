@@ -13,6 +13,7 @@ type Member struct {
 	Role      string // "admin" or "member"
 	Archived  bool
 	HasAvatar bool // else initials on colour
+	Pet       bool // can't be an Admin or do Chores
 }
 
 // Feed is an iCal feed as Settings shows it.
@@ -22,6 +23,11 @@ type Feed struct {
 	LastSuccess string // when it last synced, or "never"
 	Failures    int    // syncs failed in a row
 	LastError   string
+}
+
+// Locks are which kinds of action need an Admin's PIN (spec §9).
+type Locks struct {
+	Calendar, Chores, Todos bool
 }
 
 // Google is the Google accounts section of Settings.
@@ -100,12 +106,15 @@ templ Setup(errMsg string) {
 }
 
 // Lock is the Admin PIN pad: pick your avatar, enter your PIN.
-templ Lock(admins []Member, errMsg string) {
+templ Lock(admins []Member, errMsg, next string) {
 	@layout("Unlock Settings") {
 		<main>
 			<h1>Enter your PIN</h1>
 			@formError(errMsg)
 			<form method="post" action="/lock">
+				if next != "" {
+					<input type="hidden" name="next" value={ next }/>
+				}
 				<fieldset>
 					<legend>Who are you?</legend>
 					for i, m := range admins {
@@ -137,15 +146,24 @@ templ memberFields(m Member) {
 			<option value="admin" selected?={ m.Role == "admin" }>Admin</option>
 		</select>
 	</label>
+	<label><input type="checkbox" name="pet" checked?={ m.Pet }/> Pet</label>
 }
 
 // Settings is the unlocked Settings page.
-templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
+templ Settings(members []Member, feeds []Feed, google Google, weather Weather, locks Locks, mealie *Mealie, immich *Immich, fallback Fallback, household Household, errMsg string) {
 	@layout("Settings") {
 		<main>
 			<h1>Settings</h1>
 			<form method="post" action="/lock/now"><button>Lock now</button></form>
 			@formError(errMsg)
+			<h2>Locks</h2>
+			<p>Settings always needs an Admin's PIN. A Lock makes one more kind of action need it too. Viewing and shopping lists are never locked.</p>
+			<form method="post" action="/settings/locks">
+				<label><input type="checkbox" name="lock_calendar" checked?={ locks.Calendar }/> Changing the calendar</label>
+				<label><input type="checkbox" name="lock_chores" checked?={ locks.Chores }/> Completing chores</label>
+				<label><input type="checkbox" name="lock_todos" checked?={ locks.Todos }/> Completing to-dos</label>
+				<button>Save Locks</button>
+			</form>
 			<h2>Members</h2>
 			<p>People or pets. Only Admins have a PIN, and they need one.</p>
 			for _, m := range members {
@@ -230,6 +248,12 @@ templ Settings(members []Member, feeds []Feed, google Google, errMsg string) {
 				<button>Add feed</button>
 			</form>
 			@googleSection(google, members)
+			@weatherSection(weather)
+			@mealieSection(mealie)
+			@immichSection(immich)
+			@fallbackSection(fallback)
+			@householdSection(household)
+			@thisDevice()
 		</main>
 	}
 }

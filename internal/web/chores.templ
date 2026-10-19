@@ -1,0 +1,278 @@
+package web
+
+import (
+	"strconv"
+	"strings"
+)
+
+// Weekdays are the chosen-weekday codes in the order the form shows them.
+var Weekdays = []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
+
+// Chore is a Chore with the Rounds that can still be claimed.
+type Chore struct {
+	ID        int64
+	Name      string
+	Schedule  string // daily, weekdays, weekly or monthly
+	Days      string // chosen weekdays, e.g. "MO,WE"
+	Anyone    bool   // else an Each chore
+	Points    int
+	Archived  bool
+	Assignees map[int64]bool // on the edit page
+	Rounds    []ChoreRound   // oldest first
+}
+
+// ChoreRound is one claimable Round and who can tap it or has done it.
+type ChoreRound struct {
+	Start string // YYYY-MM-DD
+	Late  bool
+	Taps  []ChoreTap
+}
+
+// ChoreTap is a Member's avatar on a Round: done when CompletionID is set.
+type ChoreTap struct {
+	Member       Member
+	CompletionID int64
+}
+
+func schedule(c Chore) string {
+	switch c.Schedule {
+	case "weekdays":
+		return strings.ReplaceAll(c.Days, ",", ", ")
+	case "":
+		return ""
+	}
+	return strings.ToUpper(c.Schedule[:1]) + c.Schedule[1:]
+}
+
+// choreRounds is a Chore's claimable Rounds as avatar taps; next is the page to return to.
+templ choreRounds(c Chore, next string) {
+	for _, rd := range c.Rounds {
+		<div class="round" data-round={ rd.Start }>
+			if rd.Late {
+				<strong>Late</strong> ({ rd.Start })
+			}
+			for _, t := range rd.Taps {
+				if t.CompletionID == 0 {
+					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/complete") } style="display:inline">
+						<input type="hidden" name="member_id" value={ id(t.Member.ID) }/>
+						<input type="hidden" name="round" value={ rd.Start }/>
+						<input type="hidden" name="next" value={ next }/>
+						<button aria-label={ "Complete " + c.Name + " for " + t.Member.Name }>
+							@avatar(t.Member)
+							{ t.Member.Name }
+						</button>
+					</form>
+				} else {
+					<span class="done">
+						@avatar(t.Member)
+						{ t.Member.Name } done
+					</span>
+					<form method="post" action={ templ.SafeURL("/chores/completions/" + id(t.CompletionID) + "/delete") } style="display:inline">
+						<input type="hidden" name="next" value={ next }/>
+						<button>Undo</button>
+					</form>
+				}
+			}
+		</div>
+	}
+}
+
+templ choreFields(c Chore, people []Member) {
+	<label>Name <input name="name" required maxlength="100" value={ c.Name }/></label>
+	<label>
+		Comes back
+		<select name="schedule">
+			@option("daily", "Daily", c.Schedule)
+			@option("weekdays", "On chosen weekdays", c.Schedule)
+			@option("weekly", "Weekly", c.Schedule)
+			@option("monthly", "Monthly", c.Schedule)
+		</select>
+	</label>
+	for _, d := range Weekdays {
+		<label><input type="checkbox" name="days" value={ d } checked?={ strings.Contains(c.Days, d) }/> { d }</label>
+	}
+	<label>
+		Who
+		<select name="kind">
+			<option value="each" selected?={ !c.Anyone }>Each assignee does their own</option>
+			<option value="anyone" selected?={ c.Anyone }>Anyone assigned, once per Round</option>
+		</select>
+	</label>
+	<label>Points <input type="number" name="points" min="0" max="10000" required value={ strconv.Itoa(c.Points) }/></label>
+	<fieldset>
+		<legend>Assigned to</legend>
+		for _, m := range people {
+			<label><input type="checkbox" name="assignees" value={ id(m.ID) } checked?={ c.Assignees[m.ID] }/> { m.Name }</label>
+		}
+	</fieldset>
+}
+
+// Points is the chore board's points part.
+type Points struct {
+	Balances map[int64]int // by Member
+	Rewards  []Reward
+	Pending  []Redemption // oldest first
+}
+
+// Reward is something to spend points on, at a fixed cost.
+type Reward struct {
+	ID       int64
+	Name     string
+	Cost     int
+	Archived bool
+}
+
+// Redemption is a Member's pending request for a Reward.
+type Redemption struct {
+	ID     int64
+	Reward Reward
+	Member Member
+}
+
+// ChoresBoard is the chore board: tap your avatar to complete a Round.
+templ ChoresBoard(chores []Chore, people []Member, p Points) {
+	@layout("Chores") {
+		<main>
+			<h1>Chores</h1>
+			<p><a href="/">Home</a></p>
+			@defaultViewButton("/chores")
+			<div id="live">
+				for _, c := range chores {
+					if !c.Archived {
+						<section data-chore={ id(c.ID) }>
+							<h2><a href={ templ.SafeURL("/chores/" + id(c.ID)) }>{ c.Name }</a></h2>
+							<p>
+								{ schedule(c) } · { strconv.Itoa(c.Points) } points
+								if c.Anyone {
+									· anyone
+								}
+							</p>
+							if len(c.Rounds) == 0 {
+								<p>Not today.</p>
+							}
+							@choreRounds(c, "/chores")
+						</section>
+					}
+				}
+				<section id="balances">
+					<h2>Points</h2>
+					<ul>
+						for _, m := range people {
+							<li>
+								@avatar(m)
+								{ m.Name }: <span data-balance={ id(m.ID) }>{ strconv.Itoa(p.Balances[m.ID]) }</span> points
+							</li>
+						}
+					</ul>
+				</section>
+				if len(p.Pending) > 0 {
+					<section id="redemptions">
+						<h2>Waiting for an Admin</h2>
+						for _, rd := range p.Pending {
+							<div>
+								@avatar(rd.Member)
+								{ rd.Member.Name } asks for { rd.Reward.Name } ({ strconv.Itoa(rd.Reward.Cost) } points)
+								<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/approve") } style="display:inline">
+									<button>Approve</button>
+								</form>
+								<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/decline") } style="display:inline">
+									<button>Decline</button>
+								</form>
+							</div>
+						}
+					</section>
+				}
+				<section id="rewards">
+					<h2>Rewards</h2>
+					for _, rw := range p.Rewards {
+						if !rw.Archived {
+							<div data-reward={ id(rw.ID) }>
+								<h3>{ rw.Name } · { strconv.Itoa(rw.Cost) } points</h3>
+								for _, m := range people {
+									if p.Balances[m.ID] >= rw.Cost {
+										<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem") } style="display:inline">
+											<input type="hidden" name="member_id" value={ id(m.ID) }/>
+											<button aria-label={ m.Name + " asks for " + rw.Name }>
+												@avatar(m)
+												{ m.Name }
+											</button>
+										</form>
+									}
+								}
+								<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/archive") } style="display:inline">
+									<button>Archive { rw.Name }</button>
+								</form>
+							</div>
+						}
+					}
+				</section>
+			</div>
+			<details>
+				<summary>Set up a Chore (Admin)</summary>
+				<form method="post" action="/chores">
+					@choreFields(Chore{Schedule: "daily", Assignees: map[int64]bool{}}, people)
+					<button>Add Chore</button>
+				</form>
+			</details>
+			<details>
+				<summary>Add a Reward (Admin)</summary>
+				<form method="post" action="/rewards">
+					<label>Name <input name="name" required maxlength="100"/></label>
+					<label>Costs <input type="number" name="points" min="1" max="100000" required/> points</label>
+					<button>Add Reward</button>
+				</form>
+			</details>
+			<details>
+				<summary>Adjust points (Admin)</summary>
+				<form method="post" action="/adjustments">
+					<label>
+						Who
+						<select name="member_id">
+							for _, m := range people {
+								<option value={ id(m.ID) }>{ m.Name }</option>
+							}
+						</select>
+					</label>
+					<label>Points (+ or −) <input type="number" name="points" min="-100000" max="100000" required/></label>
+					<label>Reason <input name="reason" required maxlength="200"/></label>
+					<button>Adjust</button>
+				</form>
+			</details>
+			<h2>Archived</h2>
+			for _, c := range chores {
+				if c.Archived {
+					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/restore") }>
+						{ c.Name } <button>Restore { c.Name }</button>
+					</form>
+				}
+			}
+			for _, rw := range p.Rewards {
+				if rw.Archived {
+					<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/restore") }>
+						{ rw.Name } <button>Restore { rw.Name }</button>
+					</form>
+				}
+			}
+		</main>
+		@liveUpdates()
+	}
+}
+
+// ChorePage edits a Chore; changes only affect future Rounds.
+templ ChorePage(c Chore, people []Member) {
+	@layout("Chore") {
+		<main>
+			<h1>{ c.Name }</h1>
+			<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID)) }>
+				@choreFields(c, people)
+				<button>Save</button>
+			</form>
+			if !c.Archived {
+				<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/archive") }>
+					<button>Archive { c.Name }</button>
+				</form>
+			}
+			<p><a href="/chores">Back</a></p>
+		</main>
+	}
+}

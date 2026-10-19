@@ -396,6 +396,7 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 // googleSettings is the Google section of Settings.
 func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
 	g := web.Google{Configured: a.Config.GoogleClientID != "", RedirectURI: a.Config.GoogleRedirectURI}
+	clock := a.clock(ctx)
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, i.status = 'reconnect_needed', i.last_success_at, i.consecutive_failures, i.last_error, c.id, c.name, c.color, c.enabled, c.read_only,
 			(SELECT json_group_array(member_id) FROM source_calendar_members WHERE calendar_id = c.id)
 		FROM integrations i LEFT JOIN source_calendars c ON c.integration_id = i.id
@@ -412,7 +413,7 @@ func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
 		if err := rows.Scan(&acct.ID, &acct.Email, &acct.Reconnect, &lastSuccess, &acct.Failures, &acct.LastError, &calID, &name, &color, &enabled, &readOnly, &members); err != nil {
 			return g, err
 		}
-		acct.LastSuccess = a.lastSync(lastSuccess)
+		acct.LastSuccess = a.lastSync(ctx, lastSuccess, clock)
 		if acct.Reconnect {
 			acct.Failures = 0 // Reconnect needed says why it isn't syncing
 		}
