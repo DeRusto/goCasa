@@ -119,7 +119,12 @@ templ motionWake() {
 		video.muted = true;
 		video.playsInline = true;
 		video.srcObject = stream;
-		await video.play();
+		try {
+			await video.play();
+		} catch { // playback blocked: stop the camera rather than run it with no icon
+			stream.getTracks().forEach(t => t.stop());
+			return;
+		}
 		const w = 64, h = 48, canvas = document.createElement("canvas");
 		canvas.width = w;
 		canvas.height = h;
