@@ -1,6 +1,13 @@
 package web
 
 templ layout(title string) {
+	@page(title, true) {
+		{ children... }
+	}
+}
+
+// page is a full page; Today has its large weather header instead of the pill.
+templ page(title string, pill bool) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -9,7 +16,9 @@ templ layout(title string) {
 			<title>{ title }</title>
 		</head>
 		<body>
-			@weatherPill()
+			if pill {
+				@weatherPill()
+			}
 			{ children... }
 		</body>
 	</html>
@@ -20,6 +29,7 @@ templ Home() {
 		<main>
 			<h1>GoCasa</h1>
 			<p>Your family dashboard is running.</p>
+			<p><a href="/today">Today</a></p>
 			<p><a href="/calendar">Calendar</a></p>
 			<p><a href="/todos">To-dos</a></p>
 			<p><a href="/lists">Lists</a></p>

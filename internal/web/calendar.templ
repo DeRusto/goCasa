@@ -23,6 +23,7 @@ type CalendarEvent struct {
 	Colors   []string // its Members', else its calendar's
 	ReadOnly bool     // from a calendar feed: no edit link
 	Synced   bool     // from Google: links to its Members
+	Past     bool     // over already; only Today greys these
 }
 
 // StaleCalendar is a shown calendar that isn't syncing.
@@ -138,7 +139,7 @@ templ calendarDay(d CalendarDay, heading string) {
 		</h3>
 		<ul>
 			for _, e := range d.Events {
-				<li>
+				<li class={ templ.KV("past", e.Past) } style={ templ.KV("opacity:.5", e.Past) }>
 					@swatches(e.Colors)
 					if e.Synced {
 						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google">{ e.Time } { e.Title }</a>
@@ -284,6 +285,7 @@ templ liveUpdates() {
 			}
 		};
 		es.onmessage = refresh;
+		document.addEventListener("refresh-live", refresh); // a page's own timer, e.g. Today's clock
 		es.onopen = refresh;
 		es.onerror = () => {
 			// The browser gives up on an error response (e.g. a proxy's 502 mid-restart): reload, which retries.

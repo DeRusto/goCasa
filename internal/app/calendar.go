@@ -126,31 +126,9 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		p.Users[id] = true
 	}
 	for i := range n {
-		d0, d1 := dayAt(first, i), dayAt(first, i+1)
-		ds := d0.Format(dateLayout)
-		day := web.CalendarDay{Date: d0, Today: d0.Equal(today), Faded: view == "month" && d0.Month() != date.Month()}
-		for _, e := range evs {
-			ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly, Synced: e.synced}
-			if e.allDay {
-				if e.date > ds || e.endDate <= ds {
-					continue
-				}
-				ev.Time = "All day"
-			} else {
-				if e.start >= d1.Unix() || e.end <= d0.Unix() {
-					continue
-				}
-				from, to := "…", "…"
-				if e.start >= d0.Unix() {
-					from = time.Unix(e.start, 0).In(loc).Format("15:04")
-				}
-				if e.end <= d1.Unix() {
-					to = time.Unix(e.end, 0).In(loc).Format("15:04")
-				}
-				ev.Time = from + "–" + to
-			}
-			day.Events = append(day.Events, ev)
-		}
+		d0 := dayAt(first, i)
+		day := calendarDay(evs, d0, today, 0)
+		day.Faded = view == "month" && d0.Month() != date.Month()
 		if view != "agenda" || len(day.Events) > 0 {
 			p.Days = append(p.Days, day)
 		}
@@ -180,6 +158,39 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, web.Calendar(p))
+}
+
+// calendarDay is the events of evs on day d0 (local midnight); timed events
+// that ended by now (unix seconds; 0: never) are Past.
+func calendarDay(evs []calendarEvent, d0, today time.Time, now int64) web.CalendarDay {
+	loc := d0.Location()
+	d1 := dayAt(d0, 1)
+	ds := d0.Format(dateLayout)
+	day := web.CalendarDay{Date: d0, Today: d0.Equal(today)}
+	for _, e := range evs {
+		ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly, Synced: e.synced}
+		if e.allDay {
+			if e.date > ds || e.endDate <= ds {
+				continue
+			}
+			ev.Time = "All day"
+		} else {
+			if e.start >= d1.Unix() || e.end <= d0.Unix() {
+				continue
+			}
+			from, to := "…", "…"
+			if e.start >= d0.Unix() {
+				from = time.Unix(e.start, 0).In(loc).Format("15:04")
+			}
+			if e.end <= d1.Unix() {
+				to = time.Unix(e.end, 0).In(loc).Format("15:04")
+			}
+			ev.Time = from + "–" + to
+			ev.Past = e.end <= now
+		}
+		day.Events = append(day.Events, ev)
+	}
+	return day
 }
 
 func (a *App) activeMembers(r *http.Request) ([]web.Member, error) {
@@ -229,6 +240,31 @@ func (a *App) createCalendar(w http.ResponseWriter, r *http.Request) {
 
 var weekdays = map[string]bool{"MO": true, "TU": true, "WE": true, "TH": true, "FR": true, "SA": true, "SU": true}
 
+// presetRule reads the repeat, interval and byday fields of a preset (daily,
+// weekly on days, monthly or yearly, every N) into a rule, marking the days in
+// byDay, or returns a message for the person.
+func presetRule(r *http.Request, byDay map[string]bool) (rule, msg string) {
+	n := 1
+	if v := r.PostFormValue("interval"); v != "" {
+		var err error
+		if n, err = strconv.Atoi(v); err != nil || n < 1 || n > 999 {
+			return "", "Repeat every 1 to 999 days, weeks, months or years."
+		}
+	}
+	repeat := r.PostFormValue("repeat")
+	rule = "FREQ=" + strings.ToUpper(repeat) + ";INTERVAL=" + strconv.Itoa(n)
+	if repeat == "weekly" && len(r.PostForm["byday"]) > 0 {
+		for _, d := range r.PostForm["byday"] {
+			if !weekdays[d] {
+				return "", "Pick days of the week."
+			}
+			byDay[d] = true
+		}
+		rule += ";BYDAY=" + strings.Join(r.PostForm["byday"], ",")
+	}
+	return rule, ""
+}
+
 // parseRepeat reads the dialog's repeat fields into a rule and its EXDATEs and
 // RDATEs (as stored), or a message for the person.
 func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdates []string, msg string) {
@@ -238,22 +274,8 @@ func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdate
 	case "":
 		return "", nil, nil, ""
 	case "daily", "weekly", "monthly", "yearly":
-		n := 1
-		if f.Interval != "" {
-			var err error
-			if n, err = strconv.Atoi(f.Interval); err != nil || n < 1 || n > 999 {
-				return "", nil, nil, "Repeat every 1 to 999 days, weeks, months or years."
-			}
-		}
-		rule = "FREQ=" + strings.ToUpper(f.Repeat) + ";INTERVAL=" + strconv.Itoa(n)
-		if f.Repeat == "weekly" && len(r.PostForm["byday"]) > 0 {
-			for _, d := range r.PostForm["byday"] {
-				if !weekdays[d] {
-					return "", nil, nil, "Pick days of the week."
-				}
-				f.ByDay[d] = true
-			}
-			rule += ";BYDAY=" + strings.Join(r.PostForm["byday"], ",")
+		if rule, msg = presetRule(r, f.ByDay); msg != "" {
+			return "", nil, nil, msg
 		}
 	case "custom":
 		layout, basic := localLayout, "20060102T150405"
