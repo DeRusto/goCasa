@@ -145,7 +145,7 @@ func Home() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<main><h1>GoCasa</h1><p>Your family dashboard is running.</p><p><a href=\"/today\">Today</a></p><p><a href=\"/calendar\">Calendar</a></p><p><a href=\"/todos\">To-dos</a></p></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<main><h1>GoCasa</h1><p>Your family dashboard is running.</p><p><a href=\"/today\">Today</a></p><p><a href=\"/calendar\">Calendar</a></p><p><a href=\"/todos\">To-dos</a></p><p><a href=\"/lists\">Lists</a></p></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
