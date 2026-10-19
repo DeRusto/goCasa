@@ -20,6 +20,7 @@ import (
 // Upstreams are the fixed third-party base URLs; tests point them at fakes.
 // Per-integration URLs (Immich, Mealie, iCal feeds) live on the integration row.
 type Upstreams struct {
+	GoogleAuth  string // the consent page the browser is sent to
 	GoogleAPI   string
 	GoogleOAuth string
 	OpenMeteo   string
@@ -27,6 +28,7 @@ type Upstreams struct {
 
 func DefaultUpstreams() Upstreams {
 	return Upstreams{
+		GoogleAuth:  "https://accounts.google.com",
 		GoogleAPI:   "https://www.googleapis.com",
 		GoogleOAuth: "https://oauth2.googleapis.com",
 		OpenMeteo:   "https://api.open-meteo.com",
@@ -118,6 +120,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
 	mux.HandleFunc("POST /settings/feeds", a.requireUnlock(a.addFeed))
 	mux.HandleFunc("POST /settings/feeds/{id}/delete", a.requireUnlock(a.removeFeed))
+	mux.HandleFunc("POST /integrations/google/connect", a.requireUnlock(a.connectGoogle))
+	mux.HandleFunc("GET /auth/google/callback", a.requireUnlock(a.googleCallback))
+	mux.HandleFunc("POST /settings/google/{id}/delete", a.requireUnlock(a.disconnectGoogle))
+	mux.HandleFunc("POST /settings/google-calendars/{id}", a.requireUnlock(a.updateGoogleCalendar))
 	mux.HandleFunc("POST /settings/members/{id}/archive", a.requireUnlock(a.setArchived(true)))
 	mux.HandleFunc("POST /settings/members/{id}/restore", a.requireUnlock(a.setArchived(false)))
 	// shortcut: calendar changes ignore the calendar Lock until Locks land (#40).
