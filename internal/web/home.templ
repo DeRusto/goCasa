@@ -65,6 +65,14 @@ templ page(title string, pill bool) {
 			<title>{ title }</title>
 		</head>
 		<body>
+			<nav>
+				<a href="/today">Today</a>
+				<a href="/calendar">Calendar</a>
+				<a href="/todos">To-dos</a>
+				<a href="/lists">Lists</a>
+				<a href="/chores">Chores</a>
+				<a href="/settings">Settings</a>
+			</nav>
 			if pill {
 				@weatherPill()
 			}

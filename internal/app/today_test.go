@@ -108,3 +108,18 @@ func TestTodayWithoutWeatherStillRenders(t *testing.T) {
 		t.Fatalf("GET /today = %d %q", code, page)
 	}
 }
+
+func TestEveryPageLinksToTheOthersButNotTheScreensaver(t *testing.T) {
+	h := household(t)
+	for _, path := range []string{"/today", "/calendar", "/todos", "/lists", "/chores", "/settings"} {
+		_, body := h.Get(t, path)
+		for _, link := range []string{`href="/today"`, `href="/calendar"`, `href="/todos"`, `href="/lists"`, `href="/chores"`, `href="/settings"`} {
+			if !strings.Contains(body, link) {
+				t.Errorf("%s has no %s", path, link)
+			}
+		}
+	}
+	if _, body := h.Get(t, "/screensaver"); strings.Contains(body, "<nav") {
+		t.Error("the screensaver has the nav")
+	}
+}
