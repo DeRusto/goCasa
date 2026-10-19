@@ -106,12 +106,15 @@ templ Setup(errMsg string) {
 }
 
 // Lock is the Admin PIN pad: pick your avatar, enter your PIN.
-templ Lock(admins []Member, errMsg string) {
+templ Lock(admins []Member, errMsg, next string) {
 	@layout("Unlock Settings") {
 		<main>
 			<h1>Enter your PIN</h1>
 			@formError(errMsg)
 			<form method="post" action="/lock">
+				if next != "" {
+					<input type="hidden" name="next" value={ next }/>
+				}
 				<fieldset>
 					<legend>Who are you?</legend>
 					for i, m := range admins {
