@@ -40,6 +40,11 @@ func submit(t *testing.T, h *apptest.Harness, path, action string, v url.Values)
 func syncedWith(t *testing.T, g *fakeGoogle, events ...map[string]any) (*apptest.Harness, int64) {
 	t.Helper()
 	g.events["alice@example.com"] = events
+	for _, e := range events { // Google holds the versions it sent
+		if etag, ok := e["etag"].(string); ok && g.etags[e["id"].(string)] == "" {
+			g.etags[e["id"].(string)] = etag
+		}
+	}
 	h, cal := syncedGoogle(t, g)
 	h.RunDue()
 	return h, cal
@@ -83,6 +88,13 @@ func TestGoogleEditWritesFirst(t *testing.T) {
 	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(d, "14:00–15:00 Dentist (moved)") || !strings.Contains(d, "#3b82f6") || strings.Contains(d, "#22c55e") {
 		t.Fatalf("after the edit's sync: %q", d)
 	}
+
+	// Taken by Google but not synced back: the person hears so.
+	g.set(func(g *fakeGoogle) { g.fail, g.etags["dentist"] = http.StatusServiceUnavailable, "e2" })
+	if code, page := submit(t, h, path, "/edit", googleEdit("Dentist (later)", "2026-03-16T14:00", "2026-03-16T15:00")); code != http.StatusBadGateway || !strings.Contains(page, "Saved in Google") {
+		t.Fatalf("an edit whose sync failed = %d:\n%s", code, page)
+	}
+	g.set(func(g *fakeGoogle) { g.fail = 0 })
 	// A Members-only change is GoCasa's own: it needs no Google.
 	g.set(func(g *fakeGoogle) { g.writeFail = http.StatusServiceUnavailable })
 	n = len(g.sent())
@@ -179,6 +191,14 @@ func TestGoogleCreateAndDelete(t *testing.T) {
 		t.Fatalf("Google got %+v", w)
 	}
 
+	// A hidden calendar isn't offered, and a form naming it is refused.
+	h.App.DB.Exec("UPDATE source_calendars SET enabled = 0 WHERE id = ?", alice)
+	n := len(g.sent())
+	if code, _ := h.Post(t, "/calendar/event", form); code != http.StatusBadRequest || len(g.sent()) != n {
+		t.Fatalf("creating on a hidden calendar = %d, %d writes", code, len(g.sent())-n)
+	}
+	h.App.DB.Exec("UPDATE source_calendars SET enabled = 1 WHERE id = ?", alice)
+
 	// Read-only: the dialog is Members only, and the API refuses changes.
 	h.App.DB.Exec("UPDATE source_calendars SET read_only = 1 WHERE id = ?", alice)
 	swim := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "new1"))
@@ -188,7 +208,7 @@ func TestGoogleCreateAndDelete(t *testing.T) {
 	if _, page := h.Get(t, "/calendar/event/new"); strings.Contains(page, ">Alice</option>") {
 		t.Fatal("a read-only calendar is offered for new events")
 	}
-	n := len(g.sent())
+	n = len(g.sent())
 	for _, p := range []string{swim + "/edit", swim + "/delete"} {
 		if code, _ := h.Post(t, p, googleEdit("Swim", "2026-03-17T10:00", "2026-03-17T11:00", "etag", "n1")); code != http.StatusBadRequest {
 			t.Fatalf("%s on a read-only calendar = %d", p, code)
@@ -252,9 +272,9 @@ func TestGoogleSeriesScopes(t *testing.T) {
 	}
 	w := g.sent()[n:]
 	if len(w) != 2 || w[0].method != http.MethodPost || w[0].body["summary"] != "Swim club" ||
-		fmt.Sprint(w[0].body["recurrence"]) != "[RRULE:FREQ=WEEKLY;COUNT=9 EXDATE;TZID=Europe/London:20260404T090000]" ||
+		fmt.Sprint(w[0].body["recurrence"]) != "[RRULE:FREQ=WEEKLY;COUNT=9 EXDATE;TZID=Europe/London:20260404T090000 RDATE;TZID=Europe/London:20260401T090000]" ||
 		w[1].method != http.MethodPatch || w[1].id != "swim" || w[1].ifMatch != "m1" ||
-		fmt.Sprint(w[1].body["recurrence"]) != "[RRULE:FREQ=WEEKLY;UNTIL=20260321T095959Z EXDATE;TZID=Europe/London:20260404T100000 RDATE;TZID=Europe/London:20260401T100000]" {
+		fmt.Sprint(w[1].body["recurrence"]) != "[RRULE:FREQ=WEEKLY;UNTIL=20260321T095959Z EXDATE;TZID=Europe/London:20260404T100000]" {
 		t.Fatalf("This and following sent %+v", w)
 	}
 	if q := g.requests()[len(g.requests())-1]; q.Has("syncToken") {

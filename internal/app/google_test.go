@@ -36,7 +36,7 @@ type fakeGoogle struct {
 	lists     []url.Values              // each events list's query, with its calendar as "cal"
 	writes    []gWrite                  // each request to one event, and each insert
 	got       map[string]map[string]any // event id → what a GET of it answers
-	etags     map[string]string         // event id → its etag now: an If-Match of another answers 412
+	etags     map[string]string         // event id → its etag now: an If-Match of another answers 412, none 428
 	writeFail int                       // when set, writes answer it
 	failOn    string                    // the methods writeFail applies to, e.g. "PATCH DELETE"; "" is every write
 	*httptest.Server
@@ -157,6 +157,9 @@ func newGoogle(t *testing.T) *fakeGoogle {
 		switch {
 		case g.writeFail != 0 && (g.failOn == "" || strings.Contains(g.failOn, r.Method)):
 			w.WriteHeader(g.writeFail)
+		case r.Method != http.MethodPost && wr.ifMatch == "" && g.etags[id] != "" && !strings.HasPrefix(id, "new"):
+			// GoCasa's own new Series, taken back after a failed Split, is the one write without a version.
+			w.WriteHeader(http.StatusPreconditionRequired)
 		case wr.ifMatch != "" && g.etags[id] != "" && wr.ifMatch != g.etags[id]:
 			w.WriteHeader(http.StatusPreconditionFailed)
 			w.Write([]byte(`{"error":{"code":412,"errors":[{"reason":"conditionNotMet"}]}}`))

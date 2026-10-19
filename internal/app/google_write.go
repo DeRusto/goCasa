@@ -32,6 +32,8 @@ var (
 	errReadOnly    = &refusal{msg: "That Google calendar is read-only."}
 	// An event synced before etags were kept has none to send as If-Match; the full re-import migration 0009 starts fills it.
 	errNoVersion = &refusal{msg: "GoCasa hasn't synced this event's version from Google yet. Sync now, then try again.", conflict: true}
+	// The write reached Google; the sync after it didn't, so GoCasa still shows the old copy.
+	errNotLanded = &refusal{msg: "Saved in Google, but GoCasa couldn't sync it back yet: the calendar shows it after the next sync. Members picked for a new event need picking again then.", status: http.StatusBadGateway}
 )
 
 // googleRow is a Google event as a write needs it.
@@ -197,18 +199,37 @@ func originalOf(t googleTime) (int64, error) {
 
 // splitRecurrence is master's recurrence ended just before its occurrence o,
 // and the recurrence a new series from o takes: the same rule with an
-// unchanged COUNT less the occurrences before o, and its EXDATEs.
-// shortcut: RDATEs stay on the old series only; split them once GoCasa writes RDATEs to Google series.
+// unchanged COUNT less the occurrences before o, its EXDATEs, and the RDATEs
+// from o on, which the old series loses.
 func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, err error) {
 	for _, line := range master.Recurrence {
-		rule, ok := strings.CutPrefix(line, "RRULE:")
-		if !ok {
-			old = append(old, line)
-			if strings.HasPrefix(line, "EXDATE") {
-				from = append(from, line)
+		head, values, _ := strings.Cut(line, ":")
+		switch {
+		case strings.HasPrefix(line, "RDATE"):
+			zone := tzidZone(head, a.seriesZone(master))
+			var before, after []string
+			for _, v := range strings.Split(values, ",") {
+				if t, ok := recurInstant(v, zone); ok && t.Unix() >= o {
+					after = append(after, v)
+				} else {
+					before = append(before, v)
+				}
+			}
+			if len(before) > 0 {
+				old = append(old, head+":"+strings.Join(before, ","))
+			}
+			if len(after) > 0 {
+				from = append(from, head+":"+strings.Join(after, ","))
 			}
 			continue
+		case strings.HasPrefix(line, "EXDATE"):
+			old, from = append(old, line), append(from, line)
+			continue
+		case !strings.HasPrefix(line, "RRULE:"):
+			old = append(old, line)
+			continue
 		}
+		rule := values
 		old = append(old, "RRULE:"+untilBefore(rule, o, master.Start.Date != ""))
 		if m := countRE.FindStringSubmatch(rule); m != nil {
 			mc, ok := master.change(master.Start.TimeZone, a.Config.Location)
@@ -223,6 +244,13 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 				zone, _ = time.LoadLocation(mc.tzid.(string))
 			}
 			to := time.Unix(o, 0).UTC()
+			first := time.Unix(ev.start, 0)
+			if ev.allDay {
+				first, _ = time.Parse(dateLayout, ev.date)
+			}
+			if to.After(first.AddDate(horizonYears, 0, 0)) {
+				return nil, nil, &refusal{msg: fmt.Sprintf("GoCasa counts a Series' events only %d years from its start: split this one in Google.", horizonYears)}
+			}
 			before, err := occurrences(ev, series{rule: rule}, zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
 			if err != nil {
 				return nil, nil, err
@@ -235,14 +263,11 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 	return old, from, nil
 }
 
-// shiftExdates is recurrence lines with their EXDATEs moved as a Split moves Series master's
-// Occurrence o to c's start, in c's kind of time and zone, so they keep
-// excluding the same Occurrences.
-func (a *App) shiftExdates(lines []string, master googleEvent, o int64, c eventChange) []string {
-	oldZone := a.Config.Location
-	if z, err := time.LoadLocation(master.Start.TimeZone); master.Start.TimeZone != "" && err == nil {
-		oldZone = z
-	}
+// shiftDates is recurrence lines with their EXDATEs and RDATEs moved as a
+// Split moves Series master's Occurrence o to c's start, in c's kind of time
+// and zone, so they keep naming the same Occurrences.
+func (a *App) shiftDates(lines []string, master googleEvent, o int64, c eventChange) []string {
+	oldZone := a.seriesZone(master)
 	// Wall times as UTC (see floating), so a shift keeps 10:00 at 10:00 across DST; all-day keys are midnights already.
 	oldWall := time.Unix(o, 0).UTC()
 	if master.Start.Date == "" {
@@ -258,17 +283,13 @@ func (a *App) shiftExdates(lines []string, master googleEvent, o int64, c eventC
 	delta := newWall.Sub(oldWall)
 	var out []string
 	for _, line := range lines {
-		if !strings.HasPrefix(line, "EXDATE") {
+		name, _, _ := strings.Cut(line, ";")
+		if name != "EXDATE" && name != "RDATE" {
 			out = append(out, line)
 			continue
 		}
 		head, values, _ := strings.Cut(line, ":")
-		zone := oldZone
-		if _, tz, ok := strings.Cut(head, "TZID="); ok {
-			if z, err := time.LoadLocation(strings.Split(tz, ";")[0]); err == nil {
-				zone = z
-			}
-		}
+		zone := tzidZone(head, oldZone)
 		var vs []string
 		for _, v := range strings.Split(values, ",") {
 			t, err := time.Parse("20060102T150405", v)
@@ -284,10 +305,44 @@ func (a *App) shiftExdates(lines []string, master googleEvent, o int64, c eventC
 			}
 		}
 		if len(vs) > 0 {
-			out = append(out, "EXDATE"+param+strings.Join(vs, ","))
+			out = append(out, name+param+strings.Join(vs, ","))
 		}
 	}
 	return out
+}
+
+// seriesZone is Google Series master's own zone, else the Household's.
+func (a *App) seriesZone(master googleEvent) *time.Location {
+	if z, err := time.LoadLocation(master.Start.TimeZone); master.Start.TimeZone != "" && err == nil {
+		return z
+	}
+	return a.Config.Location
+}
+
+// tzidZone is the zone a recurrence line's head ("EXDATE;TZID=…") names, else zone.
+func tzidZone(head string, zone *time.Location) *time.Location {
+	if _, tz, ok := strings.Cut(head, "TZID="); ok {
+		if z, err := time.LoadLocation(strings.Split(tz, ";")[0]); err == nil {
+			return z
+		}
+	}
+	return zone
+}
+
+// recurInstant reads an EXDATE or RDATE value as an Occurrence key: UTC, a
+// wall time in zone, or a date's UTC midnight.
+func recurInstant(v string, zone *time.Location) (time.Time, bool) {
+	if t, err := time.Parse("20060102T150405Z", v); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse("20060102", v); err == nil {
+		return t, true
+	}
+	t, err := time.Parse("20060102T150405", v)
+	if err == nil {
+		t, err = parseLocal(t.Format(localLayout), zone)
+	}
+	return t, err == nil
 }
 
 // untilBefore is rule ending just before Occurrence o. Its own COUNT or UNTIL
@@ -389,7 +444,7 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		return googleResult{}, err
 	}
 	body := googleBody(c)
-	body["recurrence"] = a.shiftExdates(from, master, o, c)
+	body["recurrence"] = a.shiftDates(from, master, o, c)
 	var made googleEvent
 	if err := g.call(ctx, http.MethodPost, "", "", body, &made); err != nil {
 		return googleResult{}, err
@@ -440,7 +495,8 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 // landGoogle runs the sync after a write to calendar cal of account, giving
 // res' rows Members members unless they already have them (base) — and
 // returns once it's done, so the page that follows shows the change.
-func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResult, members, base []int64) error {
+// It is errNotLanded if that sync failed.
+func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResult, members, base []int64) (err error) {
 	if res.full {
 		// Under the sync's lock: a sync running now would write back the token it read.
 		mu, _ := a.syncLocks.LoadOrStore(account, &sync.Mutex{})
@@ -452,10 +508,19 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 			return err
 		}
 	}
+	landed := true
 	if !res.local {
 		if err := a.syncIntegration(ctx, account); err != nil {
 			return err
 		}
+		var failures int
+		if err := a.DB.QueryRowContext(ctx, "SELECT consecutive_failures FROM integrations WHERE id = ?", account).Scan(&failures); err != nil {
+			return err
+		}
+		landed = failures == 0
+	}
+	if !landed {
+		defer func() { err = cmp.Or(err, error(errNotLanded)) }()
 	}
 	if res.target == "" {
 		return nil
@@ -544,16 +609,29 @@ func (a *App) googleAnswer(w http.ResponseWriter, r *http.Request, row googleRow
 	var no *refusal
 	switch {
 	case errors.Is(err, errStale):
-		if err := a.landGoogle(r.Context(), row.account, row.calendarID, googleResult{}, nil, nil); err != nil {
+		msg := errStale.msg
+		if err := a.landGoogle(r.Context(), row.account, row.calendarID, googleResult{}, nil, nil); errors.Is(err, errNotLanded) {
+			msg = "This event changed in Google, and GoCasa couldn't reload it: Sync now, then redo your change."
+		} else if err != nil {
 			a.serverError(w, r, err)
 			return
 		}
-		a.googlePage(w, r, http.StatusConflict, row.id, errStale.msg)
+		a.googlePage(w, r, http.StatusConflict, row.id, msg)
 	case errors.As(err, &no):
 		a.eventPage(w, r, no.code(), f, no.msg)
 	default:
 		a.serverError(w, r, err)
 	}
+}
+
+// landFailed answers a change whose landing failed: errNotLanded tells the
+// person it reached Google; anything else is a server error.
+func (a *App) landFailed(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errNotLanded) {
+		http.Error(w, errNotLanded.msg, errNotLanded.code())
+		return
+	}
+	a.serverError(w, r, err)
 }
 
 // saveGoogle changes a Google event from the dialog, in the Edit scope it picks.
@@ -596,7 +674,7 @@ func (a *App) saveGoogle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := a.landGoogle(r.Context(), row.account, row.calendarID, res, c.members, base); err != nil {
-		a.serverError(w, r, err)
+		a.landFailed(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/calendar?date="+c.firstDay, http.StatusSeeOther)
@@ -627,7 +705,7 @@ func (a *App) deleteGoogle(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 	default:
 		if err := a.landGoogle(r.Context(), row.account, row.calendarID, res, nil, nil); err != nil {
-			a.serverError(w, r, err)
+			a.landFailed(w, r, err)
 			return
 		}
 		http.Redirect(w, r, "/calendar", http.StatusSeeOther)
@@ -641,7 +719,7 @@ func (a *App) createGoogle(w http.ResponseWriter, r *http.Request, f web.EventFo
 	var cal string
 	var readOnly bool
 	err := a.DB.QueryRowContext(r.Context(), `SELECT i.id, c.external_id, c.read_only FROM source_calendars c JOIN integrations i ON i.id = c.integration_id
-		WHERE c.id = ? AND i.type = ?`, c.calendarID, googleType).Scan(&account, &cal, &readOnly)
+		WHERE c.id = ? AND i.type = ? AND c.enabled`, c.calendarID, googleType).Scan(&account, &cal, &readOnly)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false
 	}
@@ -669,7 +747,7 @@ func (a *App) createGoogle(w http.ResponseWriter, r *http.Request, f web.EventFo
 	if err == nil {
 		err = a.landGoogle(r.Context(), account, c.calendarID, googleResult{target: made.ID, fresh: true}, c.members, base)
 		if err != nil {
-			a.serverError(w, r, err)
+			a.landFailed(w, r, err)
 			return true
 		}
 		http.Redirect(w, r, "/calendar?date="+c.firstDay, http.StatusSeeOther)
