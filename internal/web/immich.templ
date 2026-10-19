@@ -32,7 +32,7 @@ templ immichSection(m *Immich) {
 	} else {
 		<p>Connected to { m.URL }. The screensaver shows photos from any album or person picked here.</p>
 		@syncStatus(m.LastSuccess, m.Failures, m.LastError)
-		switch {
+		switch  {
 			case m.NothingPicked:
 				<p role="status">No photos show: pick at least one album or person.</p>
 			case m.Photos == 0:

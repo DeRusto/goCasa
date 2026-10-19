@@ -84,7 +84,8 @@ func deviceOf(r *http.Request) web.Device {
 // household is the household settings the pages follow.
 func (a *App) household(ctx context.Context) (web.Household, error) {
 	var h web.Household
-	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo FROM household_settings").Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto)
+	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, night_mode, night_start, night_end FROM household_settings").
+		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.NightMode, &h.NightStart, &h.NightEnd)
 	return h, err
 }
 
@@ -107,7 +108,8 @@ func (a *App) clock(ctx context.Context) string {
 }
 
 // saveHousehold sets the household Default view, clock, week start and
-// screensaver idle time and seconds per photo (each kept when not sent); it sits behind requireUnlock.
+// screensaver idle time, seconds per photo and Night mode (each kept when not
+// sent); it sits behind requireUnlock.
 func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	view := r.PostFormValue("default_view")
 	start, err := strconv.Atoi(r.PostFormValue("week_start"))
@@ -129,12 +131,25 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		}
 		perPhoto = &n
 	}
+	var night *string
+	var nightStart, nightEnd *int
+	if v := r.PostFormValue("night_mode"); v != "" {
+		s, err1 := strconv.Atoi(r.PostFormValue("night_start"))
+		e, err2 := strconv.Atoi(r.PostFormValue("night_end"))
+		if (v != "off" && v != "black" && v != "dim_clock") || err1 != nil || err2 != nil || s < 0 || s > 23 || e < 0 || e > 23 {
+			a.settingsPage(w, r, http.StatusBadRequest, "Pick a Night mode and its start and end hours (0 to 23).")
+			return
+		}
+		night, nightStart, nightEnd = &v, &s, &e
+	}
 	if _, ok := defaultViews[view]; !ok || err != nil || start < 0 || start > 6 {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a default view and the day weeks start on.")
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?, screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo)",
-		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto); err != nil {
+	if _, err := a.DB.ExecContext(r.Context(), `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
+		screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo),
+		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end)`,
+		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, night, nightStart, nightEnd); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -177,8 +192,9 @@ func (a *App) setWallDisplay(w http.ResponseWriter, r *http.Request) {
 }
 
 // getScreensaver is what an idle Wall display shows: the clock and today's
-// agenda over the current Immich photo, else on dark (Night mode builds on this page). Entering it
-// ends any Admin unlock; a touch goes to "/", the Default view at today.
+// agenda over the current Immich photo, else on dark, or Night mode in its
+// hours. Entering it ends any Admin unlock; a touch goes to "/", the Default
+// view at today.
 func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 	a.clearUnlock(w) // after withUnlock's refresh, so this later Set-Cookie wins
 	now := a.Now().In(a.Config.Location)
@@ -189,6 +205,10 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clock := clockLayout(hh.Clock24)
+	if mode := nightModeAt(hh, now.Hour()); mode != "off" {
+		a.render(w, r, http.StatusOK, web.Night(mode, web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}))
+		return
+	}
 	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 1), nil)
 	if err != nil {
 		a.serverError(w, r, err)
@@ -207,6 +227,17 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
 	}, src, int(left.Seconds()+.999)))
+}
+
+// nightModeAt is the Night mode in force at hour (0-23): the household's
+// between night_start and night_end (wrapping past midnight), else "off".
+// Equal start and end means no night.
+func nightModeAt(h web.Household, hour int) string {
+	s, e := h.NightStart, h.NightEnd
+	if (s < e && hour >= s && hour < e) || (s > e && (hour >= s || hour < e)) {
+		return h.NightMode
+	}
+	return "off"
 }
 
 // setDefaultView saves this device's Default view in its browser; a blank one

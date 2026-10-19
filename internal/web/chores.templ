@@ -107,8 +107,30 @@ templ choreFields(c Chore, people []Member) {
 	</fieldset>
 }
 
+// Points is the chore board's points part.
+type Points struct {
+	Balances map[int64]int // by Member
+	Rewards  []Reward
+	Pending  []Redemption // oldest first
+}
+
+// Reward is something to spend points on, at a fixed cost.
+type Reward struct {
+	ID       int64
+	Name     string
+	Cost     int
+	Archived bool
+}
+
+// Redemption is a Member's pending request for a Reward.
+type Redemption struct {
+	ID     int64
+	Reward Reward
+	Member Member
+}
+
 // ChoresBoard is the chore board: tap your avatar to complete a Round.
-templ ChoresBoard(chores []Chore, people []Member) {
+templ ChoresBoard(chores []Chore, people []Member, p Points) {
 	@layout("Chores") {
 		<main>
 			<h1>Chores</h1>
@@ -132,6 +154,58 @@ templ ChoresBoard(chores []Chore, people []Member) {
 						</section>
 					}
 				}
+				<section id="balances">
+					<h2>Points</h2>
+					<ul>
+						for _, m := range people {
+							<li>
+								@avatar(m)
+								{ m.Name }: <span data-balance={ id(m.ID) }>{ strconv.Itoa(p.Balances[m.ID]) }</span> points
+							</li>
+						}
+					</ul>
+				</section>
+				if len(p.Pending) > 0 {
+					<section id="redemptions">
+						<h2>Waiting for an Admin</h2>
+						for _, rd := range p.Pending {
+							<div>
+								@avatar(rd.Member)
+								{ rd.Member.Name } asks for { rd.Reward.Name } ({ strconv.Itoa(rd.Reward.Cost) } points)
+								<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/approve") } style="display:inline">
+									<button>Approve</button>
+								</form>
+								<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/decline") } style="display:inline">
+									<button>Decline</button>
+								</form>
+							</div>
+						}
+					</section>
+				}
+				<section id="rewards">
+					<h2>Rewards</h2>
+					for _, rw := range p.Rewards {
+						if !rw.Archived {
+							<div data-reward={ id(rw.ID) }>
+								<h3>{ rw.Name } · { strconv.Itoa(rw.Cost) } points</h3>
+								for _, m := range people {
+									if p.Balances[m.ID] >= rw.Cost {
+										<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem") } style="display:inline">
+											<input type="hidden" name="member_id" value={ id(m.ID) }/>
+											<button aria-label={ m.Name + " asks for " + rw.Name }>
+												@avatar(m)
+												{ m.Name }
+											</button>
+										</form>
+									}
+								}
+								<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/archive") } style="display:inline">
+									<button>Archive { rw.Name }</button>
+								</form>
+							</div>
+						}
+					}
+				</section>
 			</div>
 			<details>
 				<summary>Set up a Chore (Admin)</summary>
@@ -140,11 +214,42 @@ templ ChoresBoard(chores []Chore, people []Member) {
 					<button>Add Chore</button>
 				</form>
 			</details>
+			<details>
+				<summary>Add a Reward (Admin)</summary>
+				<form method="post" action="/rewards">
+					<label>Name <input name="name" required maxlength="100"/></label>
+					<label>Costs <input type="number" name="points" min="1" max="100000" required/> points</label>
+					<button>Add Reward</button>
+				</form>
+			</details>
+			<details>
+				<summary>Adjust points (Admin)</summary>
+				<form method="post" action="/adjustments">
+					<label>
+						Who
+						<select name="member_id">
+							for _, m := range people {
+								<option value={ id(m.ID) }>{ m.Name }</option>
+							}
+						</select>
+					</label>
+					<label>Points (+ or −) <input type="number" name="points" min="-100000" max="100000" required/></label>
+					<label>Reason <input name="reason" required maxlength="200"/></label>
+					<button>Adjust</button>
+				</form>
+			</details>
 			<h2>Archived</h2>
 			for _, c := range chores {
 				if c.Archived {
 					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/restore") }>
 						{ c.Name } <button>Restore { c.Name }</button>
+					</form>
+				}
+			}
+			for _, rw := range p.Rewards {
+				if rw.Archived {
+					<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/restore") }>
+						{ rw.Name } <button>Restore { rw.Name }</button>
 					</form>
 				}
 			}

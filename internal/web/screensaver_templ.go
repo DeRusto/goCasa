@@ -164,10 +164,13 @@ func Screensaver(p TodayPage, photo string, photoSeconds int) templ.Component {
 	})
 }
 
-// wallDisplay holds a Screen Wake Lock where the browser allows it, showing
-// its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
-// screensaver after that long with no touch, pointer or key input.
-func wallDisplay(idleSeconds int) templ.Component {
+// Night is what a Wall display shows in Night mode's hours instead of the
+// screensaver: mode "black" is a black screen without the wake lock, so the
+// device's own power settings may turn the display off; "dim_clock" keeps the
+// wake lock and shows a dimmed time and date. As on the screensaver, a touch
+// goes to "/" (idle then comes back here), and data-night tells a wake script
+// which mode it is in.
+func Night(mode string, p TodayPage) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -188,20 +191,111 @@ func wallDisplay(idleSeconds int) templ.Component {
 			templ_7745c5c3_Var9 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<script data-idle-seconds=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"color-scheme\" content=\"dark\"><title>Night</title></head><body style=\"margin:0;background:#000;color:#333\"><a id=\"wake\" href=\"/\" aria-label=\"Wake\" data-night=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
-		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(idleSeconds))
+		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(mode)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 49, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 61, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\">\n\t(() => {\n\t\tconst idle = Number(document.currentScript.dataset.idleSeconds);\n\t\tconst status = s => { const el = document.getElementById(\"wake-lock\"); if (el) el.textContent = s; };\n\t\tlet lock;\n\t\tconst hold = async () => {\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!(\"wakeLock\" in navigator)) return status(\"not supported by this browser\");\n\t\t\tif (document.visibilityState !== \"visible\" || (lock && !lock.released)) return;\n\t\t\ttry {\n\t\t\t\tlock = await navigator.wakeLock.request(\"screen\");\n\t\t\t\tstatus(\"held\");\n\t\t\t\tlock.addEventListener(\"release\", () => status(\"released\"));\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t};\n\t\tdocument.addEventListener(\"visibilitychange\", hold); // the browser drops the lock when the page hides\n\t\thold();\n\t\tif (idle > 0) {\n\t\t\tlet timer;\n\t\t\tconst reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign(\"/screensaver\"), idle * 1000); };\n\t\t\tfor (const e of [\"pointerdown\", \"pointermove\", \"touchstart\", \"keydown\", \"wheel\"]) addEventListener(e, reset, { capture: true, passive: true });\n\t\t\treset();\n\t\t}\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" style=\"position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if mode == "dim_clock" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<p style=\"font-size:6rem;margin:0\"><time>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var11 string
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(p.Clock)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 63, Col: 55}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</time></p><p style=\"font-size:2rem;margin:0\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var12 string
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 64, Col: 74}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</a> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if mode == "dim_clock" && device(ctx).WallDisplay {
+			templ_7745c5c3_Err = wallDisplay(0).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<script>\n\t\t\t// Reload on the next minute: the clock stays current and Night mode ends on time.\n\t\t\tsetTimeout(() => location.reload(), 60000 - Date.now() % 60000);\n\t\t\t</script></body></html>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// wallDisplay holds a Screen Wake Lock where the browser allows it, showing
+// its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
+// screensaver after that long with no touch, pointer or key input.
+func wallDisplay(idleSeconds int) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var13 == nil {
+			templ_7745c5c3_Var13 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<script data-idle-seconds=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var14 string
+		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(idleSeconds))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 82, Col: 54}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\">\n\t(() => {\n\t\tconst idle = Number(document.currentScript.dataset.idleSeconds);\n\t\tconst status = s => { const el = document.getElementById(\"wake-lock\"); if (el) el.textContent = s; };\n\t\tlet lock;\n\t\tconst hold = async () => {\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!(\"wakeLock\" in navigator)) return status(\"not supported by this browser\");\n\t\t\tif (document.visibilityState !== \"visible\" || (lock && !lock.released)) return;\n\t\t\ttry {\n\t\t\t\tlock = await navigator.wakeLock.request(\"screen\");\n\t\t\t\tstatus(\"held\");\n\t\t\t\tlock.addEventListener(\"release\", () => status(\"released\"));\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t};\n\t\tdocument.addEventListener(\"visibilitychange\", hold); // the browser drops the lock when the page hides\n\t\thold();\n\t\tif (idle > 0) {\n\t\t\tlet timer;\n\t\t\tconst reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign(\"/screensaver\"), idle * 1000); };\n\t\t\tfor (const e of [\"pointerdown\", \"pointermove\", \"touchstart\", \"keydown\", \"wheel\"]) addEventListener(e, reset, { capture: true, passive: true });\n\t\t\treset();\n\t\t}\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
