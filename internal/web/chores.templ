@@ -57,7 +57,7 @@ templ choreRounds(c Chore, next string) {
 						<input type="hidden" name="member_id" value={ id(t.Member.ID) }/>
 						<input type="hidden" name="round" value={ rd.Start }/>
 						<input type="hidden" name="next" value={ next }/>
-						<button aria-label={ t.Member.Name + " did " + c.Name }>
+						<button aria-label={ "Complete " + c.Name + " for " + t.Member.Name }>
 							@avatar(t.Member)
 							{ t.Member.Name }
 						</button>

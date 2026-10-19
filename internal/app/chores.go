@@ -115,15 +115,18 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 		round string
 	}
 	done := map[key][]web.ChoreTap{}
+	gone := map[int64]bool{} // completions by archived Members: they count but aren't shown
 	err = a.eachRow(ctx, func(s func(...any) error) error {
 		var k key
 		var t web.ChoreTap
-		if err := s(&t.CompletionID, &k.chore, &k.round, &t.Member.ID, &t.Member.Name, &t.Member.Color, &t.Member.HasAvatar); err != nil {
+		var archived bool
+		if err := s(&t.CompletionID, &k.chore, &k.round, &t.Member.ID, &t.Member.Name, &t.Member.Color, &t.Member.HasAvatar, &archived); err != nil {
 			return err
 		}
 		done[k] = append(done[k], t)
+		gone[t.CompletionID] = archived
 		return nil
-	}, `SELECT c.id, c.chore_id, c.round_start, m.id, m.name, m.color, m.avatar IS NOT NULL FROM chore_completions c JOIN members m ON m.id = c.member_id
+	}, `SELECT c.id, c.chore_id, c.round_start, m.id, m.name, m.color, m.avatar IS NOT NULL, m.archived FROM chore_completions c JOIN members m ON m.id = c.member_id
 		WHERE c.round_start >= ? ORDER BY c.completed_at, c.id`, today.AddDate(0, -3, 0).Format(dateLayout))
 	if err != nil {
 		return nil, err
@@ -138,7 +141,9 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 			rd := web.ChoreRound{Start: cr.start.Format(dateLayout), Late: cr.end.Before(today)}
 			taps := done[key{c.ID, rd.Start}]
 			open := false
-			if !c.Anyone || len(taps) == 0 {
+			if c.Anyone && len(taps) > 0 {
+				taps = slices.DeleteFunc(slices.Clone(taps), func(t web.ChoreTap) bool { return gone[t.CompletionID] })
+			} else {
 				// shortcut: an Each chore shows only its current assignees, so a completion by a since-unassigned Member isn't listed (its points still count).
 				byMember := map[int64]web.ChoreTap{}
 				for _, t := range taps {
@@ -362,8 +367,8 @@ func (a *App) choreExec(w http.ResponseWriter, r *http.Request, typ, entity, que
 }
 
 // completeChore credits the tapping Member with a claimable Round, once per
-// Round per Member (once per Round for an Anyone chore), at the Chore's
-// current points. Tapping a done Round again changes nothing.
+// Round per Member (once per Round for an Anyone chore), at the points the
+// Round's first completion earned, else the Chore's current points. Tapping a done Round again changes nothing.
 func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	member, _ := strconv.ParseInt(r.PostFormValue("member_id"), 10, 64)
@@ -393,7 +398,7 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := a.DB.ExecContext(r.Context(), `INSERT INTO chore_completions (chore_id, member_id, round_start, completed_at, points_awarded)
-		SELECT c.id, m.id, ?3, ?4, c.points FROM chores c
+		SELECT c.id, m.id, ?3, ?4, coalesce((SELECT points_awarded FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 ORDER BY x.id LIMIT 1), c.points) FROM chores c
 			JOIN chore_assignees ca ON ca.chore_id = c.id JOIN members m ON m.id = ca.member_id
 		WHERE c.id = ?1 AND m.id = ?2 AND NOT m.archived AND NOT m.pet
 			AND NOT EXISTS (SELECT 1 FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 AND (c.kind = 'anyone' OR x.member_id = m.id))`,

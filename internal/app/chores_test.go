@@ -60,12 +60,9 @@ func TestAnAdminSetsUpChoresForPeopleOnly(t *testing.T) {
 		t.Fatalf("chosen weekdays with no days = %d, want 400", code)
 	}
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))
-	if n := count(t, h, "SELECT count(*) FROM chores"); n != 1 {
-		t.Fatalf("chores = %d, want 1", n)
-	}
 
 	b := choreBoard(t, other)
-	if !strings.Contains(b, "Dishes") || !strings.Contains(b, "Bob") || !strings.Contains(b, "Carol") || strings.Contains(b, "Rex") {
+	if strings.Count(b, "data-chore=") != 1 || !strings.Contains(b, "Dishes") || !strings.Contains(b, "Bob") || !strings.Contains(b, "Carol") || strings.Contains(b, "Rex") {
 		t.Fatalf("board = %q", b)
 	}
 }
@@ -92,13 +89,13 @@ func TestEachChoreIsDoneOncePerRoundByEveryAssignee(t *testing.T) {
 	if code := complete(kid, t, "1", "1", "2026-03-15"); code != http.StatusBadRequest {
 		t.Fatalf("an unassigned Member completing = %d, want 400", code)
 	}
-	if n := count(t, h, "SELECT count(*) FROM chore_completions"); n != 2 {
-		t.Fatalf("completions = %d, want one each for Bob and Carol", n)
+	if b, c := balance(t, h, "2"), balance(t, h, "3"); b != "5" || c != "5" {
+		t.Fatalf("balances = %s, %s, want one completion each for Bob and Carol", b, c)
 	}
 	// Points are stored with the completion, so a later change only affects future Rounds.
 	post(t, h, "/chores/1", chore("Dishes", "daily", "each", "8", "2", "3"))
-	if n := count(t, h, "SELECT sum(points_awarded) FROM chore_completions"); n != 10 {
-		t.Fatalf("points = %d, want 10", n)
+	if b, c := balance(t, h, "2"), balance(t, h, "3"); b != "5" || c != "5" {
+		t.Fatalf("balances after the change = %s, %s, want 5 each", b, c)
 	}
 	if b := choreBoard(t, kid); strings.Count(b, " done") != 2 || strings.Contains(b, "/complete") {
 		t.Fatalf("board = %q", b)
@@ -109,12 +106,30 @@ func TestEachChoreIsDoneOncePerRoundByEveryAssignee(t *testing.T) {
 		t.Fatal("a locked device undid a completion")
 	}
 	post(t, h, "/chores/completions/1/delete", nil)
-	if n := count(t, h, "SELECT sum(points_awarded) FROM chore_completions"); n != 5 {
-		t.Fatalf("points after undo = %d, want 5", n)
+	if b := balance(t, h, "2"); b != "0" {
+		t.Fatalf("Bob's points after undo = %s, want 0", b)
 	}
 	complete(kid, t, "1", "2", "2026-03-15")
-	if n := count(t, h, "SELECT points_awarded FROM chore_completions WHERE member_id = 2"); n != 8 {
-		t.Fatalf("redone at %d points, want the Chore's 8", n)
+	if b := balance(t, h, "2"); b != "5" {
+		t.Fatalf("redone in the same Round at %s points, want that Round's 5", b)
+	}
+	h.Clock.Set(time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC))
+	complete(kid, t, "1", "2", "2026-03-16")
+	if b := balance(t, h, "2"); b != "13" {
+		t.Fatalf("Bob's points after the next Round = %s, want 5 + 8", b)
+	}
+}
+
+// A change mid-Round applies from the next Round, even to assignees who
+// haven't done this one yet.
+func TestAPointsChangeWaitsForTheNextRound(t *testing.T) {
+	h := choreHousehold(t)
+	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))
+	complete(h, t, "1", "2", "2026-03-15")
+	post(t, h, "/chores/1", chore("Dishes", "daily", "each", "8", "2", "3"))
+	complete(h, t, "1", "3", "2026-03-15")
+	if c := balance(t, h, "3"); c != "5" {
+		t.Fatalf("Carol's points = %s, want this Round's 5", c)
 	}
 }
 
@@ -125,8 +140,8 @@ func TestAnyoneChoreIsDoneOncePerRound(t *testing.T) {
 
 	complete(kid, t, "1", "3", "2026-03-15")
 	complete(kid, t, "1", "2", "2026-03-15")
-	if n := count(t, h, "SELECT count(*) FROM chore_completions WHERE member_id = 3"); n != 1 || count(t, h, "SELECT count(*) FROM chore_completions") != 1 {
-		t.Fatal("an Anyone chore was done twice in a Round")
+	if b, c := balance(t, h, "2"), balance(t, h, "3"); b != "0" || c != "2" {
+		t.Fatalf("balances = %s, %s: an Anyone chore was done twice in a Round", b, c)
 	}
 	if b := choreBoard(t, kid); !strings.Contains(b, "Carol done") || strings.Contains(b, "/complete") {
 		t.Fatalf("board = %q", b)
@@ -152,12 +167,35 @@ func TestArchivedChoresAndMembersLeaveTheBoard(t *testing.T) {
 		t.Fatalf("completing an archived Chore = %d, want 404", code)
 	}
 	// Archived, never deleted: the Chore and its history stay.
-	if count(t, h, "SELECT count(*) FROM chores") != 2 || count(t, h, "SELECT count(*) FROM chore_completions") != 1 {
-		t.Fatal("archiving lost history")
+	if b := balance(t, h, "2"); b != "5" {
+		t.Fatalf("Bob's points = %s, want 5: archiving lost history", b)
 	}
 	post(t, h, "/chores/2/restore", nil)
 	if !strings.Contains(choreBoard(t, h), "Bins") {
 		t.Fatal("restored Chore isn't on the board")
+	}
+}
+
+func TestAnAssignedMemberCannotBecomeAPet(t *testing.T) {
+	h := choreHousehold(t)
+	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
+	f := member("Bob", "#2563eb", "member", "")
+	f.Set("pet", "on")
+	if code, body := h.Post(t, "/settings/members/2", f); code != http.StatusConflict || !strings.Contains(body, "Chores") {
+		t.Fatalf("making an assigned Member a pet = %d %q, want 409", code, body)
+	}
+	if b := choreBoard(t, h); !strings.Contains(b, "Bob") {
+		t.Fatalf("Bob left the board: %q", b)
+	}
+}
+
+func TestAnArchivedMembersAnyoneCompletionLeavesTheBoardButStillCounts(t *testing.T) {
+	h := choreHousehold(t)
+	post(t, h, "/chores", chore("Feed Rex", "daily", "anyone", "2", "2", "3"))
+	complete(h, t, "1", "3", "2026-03-15")
+	post(t, h, "/settings/members/3/archive", nil)
+	if b := choreBoard(t, h); strings.Contains(b, "Carol") || strings.Contains(b, "/complete") {
+		t.Fatalf("board = %q", b)
 	}
 }
 
@@ -187,8 +225,11 @@ func claimableAt(t *testing.T, h *apptest.Harness, chore, at string, want map[st
 		}
 	}
 	for round, state := range want { // complete after checking the board, which completing changes
-		code := complete(h, t, chore, "2", round)
-		if (code == http.StatusConflict) != (state == "Missed") {
+		want := http.StatusOK
+		if state == "Missed" {
+			want = http.StatusConflict
+		}
+		if code := complete(h, t, chore, "2", round); code != want {
 			t.Errorf("at %s: completing Round %s (%s) = %d", at, round, state, code)
 		}
 	}
@@ -240,8 +281,8 @@ func TestAnAnyoneChoreCanBeClaimedLateOnlyIfNobodyDidThatRound(t *testing.T) {
 		t.Fatalf("a done Round shows as Late: %q", b)
 	}
 	complete(h, t, "1", "2", "2026-03-15")
-	if n := count(t, h, "SELECT count(*) FROM chore_completions"); n != 1 {
-		t.Fatalf("completions = %d, want 1", n)
+	if b, c := balance(t, h, "2"), balance(t, h, "3"); b != "0" || c != "2" {
+		t.Fatalf("balances = %s, %s, want only Carol's completion", b, c)
 	}
 }
 
@@ -252,7 +293,7 @@ func TestChoreLockGatesCompleting(t *testing.T) {
 	if asksForPIN(t, kid, "/chores/1/complete", url.Values{"member_id": {"2"}, "round": {"2026-03-15"}}) {
 		t.Fatal("completing asked for a PIN with the chore Lock off")
 	}
-	h.App.DB.Exec("DELETE FROM chore_completions")
+	post(t, h, "/chores/completions/1/delete", nil)
 	post(t, h, "/settings/locks", url.Values{"lock_chores": {"on"}})
 	if _, body := h.Get(t, "/settings"); !strings.Contains(body, `name="lock_chores" checked`) {
 		t.Fatal("Settings doesn't show the chore Lock on")
@@ -265,7 +306,7 @@ func TestChoreLockGatesCompleting(t *testing.T) {
 	}
 	unlock(t, kid, 1, "1234")
 	complete(kid, t, "1", "2", "2026-03-15")
-	if count(t, h, "SELECT count(*) FROM chore_completions WHERE member_id = 2") != 1 {
+	if balance(t, h, "2") != "5" {
 		t.Fatal("an unlocked device could not complete, crediting the tapped Member")
 	}
 }

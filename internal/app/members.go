@@ -404,7 +404,8 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 			pin_blocked_until = CASE WHEN ?4 IS NULL THEN pin_blocked_until END
 		WHERE id = ?5
 			AND (?3 = 'admin' OR `+keepsAnAdmin+`)
-			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)`,
+			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)
+			AND (NOT ?6 OR NOT EXISTS (SELECT 1 FROM chore_assignees WHERE member_id = ?5))`,
 		f.name, f.color, f.role, f.pinHash, id, f.pet)
 	if err != nil {
 		a.serverError(w, r, err)
@@ -412,7 +413,17 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		msg := errLastAdmin
-		if f.role == "admin" && f.pinHash == nil {
+		var assigned bool
+		if f.pet {
+			if err := a.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM chore_assignees WHERE member_id = ?)", id).Scan(&assigned); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+		}
+		switch {
+		case assigned:
+			msg = "Pets can't be assigned Chores: take " + f.name + " off their Chores first."
+		case f.role == "admin" && f.pinHash == nil:
 			msg = f.name + " is no longer an Admin; making them one needs a PIN."
 		}
 		a.settingsPage(w, r, http.StatusConflict, msg)
