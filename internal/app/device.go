@@ -17,6 +17,7 @@ var defaultViews = map[string]string{"today": "/today", "calendar": "/calendar",
 const (
 	defaultViewCookie = "default_view"
 	themeCookie       = "theme"
+	wallDisplayCookie = "wall_display"
 	deviceCookieAge   = 10 * 365 * 24 * 60 * 60 // a device keeps its choices until cleared
 )
 
@@ -74,13 +75,15 @@ func deviceOf(r *http.Request) web.Device {
 		d.Theme = c.Value
 	}
 	d.DefaultView, _ = cookieView(r)
+	_, err := r.Cookie(wallDisplayCookie)
+	d.WallDisplay = err == nil
 	return d
 }
 
 // household is the household settings the pages follow.
 func (a *App) household(ctx context.Context) (web.Household, error) {
 	var h web.Household
-	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start FROM household_settings").Scan(&h.DefaultView, &h.Clock24, &h.WeekStart)
+	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds FROM household_settings").Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds)
 	return h, err
 }
 
@@ -102,16 +105,26 @@ func (a *App) clock(ctx context.Context) string {
 	return clockLayout(err != nil || h.Clock24)
 }
 
-// saveHousehold sets the household Default view, clock and week start; it sits behind requireUnlock.
+// saveHousehold sets the household Default view, clock, week start and
+// screensaver idle time (kept when not sent); it sits behind requireUnlock.
 func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	view := r.PostFormValue("default_view")
 	start, err := strconv.Atoi(r.PostFormValue("week_start"))
+	var idle *int
+	if v := r.PostFormValue("screensaver_idle_seconds"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 10 {
+			a.settingsPage(w, r, http.StatusBadRequest, "The screensaver idle time is at least 10 seconds.")
+			return
+		}
+		idle = &n
+	}
 	if _, ok := defaultViews[view]; !ok || err != nil || start < 0 || start > 6 {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a default view and the day weeks start on.")
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?",
-		view, r.PostForm.Has("clock_24h"), start); err != nil {
+	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?, screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds)",
+		view, r.PostForm.Has("clock_24h"), start, idle); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -140,6 +153,41 @@ func (a *App) setTheme(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, c)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// setWallDisplay switches this browser into or out of a Wall display; it sits
+// behind requireUnlock (Admin PIN needed).
+func (a *App) setWallDisplay(w http.ResponseWriter, r *http.Request) {
+	c := &http.Cookie{Name: wallDisplayCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1}
+	if r.PostFormValue("wall_display") != "" {
+		c.Value, c.MaxAge = "on", deviceCookieAge
+	}
+	http.SetCookie(w, c)
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// getScreensaver is what an idle Wall display shows: the clock and today's
+// agenda on dark (Immich photos and Night mode build on this page). Entering it
+// ends any Admin unlock; a touch goes to "/", the Default view at today.
+func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
+	a.clearUnlock(w) // after withUnlock's refresh, so this later Set-Cookie wins
+	now := a.Now().In(a.Config.Location)
+	today := dayAt(now, 0)
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	clock := clockLayout(hh.Clock24)
+	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 1), nil)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
+		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
+		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
+	}))
 }
 
 // setDefaultView saves this device's Default view in its browser; a blank one

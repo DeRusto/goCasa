@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"strconv"
 	"time"
@@ -10,6 +11,8 @@ import (
 type Device struct {
 	Theme       string // "light", "dark" or "auto"
 	DefaultView string // "" uses the Household's
+	WallDisplay bool
+	IdleSeconds int // a Wall display's screensaver_idle_seconds; 0 when unknown
 }
 
 // Household is the household settings the pages follow.
@@ -17,6 +20,7 @@ type Household struct {
 	DefaultView string // a page name: today, calendar, todos or lists
 	Clock24     bool
 	WeekStart   int // 0 = Sunday
+	IdleSeconds int // a Wall display's screensaver after this long with no input
 }
 
 type deviceKey struct{}
@@ -60,6 +64,9 @@ templ page(title string, pill bool) {
 				@weatherPill()
 			}
 			{ children... }
+			if device(ctx).WallDisplay {
+				@wallDisplay(cmp.Or(device(ctx).IdleSeconds, 300))
+			}
 		</body>
 	</html>
 }
@@ -94,6 +101,11 @@ templ householdSection(h Household) {
 				}
 			</select>
 		</label>
+		<label>
+			Wall display screensaver after
+			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" required/>
+			seconds idle
+		</label>
 		<button>Save household</button>
 	</form>
 }
@@ -126,4 +138,18 @@ templ thisDevice() {
 		</label>
 		<button>Save theme</button>
 	</form>
+	<form method="post" action="/device/wall-display">
+		<label><input type="checkbox" name="wall_display" checked?={ device(ctx).WallDisplay }/> Wall display (goes to the screensaver when idle; Admin PIN needed)</label>
+		<button>Save</button>
+	</form>
+	<p>
+		Screen wake lock:
+		<span id="wake-lock">
+			if device(ctx).WallDisplay {
+				checking…
+			} else {
+				off (not a Wall display)
+			}
+		</span>
+	</p>
 }

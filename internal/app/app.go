@@ -109,6 +109,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /today", a.getToday)
 	mux.HandleFunc("POST /device/default-view", a.setDefaultView)
 	mux.HandleFunc("POST /device/theme", a.setTheme)
+	mux.HandleFunc("POST /device/wall-display", a.requireUnlock(a.setWallDisplay))
+	mux.HandleFunc("GET /screensaver", a.getScreensaver)
 	mux.HandleFunc("POST /settings/household", a.requireUnlock(a.saveHousehold))
 	mux.HandleFunc("GET /settings", a.getSettings)
 	mux.HandleFunc("POST /setup", a.postSetup)
