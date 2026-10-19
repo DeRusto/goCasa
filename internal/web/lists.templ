@@ -17,6 +17,7 @@ templ Lists(lists []ShoppingList) {
 	@layout("Lists") {
 		<main>
 			<h1>Lists</h1>
+			@defaultViewButton("/lists")
 			for _, l := range lists {
 				<section data-list={ id(l.ID) }>
 					<h2>{ l.Name }</h2>

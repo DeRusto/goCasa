@@ -11,14 +11,20 @@ import (
 func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
 	now := a.Now().In(a.Config.Location)
 	today := dayAt(now, 0)
-	p := web.TodayPage{Now: now}
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	clock := clockLayout(hh.Clock24)
+	p := web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}
 	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 2), nil)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	for i := range p.Days {
-		p.Days[i] = calendarDay(evs, dayAt(today, i), today, now.Unix())
+		p.Days[i] = calendarDay(evs, dayAt(today, i), today, now.Unix(), clock)
 	}
 	if p.Weather, err = a.weatherHeader(r.Context()); err != nil {
 		a.Log.Error("reading cached weather", "err", err) // the page still renders, without weather

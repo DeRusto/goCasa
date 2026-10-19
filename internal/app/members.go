@@ -96,7 +96,7 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, c templ
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := c.Render(web.WithWeatherPill(r.Context(), pill), w); err != nil {
+	if err := c.Render(web.WithDevice(web.WithWeatherPill(r.Context(), pill), deviceOf(r)), w); err != nil {
 		a.Log.Error("render failed", "path", r.URL.Path, "err", err)
 	}
 }
@@ -147,7 +147,12 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, errMsg))
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, hh, errMsg))
 }
 
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.

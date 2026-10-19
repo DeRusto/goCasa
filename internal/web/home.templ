@@ -1,5 +1,44 @@
 package web
 
+import (
+	"context"
+	"strconv"
+	"time"
+)
+
+// Device is this browser's own choices, kept in its cookies (Settings → This device).
+type Device struct {
+	Theme       string // "light", "dark" or "auto"
+	DefaultView string // "" uses the Household's
+}
+
+// Household is the household settings the pages follow.
+type Household struct {
+	DefaultView string // a page name: today, calendar, todos or lists
+	Clock24     bool
+	WeekStart   int // 0 = Sunday
+}
+
+type deviceKey struct{}
+
+// WithDevice gives the pages rendered with ctx this device's choices.
+func WithDevice(ctx context.Context, d Device) context.Context {
+	return context.WithValue(ctx, deviceKey{}, d)
+}
+
+func device(ctx context.Context) Device {
+	d, _ := ctx.Value(deviceKey{}).(Device)
+	return d
+}
+
+func colorScheme(ctx context.Context) string {
+	switch t := device(ctx).Theme; t {
+	case "light", "dark":
+		return t
+	}
+	return "light dark"
+}
+
 templ layout(title string) {
 	@page(title, true) {
 		{ children... }
@@ -13,6 +52,7 @@ templ page(title string, pill bool) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content={ colorScheme(ctx) }/>
 			<title>{ title }</title>
 		</head>
 		<body>
@@ -24,15 +64,65 @@ templ page(title string, pill bool) {
 	</html>
 }
 
-templ Home() {
-	@layout("GoCasa") {
-		<main>
-			<h1>GoCasa</h1>
-			<p>Your family dashboard is running.</p>
-			<p><a href="/today">Today</a></p>
-			<p><a href="/calendar">Calendar</a></p>
-			<p><a href="/todos">To-dos</a></p>
-			<p><a href="/lists">Lists</a></p>
-		</main>
+// defaultViewButton makes view this device's Default view (no Lock).
+templ defaultViewButton(view string) {
+	<form method="post" action="/device/default-view">
+		<input type="hidden" name="default_view" value={ view }/>
+		<button>Set as default view on this device</button>
+	</form>
+}
+
+templ householdSection(h Household) {
+	<h2>Household</h2>
+	<form method="post" action="/settings/household">
+		<label>
+			Default view (for devices that haven't set their own)
+			<select name="default_view">
+				@option("today", "Today", h.DefaultView)
+				@option("calendar", "Calendar", h.DefaultView)
+				@option("todos", "To-dos", h.DefaultView)
+				@option("lists", "Lists", h.DefaultView)
+			</select>
+		</label>
+		<label><input type="checkbox" name="clock_24h" checked?={ h.Clock24 }/> 24-hour clock</label>
+		<label>
+			Week starts on
+			<select name="week_start">
+				for d := range 7 {
+					@option(strconv.Itoa(d), time.Weekday(d).String(), strconv.Itoa(h.WeekStart))
+				}
+			</select>
+		</label>
+		<button>Save household</button>
+	</form>
+}
+
+templ thisDevice() {
+	<h2>This device</h2>
+	<p>Kept in this browser only.</p>
+	<p>
+		Default view:
+		if v := device(ctx).DefaultView; v != "" {
+			<a href={ templ.SafeURL(v) }>{ v }</a>
+		} else {
+			Household default
+		}
+	</p>
+	if device(ctx).DefaultView != "" {
+		<form method="post" action="/device/default-view">
+			<input type="hidden" name="default_view" value=""/>
+			<button>Clear</button>
+		</form>
 	}
+	<form method="post" action="/device/theme">
+		<label>
+			Theme
+			<select name="theme">
+				@option("light", "Light", device(ctx).Theme)
+				@option("dark", "Dark", device(ctx).Theme)
+				@option("auto", "Auto", device(ctx).Theme)
+			</select>
+		</label>
+		<button>Save theme</button>
+	</form>
 }

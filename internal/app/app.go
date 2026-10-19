@@ -15,7 +15,6 @@ import (
 
 	"github.com/DeRusto/goCasa/internal/config"
 	"github.com/DeRusto/goCasa/internal/db"
-	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // Upstreams are the fixed third-party base URLs; tests point them at fakes.
@@ -106,10 +105,11 @@ func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.healthz)
 	mux.HandleFunc("GET /events/stream", a.eventStream)
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		a.render(w, r, http.StatusOK, web.Home())
-	})
+	mux.HandleFunc("GET /{$}", a.getRoot)
 	mux.HandleFunc("GET /today", a.getToday)
+	mux.HandleFunc("POST /device/default-view", a.setDefaultView)
+	mux.HandleFunc("POST /device/theme", a.setTheme)
+	mux.HandleFunc("POST /settings/household", a.requireUnlock(a.saveHousehold))
 	mux.HandleFunc("GET /settings", a.getSettings)
 	mux.HandleFunc("POST /setup", a.postSetup)
 	mux.HandleFunc("GET /lock", a.getLock)
