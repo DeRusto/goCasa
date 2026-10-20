@@ -255,20 +255,21 @@ func secondsTo(now, t time.Time) int {
 	return int(t.Sub(now).Seconds() + .999)
 }
 
-// nightChange is when Night mode next starts or ends after now, at its hours
-// in now's zone (the household's), so across DST too; zero if it never does.
+// nightChange is when Night mode next starts or ends after now: the first
+// top of a local hour (the household's zone) whose mode differs, stepping real
+// hours so a DST gap or fold can't skip or repeat a change; zero if it never does.
 func nightChange(h Household, now time.Time) time.Time {
 	if h.NightMode == "off" || h.NightStart == h.NightEnd {
 		return time.Time{}
 	}
-	for d := range 2 {
-		for _, hour := range []int{min(h.NightStart, h.NightEnd), max(h.NightStart, h.NightEnd)} {
-			if t := time.Date(now.Year(), now.Month(), now.Day()+d, hour, 0, 0, 0, now.Location()); t.After(now) {
-				return t
-			}
+	mode := nightModeAt(h, now.Hour())
+	t := now.Add(-time.Duration(now.Minute())*time.Minute - time.Duration(now.Second())*time.Second - time.Duration(now.Nanosecond()))
+	for range 49 {
+		if t = t.Add(time.Hour); nightModeAt(h, t.Hour()) != mode {
+			return t
 		}
 	}
-	return time.Time{} // unreachable: tomorrow's hours are after now
+	return time.Time{} // unreachable: both modes come round within a day
 }
 
 // photoNow is the screensaver photo's address ("" for none) and the seconds it has left.

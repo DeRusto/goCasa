@@ -261,6 +261,18 @@ func (a *App) splitRecurrence(ctx context.Context, master googleEvent, o int64) 
 	return old, from, nil
 }
 
+// reanchorLines is recurrence lines with their RRULE re-anchored (see
+// reanchor) for an Occurrence moving from was to c.
+func reanchorLines(lines []string, was, c eventChange) []string {
+	out := slices.Clone(lines)
+	for i, l := range out {
+		if rule, ok := strings.CutPrefix(l, "RRULE:"); ok {
+			out[i] = "RRULE:" + reanchor(rule, startDay(was), startDay(c))
+		}
+	}
+	return out
+}
+
 // shiftDates is recurrence lines with their EXDATEs and RDATEs moved as a
 // Split moves Series master's Occurrence o to c's start, in c's kind of time
 // and zone, so they keep naming the same Occurrences.
@@ -435,14 +447,18 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		}
 		return googleResult{target: row.series, series: true}, err
 	case first: // a new start renames every occurrence, so re-import
-		return googleResult{target: row.series, series: true, full: true}, g.call(ctx, http.MethodPatch, row.series, master.Etag, googleBody(c), nil)
+		body := googleBody(c)
+		if rec := reanchorLines(master.Recurrence, was, c); !slices.Equal(rec, master.Recurrence) {
+			body["recurrence"] = rec
+		}
+		return googleResult{target: row.series, series: true, full: true}, g.call(ctx, http.MethodPatch, row.series, master.Etag, body, nil)
 	}
 	old, from, err := a.splitRecurrence(ctx, master, o)
 	if err != nil {
 		return googleResult{}, err
 	}
 	body := googleBody(c)
-	body["recurrence"] = a.shiftDates(ctx, from, master, o, c)
+	body["recurrence"] = a.shiftDates(ctx, reanchorLines(from, was, c), master, o, c)
 	var made googleEvent
 	if err := g.call(ctx, http.MethodPost, "", "", body, &made); err != nil {
 		return googleResult{}, err

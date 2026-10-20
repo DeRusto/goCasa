@@ -158,6 +158,27 @@ func TestNightModeTurnsOnItsHoursAcrossDST(t *testing.T) {
 	}
 }
 
+func TestNightModeEndsInTheSpringForwardGapAndAcrossTheFold(t *testing.T) {
+	h := household(t, apptest.WithHouseholdTimezone("America/New_York"))
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "clock_24h": {"on"},
+		"night_mode": {"black"}, "night_start": {"23"}, "night_end": {"2"}})
+	for _, c := range []struct {
+		at   time.Time
+		want string
+	}{
+		{time.Date(2026, 3, 8, 6, 0, 0, 0, time.UTC), "3600"},   // 01:00 EST; 02:00 is 03:00 EDT, Night mode ends then
+		{time.Date(2026, 3, 8, 6, 30, 0, 0, time.UTC), "1800"},  // 01:30 EST
+		{time.Date(2026, 3, 8, 7, 30, 0, 0, time.UTC), "70200"}, // 03:30 EDT, off; starts 23:00 EDT
+		{time.Date(2026, 11, 1, 5, 0, 0, 0, time.UTC), "7200"},  // 01:00 EDT; 01:00 EST, then ends 02:00 EST
+		{time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC), "1800"}, // 01:30 EST
+	} {
+		h.Clock.Set(c.at)
+		if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, `data-reload-seconds="`+c.want+`"`) {
+			t.Errorf("at %s the screensaver doesn't reload in %s s", c.at, c.want)
+		}
+	}
+}
+
 func TestWithNightModeOffTheScreensaverNeverReloads(t *testing.T) {
 	h := household(t)
 	if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, `data-reload-seconds="0"`) || strings.Contains(body, "60000") {

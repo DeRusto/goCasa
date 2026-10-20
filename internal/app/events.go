@@ -399,6 +399,9 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 					}
 				}
 			}
+			if !c.rerule { // the rule posted back as it was: still re-anchor a moved month-end preset
+				c.rrule = reanchor(c.rrule.(string), startDay(was), startDay(c))
+			}
 		default:
 			return 0, &refusal{msg: "Pick which events to change."}
 		}
