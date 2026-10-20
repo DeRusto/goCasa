@@ -20,7 +20,7 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 		<body style="margin:0;background:#000;color:#ddd">
 			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
-				<div id="live" { live("event", "household")... }>
+				<div id="live" { live(KindEvent, KindHousehold)... }>
 					<p style="font-size:6rem;margin:0">@clock(p)</p>
 					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 					<ul style="font-size:1.5rem;list-style:none;padding:0">
@@ -94,7 +94,7 @@ templ Night(mode string, p TodayPage, reloadSeconds int) {
 				@motionWake()
 			}
 			@ticker()
-			<div hidden hx-ext="sse" sse-connect="/events/stream" hx-trigger="sse:household"></div>
+			<div hidden hx-ext="sse" sse-connect="/events/stream" hx-trigger={ "sse:" + string(KindHousehold) }></div>
 			@nightWatch(reloadSeconds)
 		</body>
 	</html>

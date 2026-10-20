@@ -112,7 +112,7 @@ func (m todos) Create(ctx context.Context, t web.Todo, p todoRepeat) (id int64, 
 			return errNoColumn
 		}
 		return err
-	}, KindTodo)
+	}, web.KindTodo)
 	return id, err
 }
 
@@ -142,7 +142,7 @@ func (m todos) Edit(ctx context.Context, id int64, t web.Todo, p todoRepeat) err
 			return whyUnchanged(ctx, tx, id, errTodoCompleted)
 		}
 		return nil
-	}, KindTodo)
+	}, web.KindTodo)
 }
 
 // columnExists is errNoColumn unless column col exists.
@@ -198,7 +198,7 @@ func (m todos) Complete(ctx context.Context, id int64) (next int64, err error) {
 		}
 		_, err = tx.ExecContext(ctx, "UPDATE todos SET next_id = ? WHERE id = ?", next, id)
 		return err
-	}, KindTodo)
+	}, web.KindTodo)
 	if err != nil {
 		return 0, err
 	}
@@ -229,7 +229,7 @@ func (m todos) Reopen(ctx context.Context, id int64) (removed int64, err error) 
 		}
 		_, err = tx.ExecContext(ctx, "UPDATE todos SET completed_at = NULL, next_id = NULL WHERE id = ?", id)
 		return err
-	}, KindTodo)
+	}, web.KindTodo)
 	if err != nil {
 		return 0, err
 	}
@@ -249,7 +249,7 @@ func (m todos) Delete(ctx context.Context, id int64) error {
 			return whyUnchanged(ctx, tx, id, errTodoChained)
 		}
 		return nil
-	}, KindTodo)
+	}, web.KindTodo)
 }
 
 // Reorder sets column col's order to ids, moving in any to-do dragged from
@@ -270,7 +270,7 @@ func (m todos) Reorder(ctx context.Context, col int64, ids []int64) error {
 			}
 		}
 		return nil
-	}, KindTodo)
+	}, web.KindTodo)
 }
 
 // Columns is the board's columns in order, without their to-dos.
@@ -295,18 +295,18 @@ func (m todos) Columns(ctx context.Context) ([]web.TodoColumn, error) {
 func (m todos) AddColumn(ctx context.Context, name string) (id int64, err error) {
 	err = m.inTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, "INSERT INTO todo_columns (name, position) VALUES (?, (SELECT coalesce(max(position) + 1, 0) FROM todo_columns)) RETURNING id", name).Scan(&id)
-	}, KindTodo)
+	}, web.KindTodo)
 	return id, err
 }
 
 // RenameColumn renames column id, or returns errNoColumn.
 func (m todos) RenameColumn(ctx context.Context, id int64, name string) error {
-	return columnChanged(m.exec(ctx, KindTodo, "UPDATE todo_columns SET name = ? WHERE id = ?", name, id))
+	return columnChanged(m.exec(ctx, web.KindTodo, "UPDATE todo_columns SET name = ? WHERE id = ?", name, id))
 }
 
 // DeleteColumn deletes column id with its to-dos, or returns errNoColumn.
 func (m todos) DeleteColumn(ctx context.Context, id int64) error {
-	return columnChanged(m.exec(ctx, KindTodo, "DELETE FROM todo_columns WHERE id = ?", id))
+	return columnChanged(m.exec(ctx, web.KindTodo, "DELETE FROM todo_columns WHERE id = ?", id))
 }
 
 func columnChanged(res sql.Result, err error) error {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DeRusto/goCasa/internal/web"
 	"github.com/emersion/go-ical"
 	"github.com/teambition/rrule-go"
 )
@@ -166,7 +167,7 @@ func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, kept []s
 		}
 		_, err := tx.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", cursor, id)
 		return err
-	}, KindEvent)
+	}, web.KindEvent)
 	return err
 }
 

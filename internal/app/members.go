@@ -244,7 +244,7 @@ func (a *App) postSetup(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	res, err := a.exec(r.Context(), KindMember, `INSERT INTO members (name, color, role, pin_hash, created_at)
+	res, err := a.exec(r.Context(), web.KindMember, `INSERT INTO members (name, color, role, pin_hash, created_at)
 		SELECT ?, ?, 'admin', ?, ? WHERE NOT EXISTS (SELECT 1 FROM members)`,
 		f.name, f.color, f.pinHash, a.Now().Unix())
 	if err != nil {
@@ -342,7 +342,7 @@ func (a *App) createMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	if _, err := a.exec(r.Context(), KindMember, "INSERT INTO members (name, color, role, pin_hash, created_at, pet) VALUES (?, ?, ?, ?, ?, ?)",
+	if _, err := a.exec(r.Context(), web.KindMember, "INSERT INTO members (name, color, role, pin_hash, created_at, pet) VALUES (?, ?, ?, ?, ?, ?)",
 		f.name, f.color, f.role, f.pinHash, a.Now().Unix(), f.pet); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -371,7 +371,7 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 	// One guarded statement, so another device's change between the read above
 	// and this write can't demote the last Admin or leave an Admin without a PIN.
-	res, err := a.exec(r.Context(), KindMember, `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6,
+	res, err := a.exec(r.Context(), web.KindMember, `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6,
 			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END,
 			-- A new PIN clears a wrong-PIN block: this is how an Admin resets another's.
 			pin_failures = CASE WHEN ?4 IS NULL THEN pin_failures ELSE 0 END,
@@ -410,7 +410,7 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 // members with no ON DELETE action, so the foreign key refuses the rest.
 func (a *App) deleteMember(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	res, err := a.exec(r.Context(), KindMember, "DELETE FROM members WHERE id = ? AND "+keepsAnAdmin, id)
+	res, err := a.exec(r.Context(), web.KindMember, "DELETE FROM members WHERE id = ? AND "+keepsAnAdmin, id)
 	var serr *sqlite.Error
 	if errors.As(err, &serr) && serr.Code() == sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY {
 		a.settingsPage(w, r, http.StatusConflict, "They have history, so they can't be deleted. Archive them instead.")
@@ -423,7 +423,7 @@ func (a *App) deleteMember(w http.ResponseWriter, r *http.Request) {
 func (a *App) setArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		res, err := a.exec(r.Context(), KindMember, "UPDATE members SET archived = ? WHERE id = ? AND (NOT ? OR "+keepsAnAdmin+")", archived, id, archived)
+		res, err := a.exec(r.Context(), web.KindMember, "UPDATE members SET archived = ? WHERE id = ? AND (NOT ? OR "+keepsAnAdmin+")", archived, id, archived)
 		a.guardedMemberChange(w, r, id, res, err)
 	}
 }

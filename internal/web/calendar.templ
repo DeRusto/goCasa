@@ -204,7 +204,7 @@ templ Calendar(p CalendarPage) {
 					<button>Filter</button>
 				</fieldset>
 			</form>
-			<div id="live" { live("event", "member", "household", "integration")... }>
+			<div id="live" { live(KindEvent, KindMember, KindHousehold, KindIntegration)... }>
 				for _, s := range p.Stale {
 					<p role="status">
 						{ s.Name }: last updated { s.LastUpdated }.
@@ -277,10 +277,10 @@ templ Calendar(p CalendarPage) {
 // document-level refresh-live event (a page's own timer, e.g. Today's clock).
 // Only the region's children are swapped, so it keeps its stream; htmx's SSE
 // extension reconnects a dropped one.
-func live(kinds ...string) templ.Attributes {
+func live(kinds ...Kind) templ.Attributes {
 	trigger := "htmx:sseOpen, refresh-live from:document"
 	for _, k := range kinds {
-		trigger += ", sse:" + k
+		trigger += ", sse:" + string(k)
 	}
 	return templ.Attributes{
 		"hx-ext": "sse", "sse-connect": "/events/stream",

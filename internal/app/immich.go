@@ -320,7 +320,7 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 
 // disconnectImmich removes Immich, its photo list and their cached bytes.
 func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
-	if _, err := a.exec(r.Context(), KindIntegration, "DELETE FROM integrations WHERE type = ?", immichType); err != nil {
+	if _, err := a.exec(r.Context(), web.KindIntegration, "DELETE FROM integrations WHERE type = ?", immichType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -336,7 +336,7 @@ func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	albums, _ := json.Marshal(append([]string{}, r.PostForm["album"]...))
 	people, _ := json.Marshal(append([]string{}, r.PostForm["person"]...))
-	if _, err := a.exec(r.Context(), KindIntegration, "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
+	if _, err := a.exec(r.Context(), web.KindIntegration, "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
 		string(albums), string(people), immichType); err != nil {
 		a.serverError(w, r, err)
 		return

@@ -732,7 +732,7 @@ func Calendar(p CalendarPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live("event", "member", "household", "integration"))
+			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live(KindEvent, KindMember, KindHousehold, KindIntegration))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -971,10 +971,10 @@ func Calendar(p CalendarPage) templ.Component {
 // document-level refresh-live event (a page's own timer, e.g. Today's clock).
 // Only the region's children are swapped, so it keeps its stream; htmx's SSE
 // extension reconnects a dropped one.
-func live(kinds ...string) templ.Attributes {
+func live(kinds ...Kind) templ.Attributes {
 	trigger := "htmx:sseOpen, refresh-live from:document"
 	for _, k := range kinds {
-		trigger += ", sse:" + k
+		trigger += ", sse:" + string(k)
 	}
 	return templ.Attributes{
 		"hx-ext": "sse", "sse-connect": "/events/stream",

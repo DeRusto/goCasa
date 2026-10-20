@@ -80,7 +80,7 @@ func (a *App) createList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A list needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	if _, err := a.exec(r.Context(), KindList, `INSERT INTO shopping_lists (name, position)
+	if _, err := a.exec(r.Context(), web.KindList, `INSERT INTO shopping_lists (name, position)
 		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_lists))`, name); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -234,7 +234,7 @@ func (l localList) Clear(ctx context.Context) error {
 	if !exists {
 		return sql.ErrNoRows
 	}
-	_, err := l.a.exec(ctx, KindList, "DELETE FROM shopping_items WHERE checked AND list_id = ?", l.id)
+	_, err := l.a.exec(ctx, web.KindList, "DELETE FROM shopping_items WHERE checked AND list_id = ?", l.id)
 	return err
 }
 
@@ -274,7 +274,7 @@ func (l localList) Move(ctx context.Context, item int64, to int) error {
 			}
 		}
 		return nil
-	}, KindList)
+	}, web.KindList)
 }
 
 // localItem limits a query on shopping_items to item ? on local list ?; a Mirrored list changes through Mealie.
@@ -282,5 +282,5 @@ const localItem = "id = ? AND list_id = (SELECT id FROM shopping_lists WHERE id 
 
 // change runs query on one item of the list; no row changed is sql.ErrNoRows.
 func (l localList) change(ctx context.Context, query string, args ...any) error {
-	return l.a.inTx(ctx, func(tx *sql.Tx) error { return execOne(ctx, tx, query, args...) }, KindList)
+	return l.a.inTx(ctx, func(tx *sql.Tx) error { return execOne(ctx, tx, query, args...) }, web.KindList)
 }

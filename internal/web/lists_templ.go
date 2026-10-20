@@ -72,7 +72,7 @@ func Lists(lists []ShoppingList, msg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live("list", "integration"))
+			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live(KindList, KindIntegration))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

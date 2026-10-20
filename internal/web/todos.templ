@@ -70,7 +70,7 @@ templ TodosBoard(p TodosPage) {
 				</label>
 				<button>Apply</button>
 			</form>
-			<div id="live" { live("todo", "member", "household")... }>
+			<div id="live" { live(KindTodo, KindMember, KindHousehold)... }>
 				for _, c := range p.Columns {
 					<section data-column={ strconv.FormatInt(c.ID, 10) }>
 						<h2>{ c.Name }</h2>

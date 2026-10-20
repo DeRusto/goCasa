@@ -332,7 +332,7 @@ func (a *App) disconnectGoogle(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(plain, &tok)
 		revokeErr = a.revokeGoogle(r.Context(), tok.RefreshToken)
 	}
-	if _, err := a.exec(r.Context(), KindEvent, "DELETE FROM integrations WHERE id = ? AND type = ?", id, googleType); err != nil {
+	if _, err := a.exec(r.Context(), web.KindEvent, "DELETE FROM integrations WHERE id = ? AND type = ?", id, googleType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -364,7 +364,7 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return applyDefaultMembers(r.Context(), tx, id, nil)
-	}, KindEvent)
+	}, web.KindEvent)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)

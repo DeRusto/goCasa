@@ -157,7 +157,7 @@ func (s *integrations) WithLock(id int64, fn func() error) error {
 // Down until its next good sync. Call it inside WithLock, so a write waiting
 // there sees it.
 func (s *integrations) RecordFailure(ctx context.Context, id int64, err error) error {
-	_, rerr := s.app.exec(context.WithoutCancel(ctx), KindIntegration, "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
+	_, rerr := s.app.exec(context.WithoutCancel(ctx), web.KindIntegration, "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
 		downAfter, cutError(err), id)
 	return rerr
 }
@@ -172,7 +172,7 @@ func (s *integrations) PollSoon(ctx context.Context, id int64) error {
 // NeedsReconnect marks integration id Reconnect needed, unless its
 // credentials are no longer sealed (reconnected meanwhile).
 func (s *integrations) NeedsReconnect(ctx context.Context, id int64, sealed []byte) error {
-	_, err := s.app.exec(ctx, KindIntegration, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc IS ? AND status <> 'reconnect_needed'", id, sealed)
+	_, err := s.app.exec(ctx, web.KindIntegration, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc IS ? AND status <> 'reconnect_needed'", id, sealed)
 	return err
 }
 
@@ -288,7 +288,7 @@ func (s *integrations) Connect(ctx context.Context, c newIntegration) (msg strin
 			return c.then(tx, id)
 		}
 		return nil
-	}, KindIntegration) // a reconnect resets its health, so its next good sync publishes nothing
+	}, web.KindIntegration) // a reconnect resets its health, so its next good sync publishes nothing
 	if err != nil || msg != "" || c.login != nil {
 		return msg, err
 	}
@@ -350,10 +350,10 @@ func (s *integrations) run(ctx context.Context, id int64) (bool, error) {
 	cancel()
 	now := a.Now()
 	// Pages hear of its health only when it changes: Failing, Down, or recovered.
-	var health Kind
+	var health web.Kind
 	if err == nil {
 		if failures > 0 {
-			health = KindIntegration
+			health = web.KindIntegration
 		}
 		_, err = a.exec(context.WithoutCancel(ctx), health, `UPDATE integrations SET last_sync_at = ?1, last_success_at = ?1, consecutive_failures = 0, last_error = '', next_sync_at = ?2 WHERE id = ?3`,
 			now.Unix(), now.Add(time.Duration(interval)*time.Second).Unix(), id)
@@ -366,7 +366,7 @@ func (s *integrations) run(ctx context.Context, id int64) (bool, error) {
 		delay = time.Duration(interval) * time.Second
 	}
 	if failures == 0 || failures+1 == downAfter {
-		health = KindIntegration
+		health = web.KindIntegration
 	}
 	_, err = a.exec(context.WithoutCancel(ctx), health, `UPDATE integrations SET last_sync_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ?, next_sync_at = ? WHERE id = ?`,
 		now.Unix(), cutError(err), now.Add(delay).Unix(), id)
@@ -494,7 +494,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 // removeFeed deletes an iCal feed with its calendar and events.
 func (a *App) removeFeed(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if _, err := a.exec(r.Context(), KindEvent, "DELETE FROM integrations WHERE id = ? AND type = 'ical'", id); err != nil {
+	if _, err := a.exec(r.Context(), web.KindEvent, "DELETE FROM integrations WHERE id = ? AND type = 'ical'", id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

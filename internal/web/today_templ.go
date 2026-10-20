@@ -63,7 +63,7 @@ func Today(p TodayPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live("event", "todo", "chore", "member", "household", "integration"))
+			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live(KindEvent, KindTodo, KindChore, KindMember, KindHousehold, KindIntegration))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

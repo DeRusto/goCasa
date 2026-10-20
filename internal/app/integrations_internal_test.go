@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // fakeSync is an Integration whose next Sync returns err (after started is
@@ -309,8 +311,8 @@ func TestHealthsShowEveryIntegration(t *testing.T) {
 }
 
 // published is the kinds the bus carried since ch subscribed, once nothing more comes.
-func published(ch chan Kind) []Kind {
-	var ks []Kind
+func published(ch chan web.Kind) []web.Kind {
+	var ks []web.Kind
 	for {
 		select {
 		case k := <-ch:
@@ -328,7 +330,7 @@ func TestReconnectNeededAndAReconnectReachOpenPages(t *testing.T) {
 	ch := a.Bus.subscribe()
 	defer a.Bus.unsubscribe(ch)
 	a.integrations.NeedsReconnect(ctx, id, nil)
-	if ks := published(ch); len(ks) != 1 || ks[0] != KindIntegration {
+	if ks := published(ch); len(ks) != 1 || ks[0] != web.KindIntegration {
 		t.Fatalf("becoming Reconnect needed published %v", ks)
 	}
 	login := newIntegration{typ: "fake", name: "ada@example.com", secret: "token",
@@ -336,7 +338,7 @@ func TestReconnectNeededAndAReconnectReachOpenPages(t *testing.T) {
 	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
 		t.Fatalf("reconnect: %q, %v", msg, err)
 	}
-	if ks := published(ch); len(ks) != 1 || ks[0] != KindIntegration {
+	if ks := published(ch); len(ks) != 1 || ks[0] != web.KindIntegration {
 		t.Fatalf("a reconnect published %v", ks)
 	}
 }
