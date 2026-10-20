@@ -165,6 +165,25 @@ func TestMealiePollPublishesOnlyRealChangesAndHealthTransitions(t *testing.T) {
 	nothingPublished(t, h, lines)
 }
 
+func TestAFeedRefetchedUnchangedPublishesNothing(t *testing.T) {
+	h := household(t)
+	f := newFeed(t, vcal(swim))
+	addFeed(t, h, "School", f.URL)
+	_, lines := stream(t, h)
+	next(t, lines, ": hello")
+
+	f.set(strings.ReplaceAll(vcal(swim), "DTSTAMP:20260301", "DTSTAMP:20260315"), `"v2"`) // a 200, only its stamp new
+	h.Clock.Advance(15 * time.Minute)
+	h.RunDue()
+	post(t, h, "/todo-columns", url.Values{"name": {"Marker"}}) // not an event: the next change must be this
+	wantKind(t, lines, "todo")
+
+	f.set(vcal(swim, fair), `"v3"`)
+	h.Clock.Advance(15 * time.Minute)
+	h.RunDue()
+	wantKind(t, lines, "event")
+}
+
 func TestHouseholdSettingsPublishTheHouseholdKind(t *testing.T) {
 	h := apptest.New(t)
 	setup(t, h)
