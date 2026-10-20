@@ -63,7 +63,7 @@ func Today(p TodayPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live("event", "todo", "chore", "member", "household", "integration"))
+			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live(KindEvent, KindTodo, KindChore, KindMember, KindHousehold, KindIntegration))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -393,46 +393,59 @@ func clock(p TodayPage) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" data-h24=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" data-offset=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var18 string
-		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatBool(p.Clock24))
+		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.Now.Format("-07:00"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 96}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" data-midnight-in=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" data-h24=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var19 string
-		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(p.MidnightIn))
+		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatBool(p.Clock24))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 144}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 135}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" data-midnight-in=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var20 string
-		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(p.Clock)
+		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(p.MidnightIn))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 156}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 183}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</time>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var21 string
+		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(p.Clock)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 195}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</time>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -460,12 +473,12 @@ func ticker() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var21 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var21 == nil {
-			templ_7745c5c3_Var21 = templ.NopComponent
+		templ_7745c5c3_Var22 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var22 == nil {
+			templ_7745c5c3_Var22 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<script>\n\t(() => {\n\t\tlet seen, due;\n\t\tsetInterval(() => {\n\t\t\tconst clock = document.getElementById(\"clock\");\n\t\t\tif (!clock) return;\n\t\t\tconst opts = clock.dataset.h24 === \"true\" ? { hour: \"2-digit\", minute: \"2-digit\", hourCycle: \"h23\" } : { hour: \"numeric\", minute: \"2-digit\", hourCycle: \"h12\" };\n\t\t\ttry { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat(\"en-US\", opts); } catch { delete opts.timeZone; }\n\t\t\t// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).\n\t\t\tclock.textContent = new Date().toLocaleTimeString(\"en-US\", opts).replace(/\\s/g, \" \");\n\t\t\tconst now = Date.now();\n\t\t\tif (clock !== seen) {\n\t\t\t\tseen = clock;\n\t\t\t\tdue = Number(clock.dataset.midnightIn) > 0 ? now + Number(clock.dataset.midnightIn) * 1000 : 0;\n\t\t\t} else if (due && now >= due) {\n\t\t\t\tdue = 0;\n\t\t\t\tdocument.dispatchEvent(new Event(\"refresh-live\"));\n\t\t\t}\n\t\t\tfor (const li of document.querySelectorAll(\"[data-end]\")) {\n\t\t\t\tif (Number(li.dataset.end) <= now) {\n\t\t\t\t\tli.classList.add(\"past\");\n\t\t\t\t\tli.style.opacity = \".5\";\n\t\t\t\t}\n\t\t\t}\n\t\t}, 1000);\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<script>\n\t(() => {\n\t\tlet seen, due;\n\t\tsetInterval(() => {\n\t\t\tconst clock = document.getElementById(\"clock\");\n\t\t\tif (!clock) return;\n\t\t\tconst opts = clock.dataset.h24 === \"true\" ? { hour: \"2-digit\", minute: \"2-digit\", hourCycle: \"h23\" } : { hour: \"numeric\", minute: \"2-digit\", hourCycle: \"h12\" };\n\t\t\tlet at = new Date();\n\t\t\ttry { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat(\"en-US\", opts); } catch {\n\t\t\t\t// A zone the browser can't name (Go's \"Local\"): the household's offset at render, shown as UTC.\n\t\t\t\t// shortcut: a DST change before the next refetch (at midnight) shows an hour off until then; send a named zone if that bites.\n\t\t\t\tconst [, sign, h, m] = /([+-])(\\d\\d):(\\d\\d)/.exec(clock.dataset.offset) || [, \"+\", \"00\", \"00\"];\n\t\t\t\tat = new Date(at.getTime() + (sign === \"-\" ? -1 : 1) * (h * 60 + Number(m)) * 6e4); // minutes to ms\n\t\t\t\topts.timeZone = \"UTC\";\n\t\t\t}\n\t\t\t// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).\n\t\t\tclock.textContent = at.toLocaleTimeString(\"en-US\", opts).replace(/\\s/g, \" \");\n\t\t\tconst now = Date.now();\n\t\t\tif (clock !== seen) {\n\t\t\t\tseen = clock;\n\t\t\t\tdue = Number(clock.dataset.midnightIn) > 0 ? now + Number(clock.dataset.midnightIn) * 1000 : 0;\n\t\t\t} else if (due && now >= due) {\n\t\t\t\tdue = 0;\n\t\t\t\tdocument.dispatchEvent(new Event(\"refresh-live\"));\n\t\t\t}\n\t\t\tfor (const li of document.querySelectorAll(\"[data-end]\")) {\n\t\t\t\tif (Number(li.dataset.end) <= now) {\n\t\t\t\t\tli.classList.add(\"past\");\n\t\t\t\t\tli.style.opacity = \".5\";\n\t\t\t\t}\n\t\t\t}\n\t\t}, 1000);\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

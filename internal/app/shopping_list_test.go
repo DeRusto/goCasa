@@ -134,11 +134,11 @@ func TestAMirroredListIsReadOnlyWhileMealieFails(t *testing.T) {
 	}
 }
 
-func TestAMirroredItemGoneUpstreamRepullsTheList(t *testing.T) {
+func TestAMirroredItemGoneFromMealieRepullsTheList(t *testing.T) {
 	g, m := mirroredGroceries(t)
 	m.remove("I1")
-	if err := g.list.Check(context.Background(), g.milk, true); !errors.Is(err, app.ErrGoneUpstream) {
-		t.Fatalf("check = %v, want ErrGoneUpstream", err)
+	if err := g.list.Check(context.Background(), g.milk, true); !errors.Is(err, app.ErrGoneFromMealie) {
+		t.Fatalf("check = %v, want ErrGoneFromMealie", err)
 	}
 	if got := g.shows(t); got != "[x] Eggs" {
 		t.Errorf("Groceries = %q, want the re-pulled list", got)

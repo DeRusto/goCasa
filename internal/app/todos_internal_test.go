@@ -80,6 +80,7 @@ func TestNext(t *testing.T) {
 		{"schedule leap day", yearly, "2028-02-29", "2028-02-29", false, "2029-02-28", "2030-02-28"},
 		{"completion daily", todoRepeat{Freq: "daily", Interval: 3}, "2026-03-01", "2026-03-15", true, "2026-03-18", "2026-03-21"},
 		{"completion weekly", todoRepeat{Freq: "weekly", Interval: 2}, "2026-03-01", "2026-03-15", true, "2026-03-29", "2026-04-12"},
+		{"completion weekly by day counts from the completion day", todoRepeat{Freq: "weekly", Interval: 1, ByDay: []string{"MO", "TH"}}, "2026-03-16", "2026-03-18", true, "2026-03-25", "2026-04-01"},
 		{"completion month end clamps", monthly, "2026-01-02", "2026-01-31", true, "2026-02-28", "2026-03-28"},
 		{"completion leap day clamps", yearly, "2027-01-01", "2028-02-29", true, "2029-02-28", "2030-02-28"},
 	} {
@@ -87,6 +88,9 @@ func TestNext(t *testing.T) {
 		if err != nil || next != c.wantDue {
 			t.Errorf("%s: Next = %q, %v; want %q", c.name, next, err, c.wantDue)
 			continue
+		}
+		if got := decodeRepeat(rule).ByDay; !slices.Equal(got, c.p.ByDay) {
+			t.Errorf("%s: the next copy repeats on %v, want %v", c.name, got, c.p.ByDay)
 		}
 		after, _, err := decodeRepeat(rule).Next(date(next), date(next), c.fromCompletion)
 		if err != nil || after != c.chain2 {
@@ -200,6 +204,29 @@ func TestAChainedCopyCannotBeDeletedOrEdited(t *testing.T) {
 	}
 	if got := open(t, m); len(got) != 0 {
 		t.Errorf("open = %q", got)
+	}
+}
+
+// An edit that keeps a clamped copy's due date and repeat keeps its month-end
+// anchor; one that moves the due date anchors there instead.
+func TestEditingAClampedCopyKeepsItsAnchor(t *testing.T) {
+	m, ctx := board(t), context.Background()
+	monthly := todoRepeat{Freq: "monthly", Interval: 1} // as the form sends it
+	id, _ := m.Create(ctx, web.Todo{ColumnID: 1, Title: "Rent", Due: "2026-03-31"}, monthly)
+	next := complete(t, m, id) // due 2026-04-30
+	if err := m.Edit(ctx, next, web.Todo{ColumnID: 1, Title: "Pay rent", Due: "2026-04-30"}, monthly); err != nil {
+		t.Fatal(err)
+	}
+	next = complete(t, m, next)
+	if got := open(t, m); !slices.Equal(got, []string{"Pay rent 2026-05-31"}) {
+		t.Errorf("after a title-only edit, open = %q", got)
+	}
+	if err := m.Edit(ctx, next, web.Todo{ColumnID: 1, Title: "Pay rent", Due: "2026-05-15"}, monthly); err != nil {
+		t.Fatal(err)
+	}
+	complete(t, m, next)
+	if got := open(t, m); !slices.Equal(got, []string{"Pay rent 2026-06-15"}) {
+		t.Errorf("after moving the due date, open = %q", got)
 	}
 }
 

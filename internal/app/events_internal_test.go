@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/config"
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // household is an app with Ada (Admin, 1), Bob (2), Carol (3) and local calendar 1.
@@ -133,7 +134,7 @@ func TestThisEventEditsAndDeletesOneOccurrence(t *testing.T) {
 	changes := a.Bus.subscribe()
 	defer a.Bus.unsubscribe(changes)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1, 2), "FREQ=DAILY", nil, nil))
-	if c := <-changes; c != KindEvent {
+	if c := <-changes; c != web.KindEvent {
 		t.Errorf("published %+v", c)
 	}
 	write(t, a, id, key(at(16, 9)), scopeThis, timedAt("Long walk", at(16, 11), 2, 3))

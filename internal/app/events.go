@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // scope is an Edit scope: which Occurrences of a Series a change or deletion applies to.
@@ -495,7 +497,7 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			}
 		}
 	}
-	if err := a.commit(tx, KindEvent); err != nil {
+	if err := a.commit(tx, web.KindEvent); err != nil {
 		return 0, err
 	}
 	if splitAt != nil {
@@ -515,7 +517,7 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 	}
 	ss, occ := fo.ss, fo.occ
 	if ss.s.rule == "" {
-		_, err = a.exec(ctx, KindEvent, "DELETE FROM events WHERE id = ?", id)
+		_, err = a.exec(ctx, web.KindEvent, "DELETE FROM events WHERE id = ?", id)
 	} else {
 		first := sc == scopeAll
 		if sc == scopeFollowing {
@@ -527,11 +529,11 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 		case sc != scopeThis && sc != scopeFollowing && sc != scopeAll:
 			return &refusal{msg: "Pick which events to delete."}
 		case first:
-			_, err = a.exec(ctx, KindEvent, "DELETE FROM events WHERE id = ?", id)
+			_, err = a.exec(ctx, web.KindEvent, "DELETE FROM events WHERE id = ?", id)
 		case sc == scopeFollowing:
-			err = a.inTx(ctx, func(tx *sql.Tx) error { return a.endSeriesBefore(ctx, tx, ss, occ.original) }, KindEvent)
+			err = a.inTx(ctx, func(tx *sql.Tx) error { return a.endSeriesBefore(ctx, tx, ss, occ.original) }, web.KindEvent)
 		case fo.editID != 0:
-			_, err = a.exec(ctx, KindEvent, "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), fo.editID)
+			_, err = a.exec(ctx, web.KindEvent, "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), fo.editID)
 		default: // a cancelled row keeps the Occurrence's times so the event CHECKs hold
 			var start, end, date, endDate any
 			if occ.allDay {
@@ -539,7 +541,7 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 			} else {
 				start, end = occ.start, occ.end
 			}
-			_, err = a.exec(ctx, KindEvent, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
+			_, err = a.exec(ctx, web.KindEvent, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 					recurring_master_id, original_start_utc, status, updated_at)
 				SELECT calendar_id, title, location, description, all_day, ?, ?, start_tzid, ?, ?, id, ?, 'cancelled', ? FROM events WHERE id = ?
 				ON CONFLICT (recurring_master_id, original_start_utc) DO UPDATE SET status = 'cancelled', updated_at = excluded.updated_at`,

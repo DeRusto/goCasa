@@ -521,7 +521,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live("chore", "points", "member", "household"))
+			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live(KindChore, KindPoints, KindMember, KindHousehold))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

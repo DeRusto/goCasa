@@ -30,7 +30,7 @@ type Integration interface {
 // settingsSection is an Integration with its own Settings section. st is
 // every integration's status; members are the Members Settings lists.
 type settingsSection interface {
-	Section(ctx context.Context, a *App, st map[int64]integrationStatus, members []web.Member) (templ.Component, error)
+	Section(ctx context.Context, a *App, st map[int64]integrationHealth, members []web.Member) (templ.Component, error)
 }
 
 // builtins is every integration type, in the order Settings shows their sections.
@@ -49,7 +49,7 @@ var integrationTypes = func() map[string]Integration {
 
 // settingsSections is each built-in integration type's Settings section, in order.
 func (a *App) settingsSections(ctx context.Context, members []web.Member) ([]templ.Component, error) {
-	st, err := a.integrations.Statuses(ctx)
+	st, err := a.integrations.Healths(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ type integrationHealth struct {
 	Reconnect   bool // Reconnect needed: no syncs until an Admin reconnects it
 	Failures    int
 	LastError   string
-	LastSuccess sql.NullInt64
+	LastSuccess string // see lastSync
 }
 
 // SQL for an integrations row t (a table name or alias) that is Failing, Down
@@ -108,10 +108,40 @@ func reconnectSQL(t string) string { return t + ".status = 'reconnect_needed'" }
 
 // Health is integration id's health, or sql.ErrNoRows.
 func (s *integrations) Health(ctx context.Context, id int64) (integrationHealth, error) {
-	var h integrationHealth
-	err := s.app.DB.QueryRowContext(ctx, `SELECT `+failingSQL("i")+`, `+downSQL("i")+`, `+reconnectSQL("i")+`, i.consecutive_failures, i.last_error, i.last_success_at
-		FROM integrations i WHERE i.id = ?`, id).Scan(&h.Failing, &h.Down, &h.Reconnect, &h.Failures, &h.LastError, &h.LastSuccess)
+	hs, err := s.healths(ctx, "WHERE i.id = ?", id)
+	h, ok := hs[id]
+	if err == nil && !ok {
+		err = sql.ErrNoRows
+	}
 	return h, err
+}
+
+// Healths is every integration's health, by id.
+func (s *integrations) Healths(ctx context.Context) (map[int64]integrationHealth, error) {
+	return s.healths(ctx, "")
+}
+
+// healths is the health of each integration where picks, by id.
+func (s *integrations) healths(ctx context.Context, where string, args ...any) (map[int64]integrationHealth, error) {
+	loc, clock := s.app.location(ctx), s.app.clock(ctx)
+	rows, err := s.app.DB.QueryContext(ctx, `SELECT i.id, `+failingSQL("i")+`, `+downSQL("i")+`, `+reconnectSQL("i")+`, i.consecutive_failures, i.last_error, i.last_success_at
+		FROM integrations i `+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	hs := map[int64]integrationHealth{}
+	for rows.Next() {
+		var id int64
+		var h integrationHealth
+		var ok sql.NullInt64
+		if err := rows.Scan(&id, &h.Failing, &h.Down, &h.Reconnect, &h.Failures, &h.LastError, &ok); err != nil {
+			return nil, err
+		}
+		h.LastSuccess = lastSync(ok, loc, clock)
+		hs[id] = h
+	}
+	return hs, rows.Err()
 }
 
 // WithLock runs fn while no sync of integration id runs: for a write through
@@ -127,12 +157,13 @@ func (s *integrations) WithLock(id int64, fn func() error) error {
 // Down until its next good sync. Call it inside WithLock, so a write waiting
 // there sees it.
 func (s *integrations) RecordFailure(ctx context.Context, id int64, err error) error {
-	_, rerr := s.app.exec(context.WithoutCancel(ctx), KindIntegration, "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
+	_, rerr := s.app.exec(context.WithoutCancel(ctx), web.KindIntegration, "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
 		downAfter, cutError(err), id)
 	return rerr
 }
 
-// PollSoon makes integration id due on the next scheduler tick.
+// PollSoon makes integration id due on the next scheduler tick. It publishes
+// nothing: no page shows next_sync_at, and the sync publishes what it changes.
 func (s *integrations) PollSoon(ctx context.Context, id int64) error {
 	_, err := s.app.DB.ExecContext(ctx, "UPDATE integrations SET next_sync_at = min(next_sync_at, ?) WHERE id = ?", s.app.Now().Unix(), id)
 	return err
@@ -141,7 +172,7 @@ func (s *integrations) PollSoon(ctx context.Context, id int64) error {
 // NeedsReconnect marks integration id Reconnect needed, unless its
 // credentials are no longer sealed (reconnected meanwhile).
 func (s *integrations) NeedsReconnect(ctx context.Context, id int64, sealed []byte) error {
-	_, err := s.app.DB.ExecContext(ctx, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc IS ?", id, sealed)
+	_, err := s.app.exec(ctx, web.KindIntegration, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc IS ? AND status <> 'reconnect_needed'", id, sealed)
 	return err
 }
 
@@ -157,31 +188,37 @@ func cutError(err error) string {
 	return string(msg[:min(len(msg), maxErrRunes)])
 }
 
-// connection is an integration to Connect.
-type connection struct {
+// newIntegration is an Integration to Connect: one at an address (an iCal
+// feed, Mealie, Immich), or a login (a Google account) when login is set.
+type newIntegration struct {
 	typ, name     string // name as Settings shows it
-	url           string // its address
-	badURL        string // refuses an address that isn't http(s); "" says so for name
-	urlSealed     bool   // the address is the secret, so may name a user and password
 	secret        string
-	missingSecret string                                 // refuses an empty secret; "" allows one
-	cfg           any                                    // config_json; nil keeps {} (a login keeps its own)
-	interval      int                                    // seconds between syncs
-	unique        bool                                   // one per typ
-	check         func(ctx context.Context) (msg string) // probes the upstream; msg refuses it
-	then          func(tx *sql.Tx, id int64) error       // its own rows, in the same transaction
+	missingSecret string                           // refuses an empty secret; "" allows one
+	interval      int                              // seconds between syncs
+	then          func(tx *sql.Tx, id int64) error // its own rows, in the same transaction
 
-	// reconnect makes this a login with no address: it finds the row this
-	// login reconnects (0 adds one) or refuses it. A login's connect resets
-	// its health and syncs on the next scheduler tick, not straight away.
-	reconnect func(tx *sql.Tx) (id int64, msg string, err error)
-	sub       string // a login's account_sub
+	// An address's.
+	url       string                                 // its address
+	badURL    string                                 // refuses an address that isn't http(s); "" says so for name
+	urlSealed bool                                   // the address is the secret, so may name a user and password
+	cfg       any                                    // config_json; nil keeps {}
+	unique    bool                                   // one per typ
+	check     func(ctx context.Context) (msg string) // tries the address; msg refuses it
+
+	login *integrationLogin
+}
+
+// integrationLogin is a newIntegration with no address. Its connect resets
+// its health and syncs on the next scheduler tick, not straight away.
+type integrationLogin struct {
+	sub  string                                             // its account_sub
+	find func(tx *sql.Tx) (id int64, msg string, err error) // the row it reconnects (0 adds one), or msg refusing it
 }
 
 // Connect checks c and adds it, syncing it once (its outcome shows in
 // Settings), or reconnects a login. msg refuses it, for the person.
-func (s *integrations) Connect(ctx context.Context, c connection) (msg string, err error) {
-	if c.reconnect == nil {
+func (s *integrations) Connect(ctx context.Context, c newIntegration) (msg string, err error) {
+	if c.login == nil {
 		switch u := parseUpstreamURL(c.url); {
 		case u == nil:
 			return cmp.Or(c.badURL, c.name+"'s address starts with https:// or http://."), nil
@@ -216,14 +253,15 @@ func (s *integrations) Connect(ctx context.Context, c connection) (msg string, e
 		cfgJSON, _ = json.Marshal(c.cfg)
 	}
 	var id int64
-	err = s.app.inTx(ctx, func(tx *sql.Tx) error {
-		if c.reconnect != nil {
+	changed := false // a refusal publishes nothing
+	err = s.app.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
+		if c.login != nil {
 			var err error
-			if id, msg, err = c.reconnect(tx); err != nil || msg != "" {
+			if id, msg, err = c.login.find(tx); err != nil || msg != "" {
 				return err
 			}
 			if id == 0 {
-				if err := tx.QueryRowContext(ctx, "INSERT INTO integrations (type, name, account_sub, sync_interval_seconds) VALUES (?, ?, ?, ?) RETURNING id", c.typ, c.name, c.sub, c.interval).Scan(&id); err != nil {
+				if err := tx.QueryRowContext(ctx, "INSERT INTO integrations (type, name, account_sub, sync_interval_seconds) VALUES (?, ?, ?, ?) RETURNING id", c.typ, c.name, c.login.sub, c.interval).Scan(&id); err != nil {
 					return err
 				}
 			}
@@ -245,12 +283,13 @@ func (s *integrations) Connect(ctx context.Context, c connection) (msg string, e
 				return err
 			}
 		}
+		changed = true
 		if c.then != nil {
 			return c.then(tx, id)
 		}
 		return nil
-	})
-	if err != nil || msg != "" || c.reconnect != nil {
+	}, web.KindIntegration) // a reconnect resets its health, so its next good sync publishes nothing
+	if err != nil || msg != "" || c.login != nil {
 		return msg, err
 	}
 	_, err = s.Run(ctx, id)
@@ -311,10 +350,10 @@ func (s *integrations) run(ctx context.Context, id int64) (bool, error) {
 	cancel()
 	now := a.Now()
 	// Pages hear of its health only when it changes: Failing, Down, or recovered.
-	var health Kind
+	var health web.Kind
 	if err == nil {
 		if failures > 0 {
-			health = KindIntegration
+			health = web.KindIntegration
 		}
 		_, err = a.exec(context.WithoutCancel(ctx), health, `UPDATE integrations SET last_sync_at = ?1, last_success_at = ?1, consecutive_failures = 0, last_error = '', next_sync_at = ?2 WHERE id = ?3`,
 			now.Unix(), now.Add(time.Duration(interval)*time.Second).Unix(), id)
@@ -327,7 +366,7 @@ func (s *integrations) run(ctx context.Context, id int64) (bool, error) {
 		delay = time.Duration(interval) * time.Second
 	}
 	if failures == 0 || failures+1 == downAfter {
-		health = KindIntegration
+		health = web.KindIntegration
 	}
 	_, err = a.exec(context.WithoutCancel(ctx), health, `UPDATE integrations SET last_sync_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ?, next_sync_at = ? WHERE id = ?`,
 		now.Unix(), cutError(err), now.Add(delay).Unix(), id)
@@ -390,36 +429,6 @@ func lastSync(at sql.NullInt64, loc *time.Location, clock string) string {
 	return time.Unix(at.Int64, 0).In(loc).Format("2 Jan 2006 " + clock)
 }
 
-// integrationStatus is how an integration's syncs are going, as Settings shows it.
-type integrationStatus struct {
-	Failures    int
-	LastError   string
-	LastSuccess string // see lastSync
-	Reconnect   bool
-}
-
-// Statuses is every integration's status, by id.
-func (s *integrations) Statuses(ctx context.Context) (map[int64]integrationStatus, error) {
-	loc, clock := s.app.location(ctx), s.app.clock(ctx)
-	rows, err := s.app.DB.QueryContext(ctx, "SELECT i.id, i.consecutive_failures, i.last_error, i.last_success_at, "+reconnectSQL("i")+" FROM integrations i")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	st := map[int64]integrationStatus{}
-	for rows.Next() {
-		var id int64
-		var x integrationStatus
-		var ok sql.NullInt64
-		if err := rows.Scan(&id, &x.Failures, &x.LastError, &ok, &x.Reconnect); err != nil {
-			return nil, err
-		}
-		x.LastSuccess = lastSync(ok, loc, clock)
-		st[id] = x
-	}
-	return st, rows.Err()
-}
-
 // syncNow syncs every integration that can sync, due or not.
 func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 	// Not cancelled by a closed tab: a sync cut short counts as a failure.
@@ -434,13 +443,13 @@ func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
-func (icalFeed) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+func (icalFeed) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
 	fs, err := a.feeds(ctx, st)
 	return web.FeedsSection(fs), err
 }
 
 // feeds is the iCal feeds as Settings shows them.
-func (a *App) feeds(ctx context.Context, st map[int64]integrationStatus) ([]web.Feed, error) {
+func (a *App) feeds(ctx context.Context, st map[int64]integrationHealth) ([]web.Feed, error) {
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.color
 		FROM integrations i JOIN source_calendars c ON c.integration_id = i.id WHERE i.type = 'ical' ORDER BY i.name, i.id`)
 	if err != nil {
@@ -473,7 +482,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a colour.")
 		return
 	}
-	msg, err := a.integrations.Connect(r.Context(), connection{typ: "ical", name: name, url: feedURL(raw), urlSealed: true, secret: raw, interval: icalInterval,
+	msg, err := a.integrations.Connect(r.Context(), newIntegration{typ: "ical", name: name, url: feedURL(raw), urlSealed: true, secret: raw, interval: icalInterval,
 		badURL: "A feed's address starts with webcal://, https:// or http://.",
 		then: func(tx *sql.Tx, id int64) error {
 			_, err := tx.ExecContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color, read_only) VALUES (?, ?, ?, 1)", id, name, color)
@@ -485,7 +494,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 // removeFeed deletes an iCal feed with its calendar and events.
 func (a *App) removeFeed(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if _, err := a.exec(r.Context(), KindEvent, "DELETE FROM integrations WHERE id = ? AND type = 'ical'", id); err != nil {
+	if _, err := a.exec(r.Context(), web.KindEvent, "DELETE FROM integrations WHERE id = ? AND type = 'ical'", id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

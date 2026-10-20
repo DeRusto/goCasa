@@ -297,7 +297,7 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	key := strings.TrimSpace(r.PostFormValue("key"))
-	msg, err := a.integrations.Connect(r.Context(), connection{typ: immichType, name: "Immich", url: raw, secret: key,
+	msg, err := a.integrations.Connect(r.Context(), newIntegration{typ: immichType, name: "Immich", url: raw, secret: key,
 		missingSecret: "Paste an API key from Immich (Account Settings > API Keys).", cfg: immichConfig{URL: raw}, interval: immichRelist, unique: true,
 		check: func(ctx context.Context) string {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -320,7 +320,7 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 
 // disconnectImmich removes Immich, its photo list and their cached bytes.
 func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
-	if _, err := a.exec(r.Context(), KindIntegration, "DELETE FROM integrations WHERE type = ?", immichType); err != nil {
+	if _, err := a.exec(r.Context(), web.KindIntegration, "DELETE FROM integrations WHERE type = ?", immichType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -336,7 +336,7 @@ func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	albums, _ := json.Marshal(append([]string{}, r.PostForm["album"]...))
 	people, _ := json.Marshal(append([]string{}, r.PostForm["person"]...))
-	if _, err := a.exec(r.Context(), KindIntegration, "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
+	if _, err := a.exec(r.Context(), web.KindIntegration, "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
 		string(albums), string(people), immichType); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -360,13 +360,13 @@ func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-func (immich) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+func (immich) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
 	m, err := a.immichSettings(ctx, st)
 	return web.ImmichSection(m), err
 }
 
 // immichSettings is the Immich section of Settings; nil when not connected.
-func (a *App) immichSettings(ctx context.Context, st map[int64]integrationStatus) (*web.Immich, error) {
+func (a *App) immichSettings(ctx context.Context, st map[int64]integrationHealth) (*web.Immich, error) {
 	var m web.Immich
 	var raw string
 	var id int64

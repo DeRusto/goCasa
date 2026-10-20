@@ -155,8 +155,8 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGrant, cals []googleCalendar) (msg string, err error) {
 	tok, _ := json.Marshal(googleToken{RefreshToken: g.refresh})
 	// A reconnect ends Reconnect needed and any backoff: sync straight away.
-	return a.integrations.Connect(ctx, connection{typ: googleType, name: g.email, secret: string(tok), interval: googleSyncInterval, sub: g.sub,
-		reconnect: func(tx *sql.Tx) (id int64, msg string, err error) {
+	return a.integrations.Connect(ctx, newIntegration{typ: googleType, name: g.email, secret: string(tok), interval: googleSyncInterval,
+		login: &integrationLogin{sub: g.sub, find: func(tx *sql.Tx) (id int64, msg string, err error) {
 			if account == "" {
 				// Connecting a login that's already here reconnects it.
 				err = tx.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ? AND account_sub = ?", googleType, g.sub).Scan(&id)
@@ -173,10 +173,10 @@ func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGr
 			case err != nil:
 				return 0, "", err
 			case sub != g.sub:
-				return 0, "That's a different Google account. Add it as a new connection instead.", nil
+				return 0, "That's a different Google account. Connect it as another Google account instead.", nil
 			}
 			return id, "", nil
-		},
+		}},
 		then: func(tx *sql.Tx, id int64) error {
 			for _, c := range cals {
 				name := []rune(strings.TrimSpace(c.SummaryOverride))
@@ -332,7 +332,7 @@ func (a *App) disconnectGoogle(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(plain, &tok)
 		revokeErr = a.revokeGoogle(r.Context(), tok.RefreshToken)
 	}
-	if _, err := a.exec(r.Context(), KindEvent, "DELETE FROM integrations WHERE id = ? AND type = ?", id, googleType); err != nil {
+	if _, err := a.exec(r.Context(), web.KindEvent, "DELETE FROM integrations WHERE id = ? AND type = ?", id, googleType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -364,7 +364,7 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return applyDefaultMembers(r.Context(), tx, id, nil)
-	}, KindEvent)
+	}, web.KindEvent)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
@@ -375,13 +375,13 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (googleSync) Section(ctx context.Context, a *App, st map[int64]integrationStatus, members []web.Member) (templ.Component, error) {
+func (googleSync) Section(ctx context.Context, a *App, st map[int64]integrationHealth, members []web.Member) (templ.Component, error) {
 	g, err := a.googleSettings(ctx, st)
 	return web.GoogleSection(g, members), err
 }
 
 // googleSettings is the Google section of Settings.
-func (a *App) googleSettings(ctx context.Context, st map[int64]integrationStatus) (web.Google, error) {
+func (a *App) googleSettings(ctx context.Context, st map[int64]integrationHealth) (web.Google, error) {
 	g := web.Google{Configured: a.Config.GoogleClientID != "", RedirectURI: a.Config.GoogleRedirectURI}
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.id, c.name, c.color, c.enabled, c.read_only,
 			(SELECT json_group_array(member_id) FROM source_calendar_members WHERE calendar_id = c.id)

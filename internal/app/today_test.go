@@ -158,6 +158,10 @@ func TestTodayTurnsAtTheHouseholdsMidnightAndEventsCarryTheirEnd(t *testing.T) {
 	if !strings.Contains(page, `data-midnight-in="82800"`) {
 		t.Errorf("Today doesn't turn at Auckland's midnight, 23 hours off: %q", page)
 	}
+	// For a zone the browser can't name (Go's "Local"), the clock ticks from the offset.
+	if !strings.Contains(page, `data-offset="+13:00"`) {
+		t.Errorf("the clock lacks Auckland's offset: %q", page)
+	}
 	if strings.Contains(page, "60000") {
 		t.Errorf("Today still refetches by the minute: %q", page)
 	}

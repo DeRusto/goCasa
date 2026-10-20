@@ -140,7 +140,7 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 		if errors.Is(err, errCalendarGone) {
 			// Removed or unshared in Google: hide it, keeping its events and Members, and sync the rest.
 			a.Log.Warn("hiding a google calendar google no longer has", "calendar", c.id)
-			if _, err := a.exec(ctx, KindEvent, "UPDATE source_calendars SET enabled = 0 WHERE id = ?", c.id); err != nil {
+			if _, err := a.exec(ctx, web.KindEvent, "UPDATE source_calendars SET enabled = 0 WHERE id = ?", c.id); err != nil {
 				return err
 			}
 			continue
@@ -306,7 +306,7 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 		changed = changed || n > 0
 		_, err = tx.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", cursor, id)
 		return err
-	}, KindEvent)
+	}, web.KindEvent)
 }
 
 // startKey is an events row's start as a number to compare: the instant, or for all-day the date's UTC midnight.
@@ -496,7 +496,7 @@ func (a *App) saveSynced(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		return setMembers(r.Context(), tx, id, parseIDs(r.PostForm["members"]))
-	}, KindEvent)
+	}, web.KindEvent)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)

@@ -301,7 +301,7 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err == nil {
-		err = a.commit(tx, KindChore)
+		err = a.commit(tx, web.KindChore)
 	}
 	if err != nil {
 		a.serverError(w, r, err)
@@ -342,13 +342,13 @@ func (a *App) getChore(w http.ResponseWriter, r *http.Request) {
 // setChoreArchived archives a Chore (off the board, its completions kept) or restores it.
 func (a *App) setChoreArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a.choreExec(w, r, []Kind{KindChore}, "UPDATE chores SET archived = ? WHERE id = ?", archived)
+		a.choreExec(w, r, []web.Kind{web.KindChore}, "UPDATE chores SET archived = ? WHERE id = ?", archived)
 	}
 }
 
 // choreExec runs query with args and the path's id last: 404 if no row
 // changed, else it publishes kinds and goes back.
-func (a *App) choreExec(w http.ResponseWriter, r *http.Request, kinds []Kind, query string, args ...any) {
+func (a *App) choreExec(w http.ResponseWriter, r *http.Request, kinds []web.Kind, query string, args ...any) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	err := a.inTx(r.Context(), func(tx *sql.Tx) error { return execOne(r.Context(), tx, query, append(args, id)...) }, kinds...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -399,7 +399,7 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		WHERE c.id = ?1 AND m.id = ?2 AND NOT m.archived AND NOT m.pet
 			AND NOT EXISTS (SELECT 1 FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 AND (c.kind = 'anyone' OR x.member_id = m.id))`,
 			id, member, round, a.Now().Unix())
-	}, KindChore, KindPoints)
+	}, web.KindChore, web.KindPoints)
 	if errors.Is(err, sql.ErrNoRows) {
 		var assigned bool
 		if err := a.DB.QueryRowContext(r.Context(), `SELECT EXISTS (SELECT 1 FROM chore_assignees ca JOIN members m ON m.id = ca.member_id
@@ -420,5 +420,5 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 
 // undoCompletion is an Admin removing a completion, and so its points.
 func (a *App) undoCompletion(w http.ResponseWriter, r *http.Request) {
-	a.choreExec(w, r, []Kind{KindChore, KindPoints}, "DELETE FROM chore_completions WHERE id = ?")
+	a.choreExec(w, r, []web.Kind{web.KindChore, web.KindPoints}, "DELETE FROM chore_completions WHERE id = ?")
 }

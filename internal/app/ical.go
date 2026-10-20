@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DeRusto/goCasa/internal/web"
 	"github.com/emersion/go-ical"
 	"github.com/teambition/rrule-go"
 )
@@ -30,6 +33,7 @@ var syncFault = func(n int) {}
 type feedCursor struct {
 	ETag         string `json:"etag,omitempty"`
 	LastModified string `json:"last_modified,omitempty"`
+	Sum          string `json:"sum,omitempty"` // of the events last stored, so a 200 with the same ones publishes nothing
 }
 
 // feedEvent is one VEVENT, in its stored form.
@@ -77,18 +81,20 @@ func (icalFeed) Sync(ctx context.Context, a *App, in integrationRow) error {
 	if err != nil {
 		return fmt.Errorf("that isn't an iCal feed: %w", err)
 	}
-	next, _ := json.Marshal(feedCursor{ETag: res.Header.Get("ETag"), LastModified: res.Header.Get("Last-Modified")})
 	evs, kept := parseFeed(cal, a.location(ctx))
-	return a.storeFeed(ctx, in.id, evs, kept, string(next))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%v %v", evs, kept)) // the parsed events, not the body: feeds restamp DTSTAMP on every fetch
+	nc := feedCursor{ETag: res.Header.Get("ETag"), LastModified: res.Header.Get("Last-Modified"), Sum: hex.EncodeToString(sum[:])}
+	next, _ := json.Marshal(nc)
+	return a.storeFeed(ctx, in.id, evs, kept, string(next), nc.Sum != cur.Sum)
 }
 
 // storeFeed makes integration id's calendar match evs, and saves its next
 // cursor, in one transaction: rows are upserted by UID, RECURRENCE-ID
 // overrides rebuilt, and events gone from the feed cancelled; those with UIDs
-// in kept stay as they were.
-func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, kept []string, cursor string) error {
+// in kept stay as they were. It publishes only if changed.
+func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, kept []string, cursor string, changed bool) error {
 	var cal int64
-	err := a.inTx(ctx, func(tx *sql.Tx) error {
+	err := a.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT id FROM source_calendars WHERE integration_id = ?", id).Scan(&cal); err != nil {
 			return err
 		}
@@ -161,7 +167,7 @@ func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, kept []s
 		}
 		_, err := tx.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", cursor, id)
 		return err
-	}, KindEvent) // shortcut: a 200 with the same feed still publishes (a 304 doesn't); compare a body hash in the cursor if feeds without ETags refetch pages too often
+	}, web.KindEvent)
 	return err
 }
 

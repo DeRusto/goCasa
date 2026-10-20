@@ -165,7 +165,7 @@ func TodosBoard(p TodosPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live("todo", "member", "household"))
+			templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, live(KindTodo, KindMember, KindHousehold))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

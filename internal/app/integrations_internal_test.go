@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // fakeSync is an Integration whose next Sync returns err (after started is
@@ -67,7 +69,7 @@ func TestOneFailureIsFailingAndThreeAreDown(t *testing.T) {
 	if synced, err := a.integrations.Run(ctx, id); err != nil || !synced {
 		t.Fatalf("good run: synced %v, err %v", synced, err)
 	}
-	if h := health(t, a, id); h.Failing || h.Down || h.LastError != "" || h.LastSuccess.Int64 != a.Now().Unix() {
+	if h := health(t, a, id); h.Failing || h.Down || h.LastError != "" || h.LastSuccess != "15 Mar 2026 09:00" {
 		t.Fatalf("after a good sync: %+v", h)
 	}
 }
@@ -191,7 +193,7 @@ func TestConnectChecksTheAddress(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	probed := false
-	c := connection{typ: "fake", name: "Fake", secret: "s", missingSecret: "Paste a key.", interval: 60, unique: true,
+	c := newIntegration{typ: "fake", name: "Fake", secret: "s", missingSecret: "Paste a key.", interval: 60, unique: true,
 		check: func(context.Context) string { probed = true; return "" }}
 	for raw, want := range map[string]string{
 		"ftp://x":            "Fake's address starts with https:// or http://.",
@@ -226,7 +228,7 @@ func TestConnectAddsAnotherWithItsOwnRows(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	_, _, calls := fake(t, a)
-	c := connection{typ: "fake", name: "Fake", url: "https://u:p@x.test/feed", urlSealed: true, secret: "https://u:p@x.test/feed", interval: 60,
+	c := newIntegration{typ: "fake", name: "Fake", url: "https://u:p@x.test/feed", urlSealed: true, secret: "https://u:p@x.test/feed", interval: 60,
 		then: func(tx *sql.Tx, id int64) error {
 			_, err := tx.Exec("INSERT INTO source_calendars (integration_id, name, color) VALUES (?, 'Fake', '#000000')", id)
 			return err
@@ -255,8 +257,8 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 		a.integrations.Run(ctx, id)
 	}
 	a.integrations.NeedsReconnect(ctx, id, nil)
-	login := connection{typ: "fake", name: "ada@example.com", secret: "token",
-		reconnect: func(*sql.Tx) (int64, string, error) { return id, "", nil }}
+	login := newIntegration{typ: "fake", name: "ada@example.com", secret: "token",
+		login: &integrationLogin{find: func(*sql.Tx) (int64, string, error) { return id, "", nil }}}
 	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
 		t.Fatalf("reconnect: %q, %v", msg, err)
 	}
@@ -268,12 +270,12 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 	if *calls != before+1 {
 		t.Fatal("a reconnect isn't due straight away")
 	}
-	login.reconnect = func(*sql.Tx) (int64, string, error) { return 0, "Wrong login.", nil }
+	login.login.find = func(*sql.Tx) (int64, string, error) { return 0, "Wrong login.", nil }
 	if msg, _ := a.integrations.Connect(ctx, login); msg != "Wrong login." {
 		t.Fatalf("refused login: %q", msg)
 	}
-	login.reconnect = func(*sql.Tx) (int64, string, error) { return 0, "", nil }
-	login.sub = "bob"
+	login.login.find = func(*sql.Tx) (int64, string, error) { return 0, "", nil }
+	login.login.sub = "bob"
 	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
 		t.Fatalf("new login: %q, %v", msg, err)
 	}
@@ -284,11 +286,11 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 	}
 }
 
-func TestStatusesShowEveryIntegration(t *testing.T) {
+func TestHealthsShowEveryIntegration(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	id, syncErr, _ := fake(t, a)
-	st, err := a.integrations.Statuses(ctx)
+	st, err := a.integrations.Healths(ctx)
 	if err != nil || st[id].LastSuccess != "never" {
 		t.Fatalf("before a sync: %+v, %v", st[id], err)
 	}
@@ -298,12 +300,45 @@ func TestStatusesShowEveryIntegration(t *testing.T) {
 	}
 	*syncErr = errors.New("boom")
 	a.integrations.Run(ctx, id)
-	st, _ = a.integrations.Statuses(ctx)
+	st, _ = a.integrations.Healths(ctx)
 	if got := st[id]; got.LastSuccess != "15 Mar 2026 10:00" || got.Failures != 1 || got.LastError != "boom" || got.Reconnect {
 		t.Fatalf("after a failure: %+v", got)
 	}
 	a.integrations.NeedsReconnect(ctx, id, nil)
-	if st, _ = a.integrations.Statuses(ctx); !st[id].Reconnect {
+	if st, _ = a.integrations.Healths(ctx); !st[id].Reconnect {
 		t.Fatal("not Reconnect needed")
+	}
+}
+
+// published is the kinds the bus carried since ch subscribed, once nothing more comes.
+func published(ch chan web.Kind) []web.Kind {
+	var ks []web.Kind
+	for {
+		select {
+		case k := <-ch:
+			ks = append(ks, k)
+		case <-time.After(50 * time.Millisecond):
+			return ks
+		}
+	}
+}
+
+func TestReconnectNeededAndAReconnectReachOpenPages(t *testing.T) {
+	a := household(t)
+	ctx := context.Background()
+	id, _, _ := fake(t, a)
+	ch := a.Bus.subscribe()
+	defer a.Bus.unsubscribe(ch)
+	a.integrations.NeedsReconnect(ctx, id, nil)
+	if ks := published(ch); len(ks) != 1 || ks[0] != web.KindIntegration {
+		t.Fatalf("becoming Reconnect needed published %v", ks)
+	}
+	login := newIntegration{typ: "fake", name: "ada@example.com", secret: "token",
+		login: &integrationLogin{find: func(*sql.Tx) (int64, string, error) { return id, "", nil }}}
+	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
+		t.Fatalf("reconnect: %q, %v", msg, err)
+	}
+	if ks := published(ch); len(ks) != 1 || ks[0] != web.KindIntegration {
+		t.Fatalf("a reconnect published %v", ks)
 	}
 }

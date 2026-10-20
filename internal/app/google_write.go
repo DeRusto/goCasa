@@ -281,7 +281,7 @@ func (a *App) shiftDates(ctx context.Context, lines []string, master googleEvent
 	delta := newWall.Sub(oldWall)
 	var out []string
 	for _, line := range lines {
-		name, _, _ := strings.Cut(line, ";")
+		name := line[:strings.IndexAny(line+":", ";:")] // "EXDATE;TZID=…:" or bare "EXDATE:"
 		if name != "EXDATE" && name != "RDATE" {
 			out = append(out, line)
 			continue
@@ -565,7 +565,7 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		_, err = tx.ExecContext(ctx, `INSERT INTO google_series_members (calendar_id, series_id, from_key, members)
 			VALUES (?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4)`, cal, res.target, res.from, string(list))
 		return err
-	}, KindEvent)
+	}, web.KindEvent)
 }
 
 // setMembers gives event id Members members. The form lists only active

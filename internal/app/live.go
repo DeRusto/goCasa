@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // heartbeat keeps reverse proxies from idle-closing a quiet stream.
@@ -15,33 +17,18 @@ var heartbeat = 25 * time.Second
 // writeTimeout is how long one stream write may wait on a client that stopped reading.
 const writeTimeout = 5 * time.Second
 
-// Kind is what the bus carries: what sort of thing changed, so a page refetches
-// only for the kinds it shows. It is the SSE event name.
-type Kind string
-
-const (
-	KindEvent       Kind = "event" // events and calendars
-	KindTodo        Kind = "todo"  // to-dos and their columns
-	KindList        Kind = "list"  // shopping lists and items
-	KindChore       Kind = "chore"
-	KindPoints      Kind = "points" // balances, rewards and redemptions
-	KindMember      Kind = "member"
-	KindHousehold   Kind = "household"   // household settings, locks, the Fallback folder
-	KindIntegration Kind = "integration" // an integration's health, settings or picks; the weather
-)
-
-// Bus fans every published Kind out to each open /events/stream.
+// Bus fans every published web.Kind out to each open /events/stream.
 type Bus struct {
 	mu     sync.Mutex
-	subs   map[chan Kind]struct{}
+	subs   map[chan web.Kind]struct{}
 	closed bool
 }
 
-func newBus() *Bus { return &Bus{subs: map[chan Kind]struct{}{}} }
+func newBus() *Bus { return &Bus{subs: map[chan web.Kind]struct{}{}} }
 
 // Publish never blocks a mutation: a stream too far behind to take a change is
 // closed, and its browser reconnects and catches up by refetching.
-func (b *Bus) Publish(c Kind) {
+func (b *Bus) Publish(c web.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for ch := range b.subs {
@@ -54,8 +41,8 @@ func (b *Bus) Publish(c Kind) {
 	}
 }
 
-func (b *Bus) subscribe() chan Kind {
-	ch := make(chan Kind, 16)
+func (b *Bus) subscribe() chan web.Kind {
+	ch := make(chan web.Kind, 16)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -66,7 +53,7 @@ func (b *Bus) subscribe() chan Kind {
 	return ch
 }
 
-func (b *Bus) unsubscribe(ch chan Kind) {
+func (b *Bus) unsubscribe(ch chan web.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, ok := b.subs[ch]; ok {
@@ -90,7 +77,7 @@ func (b *Bus) Close() {
 
 // commit commits tx, then publishes each of kinds once: the only way a change
 // reaches open pages, so none sees it before it is committed.
-func (a *App) commit(tx *sql.Tx, kinds ...Kind) error {
+func (a *App) commit(tx *sql.Tx, kinds ...web.Kind) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -103,13 +90,13 @@ func (a *App) commit(tx *sql.Tx, kinds ...Kind) error {
 }
 
 // inTx runs fn in a transaction, committing if it succeeds and then publishing kinds.
-func (a *App) inTx(ctx context.Context, fn func(*sql.Tx) error, kinds ...Kind) error {
+func (a *App) inTx(ctx context.Context, fn func(*sql.Tx) error, kinds ...web.Kind) error {
 	return a.inTxIf(ctx, nil, fn, kinds...)
 }
 
 // inTxIf is inTx publishing kinds only if fn set *changed: a sync that found
 // nothing new publishes nothing.
-func (a *App) inTxIf(ctx context.Context, changed *bool, fn func(*sql.Tx) error, kinds ...Kind) error {
+func (a *App) inTxIf(ctx context.Context, changed *bool, fn func(*sql.Tx) error, kinds ...web.Kind) error {
 	tx, err := a.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -125,7 +112,7 @@ func (a *App) inTxIf(ctx context.Context, changed *bool, fn func(*sql.Tx) error,
 }
 
 // exec runs one statement and, once committed, publishes k if it changed a row.
-func (a *App) exec(ctx context.Context, k Kind, query string, args ...any) (sql.Result, error) {
+func (a *App) exec(ctx context.Context, k web.Kind, query string, args ...any) (sql.Result, error) {
 	tx, err := a.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
