@@ -22,3 +22,6 @@ func SetPhotoCacheLimit(n int) (restore func()) {
 	photoCacheLimit = int64(n)
 	return func() { photoCacheLimit = old }
 }
+
+// HouseholdReads counts the queries on household_settings so far.
+func HouseholdReads(a *App) int64 { return a.householdReads.Load() }
