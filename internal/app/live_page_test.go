@@ -88,6 +88,24 @@ func TestNightPagesWatchHouseholdOnTheirOneStream(t *testing.T) {
 	}
 }
 
+// To-dos and local lists reorder by drag with vendored SortableJS, not a hand-rolled script.
+func TestDragPagesLoadVendoredSortable(t *testing.T) {
+	h := household(t)
+	for _, path := range []string{"/todos", "/lists"} {
+		_, page := h.Get(t, path)
+		if !strings.Contains(page, `<script src="/static/Sortable-1.15.6.min.js"></script>`) {
+			t.Errorf("%s doesn't load SortableJS 1.15.6", path)
+		}
+		if strings.Contains(page, "pointerdown") {
+			t.Errorf("%s still has the hand-rolled drag script", path)
+		}
+	}
+	code, body := h.Get(t, "/static/Sortable-1.15.6.min.js")
+	if code != http.StatusOK || !strings.HasPrefix(body, "/*! Sortable 1.15.6 ") {
+		t.Errorf("GET Sortable = %d %.40q", code, body)
+	}
+}
+
 func TestPagesLoadVendoredHtmxFromGoCasa(t *testing.T) {
 	h := household(t)
 	src := regexp.MustCompile(`<script src="([^"]+)"`)
