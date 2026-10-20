@@ -3,8 +3,10 @@ package app
 import (
 	"cmp"
 	"errors"
+	"math"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,10 +159,22 @@ func occurrences(master calendarEvent, s series, zone *time.Location, oneOffs []
 	return out[:min(len(out), limit)], nil
 }
 
-// endBefore is s ending just before the Occurrence whose original is o: an
-// UNTIL just before o, unless its own COUNT or UNTIL ends it sooner, and no
-// RDATEs from o on.
-func endBefore(s series, zone *time.Location, o int64) series {
+// split is master's Series s Split at the Occurrence whose original is o.
+// before ends just before o: an UNTIL just before o, unless its own COUNT or
+// UNTIL ends it sooner, and no RDATEs from o on. after starts at o: the same
+// rule with a COUNT less the Occurrences before o, and the RDATEs from o on.
+// Both keep s' EXDATEs.
+func split(master calendarEvent, s series, zone *time.Location, o int64) (before, after series, err error) {
+	after = series{rule: s.rule, exdates: s.exdates}
+	if m := countRE.FindStringSubmatch(s.rule); m != nil {
+		to := time.Unix(o, 0).UTC()
+		earlier, err := occurrences(master, series{rule: s.rule}, zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
+		if err != nil {
+			return series{}, series{}, err
+		}
+		n, _ := strconv.Atoi(m[1])
+		after.rule = countRE.ReplaceAllString(s.rule, "COUNT="+strconv.Itoa(max(n-len(earlier), 1)))
+	}
 	until := time.Unix(o-1, 0).UTC()
 	var parts []string
 	for _, p := range strings.Split(s.rule, ";") {
@@ -174,9 +188,9 @@ func endBefore(s series, zone *time.Location, o int64) series {
 		}
 	}
 	// For all-day, originals are UTC midnights, which expand compares UNTIL with directly.
-	out := series{rule: strings.Join(append(parts, "UNTIL="+until.Format("20060102T150405Z")), ";"), exdates: s.exdates}
-	out.rdates, _ = splitRDates(s.rdates, zone, o)
-	return out
+	before = series{rule: strings.Join(append(parts, "UNTIL="+until.Format("20060102T150405Z")), ";"), exdates: s.exdates}
+	before.rdates, after.rdates = splitRDates(s.rdates, zone, o)
+	return before, after, nil
 }
 
 // untilInstant reads an UNTIL value: UTC, a wall time in zone, or a date.

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -317,10 +316,10 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			return 0, err
 		}
 	}
-	row := id                // the row to update; 0 inserts
-	var editOf, original any // set for a This event edit: its Series and Occurrence
-	var split, resetFrom any // set for This and following: the Occurrence a Split starts at; the first original whose One-off edits go
-	var all *allEdit         // set for All events
+	row := id                  // the row to update; 0 inserts
+	var editOf, original any   // set for a This event edit: its Series and Occurrence
+	var splitAt, resetFrom any // set for This and following: the Occurrence a Split starts at; the first original whose One-off edits go
+	var all *allEdit           // set for All events
 	if ss.s.rule != "" {
 		was, err := a.occurrenceNow(ctx, fo)
 		if err != nil {
@@ -381,21 +380,20 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			}
 			resetFrom = occ.original
 			if !first {
-				row, split = 0, occ.original
+				row, splitAt = 0, occ.original
 				// The new Series takes only the RDATEs from the Split on, and an unchanged COUNT less the Occurrences before it.
+				// c's RDATEs are split in c's own zone and kind, which a change may have moved from the Series'.
 				var rds []string
-				if rule, ok := c.rrule.(string); ok && json.Unmarshal([]byte(c.rdates), &rds) == nil {
+				if _, ok := c.rrule.(string); ok && json.Unmarshal([]byte(c.rdates), &rds) == nil {
 					_, rds = splitRDates(rds, zone, occ.original)
 					b, _ := json.Marshal(append([]string{}, rds...))
 					c.rdates = string(b)
-					if m := countRE.FindStringSubmatch(rule); m != nil && !c.rerule {
-						to := time.Unix(occ.original, 0).UTC()
-						before, err := occurrences(ss.ev, series{rule: ss.s.rule}, ss.zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
+					if !c.rerule {
+						_, after, err := split(ss.ev, series{rule: ss.s.rule}, ss.zone, occ.original)
 						if err != nil {
 							return 0, err
 						}
-						n, _ := strconv.Atoi(m[1])
-						c.rrule = countRE.ReplaceAllString(rule, "COUNT="+strconv.Itoa(max(n-len(before), 1)))
+						c.rrule = after.rule
 					}
 				}
 			}
@@ -420,8 +418,8 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	typ := "updated"
 	rows := []int64{row} // the rows whose Members become c.members
 	switch {
-	case split != nil:
-		err = a.endSeriesBefore(ctx, tx, ss, split.(int64))
+	case splitAt != nil:
+		err = a.endSeriesBefore(ctx, tx, ss, splitAt.(int64))
 	case resetFrom != nil:
 		_, err = tx.ExecContext(ctx, "DELETE FROM events WHERE recurring_master_id = ? AND original_start_utc >= ?", id, resetFrom)
 	}
@@ -505,7 +503,7 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 		return 0, err
 	}
 	a.publish(typ, "event", cmp.Or(id, row))
-	if split != nil {
+	if splitAt != nil {
 		return row, nil
 	}
 	return cmp.Or(id, row), nil
@@ -630,7 +628,11 @@ func (a *App) startsAt(ctx context.Context, ss storedSeries, o int64) (bool, err
 
 // endSeriesBefore ends Series ss just before its Occurrence o and drops its One-off edits from o on.
 func (a *App) endSeriesBefore(ctx context.Context, tx *sql.Tx, ss storedSeries, o int64) error {
-	rule, _, rd := storedRule(endBefore(ss.s, ss.zone, o))
+	before, _, err := split(ss.ev, ss.s, ss.zone, o)
+	if err != nil {
+		return err
+	}
+	rule, _, rd := storedRule(before)
 	oldRule, _, oldRD := storedRule(ss.s)
 	// Only if the Series is still as loaded: a concurrent Split must not end it twice and start two new ones.
 	res, err := tx.ExecContext(ctx, "UPDATE events SET rrule = ?, rdates_json = ?, updated_at = ? WHERE id = ? AND rrule IS ? AND rdates_json IS ?",
