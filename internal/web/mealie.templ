@@ -19,7 +19,7 @@ type MealieList struct {
 	Hidden bool
 }
 
-templ mealieSection(m *Mealie) {
+templ MealieSection(m *Mealie) {
 	<h2>Mealie</h2>
 	if m == nil {
 		<p>Mirror a Mealie household's shopping lists (Mealie v2.0 or later). Make an API token in Mealie under Profile > API Tokens.</p>

@@ -99,8 +99,7 @@ func (a *App) screensaverPhotos(ctx context.Context) (map[int64]bool, error) {
 			return im, nil
 		}
 	}
-	var on bool
-	if err := a.DB.QueryRowContext(ctx, "SELECT fallback_folder_enabled FROM household_settings").Scan(&on); err != nil || !on {
+	if hh, err := a.household(ctx); err != nil || !hh.FallbackFolder {
 		return nil, err
 	}
 	folder, err := a.photoList(ctx, photoSourceFolder)
@@ -163,7 +162,11 @@ func (a *App) saveFallbackFolder(w http.ResponseWriter, r *http.Request) {
 
 // fallbackSettings is the Fallback folder section of Settings.
 func (a *App) fallbackSettings(ctx context.Context) (web.Fallback, error) {
-	var f web.Fallback
-	err := a.DB.QueryRowContext(ctx, "SELECT fallback_folder_enabled, (SELECT count(*) FROM photos_cache WHERE source = 'folder') FROM household_settings").Scan(&f.Enabled, &f.Images)
+	hh, err := a.household(ctx)
+	if err != nil {
+		return web.Fallback{}, err
+	}
+	f := web.Fallback{Enabled: hh.FallbackFolder}
+	err = a.DB.QueryRowContext(ctx, "SELECT count(*) FROM photos_cache WHERE source = 'folder'").Scan(&f.Images)
 	return f, err
 }

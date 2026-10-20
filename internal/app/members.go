@@ -141,37 +141,7 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	st, err := a.integrations.Statuses(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	fs, err := a.feeds(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	g, err := a.googleSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	wx, err := a.weatherSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	var l web.Locks
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT lock_calendar, lock_chores, lock_todos FROM household_settings").Scan(&l.Calendar, &l.Chores, &l.Todos); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	ml, err := a.mealieSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	im, err := a.immichSettings(r.Context(), st)
+	secs, err := a.settingsSections(r.Context(), ms)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -186,34 +156,33 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, ml, im, fb, hh, errMsg))
+	a.render(w, r, status, web.Settings(ms, hh.Locks, secs, fb, hh.Household, errMsg))
 }
 
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
 func (a *App) saveLocks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	if _, err := a.exec(r.Context(), KindHousehold, "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
-		r.PostForm.Has("lock_calendar"), r.PostForm.Has("lock_chores"), r.PostForm.Has("lock_todos")); err != nil {
+	if err := a.setLocks(r.Context(), web.Locks{Calendar: r.PostForm.Has("lock_calendar"),
+		Chores: r.PostForm.Has("lock_chores"), Todos: r.PostForm.Has("lock_todos")}); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-// requireLock wraps an action behind the Lock in column: while that Lock is on,
-// a locked device goes to the PIN pad. One unlock covers every Lock (spec §9).
-func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
+// requireLock wraps an action behind lock: while that Lock is on, a locked
+// device goes to the PIN pad. One unlock covers every Lock (spec §9).
+func (a *App) requireLock(lock web.Lock, h http.HandlerFunc) http.HandlerFunc {
+	web.Locks{}.On(lock) // an unknown Lock panics at startup, not per request
 	return func(w http.ResponseWriter, r *http.Request) {
-		if unlockedAdmin(r.Context()) == 0 {
-			var on bool
-			if err := a.DB.QueryRowContext(r.Context(), "SELECT "+column+" FROM household_settings").Scan(&on); err != nil {
-				a.serverError(w, r, err)
-				return
-			}
-			if on {
-				toLock(w, r)
-				return
-			}
+		acc, err := a.access(r.Context())
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		if !acc.CanDo(lock) {
+			toLock(w, r)
+			return
 		}
 		h(w, r)
 	}
@@ -303,7 +272,7 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 		http.Redirect(w, r, "/settings", http.StatusSeeOther) // first run
 		return
 	}
-	a.render(w, r, status, web.Lock(admins, errMsg, safeNext(r.FormValue("next"))))
+	a.render(w, r, status, web.PINPad(admins, errMsg, safeNext(r.FormValue("next"))))
 }
 
 // Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
