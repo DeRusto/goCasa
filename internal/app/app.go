@@ -16,6 +16,7 @@ import (
 
 	"github.com/DeRusto/goCasa/internal/config"
 	"github.com/DeRusto/goCasa/internal/db"
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // Upstreams are the fixed third-party base URLs; tests point them at fakes.
@@ -157,16 +158,16 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/locks", a.requireUnlock(a.saveLocks))
 	mux.HandleFunc("GET /calendar", a.getCalendar)
 	mux.HandleFunc("GET /calendar.ics", a.getICS)
-	mux.HandleFunc("POST /calendar/calendars", a.requireLock("lock_calendar", a.createCalendar))
+	mux.HandleFunc("POST /calendar/calendars", a.requireLock(web.LockCalendar, a.createCalendar))
 	mux.HandleFunc("GET /calendar/event/new", a.newEvent)
-	mux.HandleFunc("POST /calendar/event", a.requireLock("lock_calendar", a.saveEvent))
+	mux.HandleFunc("POST /calendar/event", a.requireLock(web.LockCalendar, a.saveEvent))
 	mux.HandleFunc("GET /calendar/event/{id}", a.getEvent)
-	mux.HandleFunc("POST /calendar/event/{id}", a.requireLock("lock_calendar", a.saveEvent))
-	mux.HandleFunc("POST /calendar/event/{id}/delete", a.requireLock("lock_calendar", a.deleteEvent))
+	mux.HandleFunc("POST /calendar/event/{id}", a.requireLock(web.LockCalendar, a.saveEvent))
+	mux.HandleFunc("POST /calendar/event/{id}/delete", a.requireLock(web.LockCalendar, a.deleteEvent))
 	mux.HandleFunc("GET /calendar/synced/{id}", a.getSynced)
-	mux.HandleFunc("POST /calendar/synced/{id}", a.requireLock("lock_calendar", a.saveSynced))
-	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.requireLock("lock_calendar", a.saveGoogle))
-	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.requireLock("lock_calendar", a.deleteGoogle))
+	mux.HandleFunc("POST /calendar/synced/{id}", a.requireLock(web.LockCalendar, a.saveSynced))
+	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.requireLock(web.LockCalendar, a.saveGoogle))
+	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.requireLock(web.LockCalendar, a.deleteGoogle))
 	mux.HandleFunc("POST /calendar/sync", a.syncNow)
 	mux.HandleFunc("GET /lists", a.getLists)
 	mux.HandleFunc("POST /lists", a.createList)
@@ -180,8 +181,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /todos/reorder", a.reorderTodos)
 	mux.HandleFunc("GET /todos/{id}", a.getTodo)
 	mux.HandleFunc("POST /todos/{id}", a.updateTodo)
-	mux.HandleFunc("POST /todos/{id}/complete", a.requireLock("lock_todos", a.completeTodo))
-	mux.HandleFunc("POST /todos/{id}/reopen", a.requireLock("lock_todos", a.reopenTodo))
+	mux.HandleFunc("POST /todos/{id}/complete", a.requireLock(web.LockTodos, a.completeTodo))
+	mux.HandleFunc("POST /todos/{id}/reopen", a.requireLock(web.LockTodos, a.reopenTodo))
 	mux.HandleFunc("POST /todos/{id}/delete", a.deleteTodo)
 	mux.HandleFunc("GET /chores", a.getChores)
 	mux.HandleFunc("POST /chores", a.requireUnlock(a.saveChore))
@@ -189,7 +190,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /chores/{id}", a.requireUnlock(a.saveChore))
 	mux.HandleFunc("POST /chores/{id}/archive", a.requireUnlock(a.setChoreArchived(true)))
 	mux.HandleFunc("POST /chores/{id}/restore", a.requireUnlock(a.setChoreArchived(false)))
-	mux.HandleFunc("POST /chores/{id}/complete", a.requireLock("lock_chores", a.completeChore))
+	mux.HandleFunc("POST /chores/{id}/complete", a.requireLock(web.LockChores, a.completeChore))
 	mux.HandleFunc("POST /chores/completions/{id}/delete", a.requireUnlock(a.undoCompletion))
 	mux.HandleFunc("POST /rewards", a.requireUnlock(a.createReward))
 	mux.HandleFunc("POST /rewards/{id}/archive", a.requireUnlock(a.setRewardArchived(true)))

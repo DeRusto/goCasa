@@ -105,8 +105,8 @@ templ Setup(errMsg string) {
 	}
 }
 
-// Lock is the Admin PIN pad: pick your avatar, enter your PIN.
-templ Lock(admins []Member, errMsg, next string) {
+// PINPad is the Admin PIN pad: pick your avatar, enter your PIN.
+templ PINPad(admins []Member, errMsg, next string) {
 	@layout("Unlock Settings") {
 		<main>
 			<h1>Enter your PIN</h1>

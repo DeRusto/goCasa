@@ -29,18 +29,18 @@ func (h Household) Today(now time.Time) time.Time { return dayAt(now.In(h.Zone),
 // Clock is the time layout under the 12/24-hour setting.
 func (h Household) Clock() string { return clockLayout(h.Clock24) }
 
-// Lock is whether the Lock in column is on; requireLock names its Locks by
-// column (typed in #76).
-func (h Household) Lock(column string) bool {
-	switch column {
-	case "lock_calendar":
-		return h.Locks.Calendar
-	case "lock_chores":
-		return h.Locks.Chores
-	case "lock_todos":
-		return h.Locks.Todos
-	}
-	panic("no Lock " + column)
+// access is what this request's device may do: the Household's Locks, and
+// whether an Admin has unlocked it.
+func (a *App) access(ctx context.Context) (web.Access, error) {
+	h, err := a.household(ctx)
+	return web.Access{Locks: h.Locks, Unlocked: unlockedAdmin(ctx) != 0}, err
+}
+
+// setLocks writes the Household's Locks.
+func (a *App) setLocks(ctx context.Context, l web.Locks) error {
+	_, err := a.DB.ExecContext(ctx, "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
+		l.Calendar, l.Chores, l.Todos)
+	return err
 }
 
 // loadHousehold reads household_settings. On error, Zone is still set (the

@@ -162,29 +162,27 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
 func (a *App) saveLocks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
-		r.PostForm.Has("lock_calendar"), r.PostForm.Has("lock_chores"), r.PostForm.Has("lock_todos")); err != nil {
+	if err := a.setLocks(r.Context(), web.Locks{Calendar: r.PostForm.Has("lock_calendar"),
+		Chores: r.PostForm.Has("lock_chores"), Todos: r.PostForm.Has("lock_todos")}); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-// requireLock wraps an action behind the Lock in column: while that Lock is on,
-// a locked device goes to the PIN pad. One unlock covers every Lock (spec §9).
-func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
-	Household{}.Lock(column) // an unknown Lock panics at startup, not per request
+// requireLock wraps an action behind lock: while that Lock is on, a locked
+// device goes to the PIN pad. One unlock covers every Lock (spec §9).
+func (a *App) requireLock(lock web.Lock, h http.HandlerFunc) http.HandlerFunc {
+	web.Locks{}.On(lock) // an unknown Lock panics at startup, not per request
 	return func(w http.ResponseWriter, r *http.Request) {
-		if unlockedAdmin(r.Context()) == 0 {
-			hh, err := a.household(r.Context())
-			if err != nil {
-				a.serverError(w, r, err)
-				return
-			}
-			if hh.Lock(column) {
-				toLock(w, r)
-				return
-			}
+		acc, err := a.access(r.Context())
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		if !acc.CanDo(lock) {
+			toLock(w, r)
+			return
 		}
 		h(w, r)
 	}
@@ -275,7 +273,7 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 		http.Redirect(w, r, "/settings", http.StatusSeeOther) // first run
 		return
 	}
-	a.render(w, r, status, web.Lock(admins, errMsg, safeNext(r.FormValue("next"))))
+	a.render(w, r, status, web.PINPad(admins, errMsg, safeNext(r.FormValue("next"))))
 }
 
 // Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
