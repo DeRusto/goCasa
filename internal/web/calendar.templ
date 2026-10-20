@@ -339,7 +339,7 @@ templ sortable() {
 }
 
 // liveDrafts keeps a remote change from wiping a draft: while a form in #live
-// is being filled (focused, or holding unsent text) its swap is cancelled, and
+// is being filled (focused, or holding unsent text, ticks or choices) its swap is cancelled, and
 // redone once focus leaves it. A failed refetch is retried, so the page doesn't
 // stay stale until the next change.
 templ liveDrafts() {
@@ -347,8 +347,11 @@ templ liveDrafts() {
 	(() => {
 		const live = document.getElementById("live");
 		const refresh = () => document.dispatchEvent(new Event("refresh-live"));
-		const drafting = () => [...live.querySelectorAll("input:not([type=hidden], [type=checkbox], [type=radio]), textarea")].some(el =>
-			el === document.activeElement || el.value !== el.defaultValue);
+		const drafting = () => [...live.querySelectorAll("input:not([type=hidden]), textarea, select")].some(el =>
+			el === document.activeElement || (
+			el.type === "checkbox" || el.type === "radio" ? el.checked !== el.defaultChecked :
+			el.tagName === "SELECT" ? [...el.options].some(o => o.selected !== o.defaultSelected) :
+			el.value !== el.defaultValue));
 		let deferred, retry;
 		live.addEventListener("htmx:beforeSwap", e => {
 			deferred = drafting();
