@@ -20,25 +20,29 @@ type MealieList struct {
 }
 
 templ MealieSection(m *Mealie) {
-	<h2>Mealie</h2>
-	if m == nil {
-		<p>Mirror a Mealie household's shopping lists (Mealie v2.0 or later). Make an API token in Mealie under Profile > API Tokens.</p>
-		<form method="post" action="/settings/mealie">
-			<label>Address <input name="url" type="text" inputmode="url" required placeholder="https://mealie.example.com"/></label>
-			<label>API token <input name="token" type="password" required autocomplete="off"/></label>
-			<button>Connect Mealie</button>
-		</form>
-	} else {
-		<p>Connected to { m.URL }. Every shopping list there shows under Lists; hide the ones you don't want.</p>
-		@syncStatus(m.LastSuccess, m.Failures, m.LastError)
-		for _, l := range m.Lists {
-			<form method="post" action={ templ.SafeURL("/settings/mealie-lists/" + strconv.FormatInt(l.ID, 10)) }>
-				<label><input type="checkbox" name="hidden" checked?={ l.Hidden }/> Hide { l.Name }</label>
-				<button>Save { l.Name }</button>
+	<section class="card flex flex-col gap-3">
+		<h2>Mealie</h2>
+		if m == nil {
+			<p class="text-muted">Mirror a Mealie household's shopping lists (Mealie v2.0 or later). Make an API token in Mealie under Profile > API Tokens.</p>
+			<form method="post" action="/settings/mealie">
+				<label>Address <input name="url" type="text" inputmode="url" required placeholder="https://mealie.example.com"/></label>
+				<label>API token <input name="token" type="password" required autocomplete="off"/></label>
+				<button class="btn-primary">Connect Mealie</button>
 			</form>
+		} else {
+			<p class="text-muted break-words">Connected to { m.URL }. Every shopping list there shows under Lists; hide the ones you don't want.</p>
+			@syncStatus(m.LastSuccess, m.Failures, m.LastError)
+			for _, l := range m.Lists {
+				<form method="post" action={ templ.SafeURL("/settings/mealie-lists/" + strconv.FormatInt(l.ID, 10)) }>
+					<label class="pick"><input type="checkbox" name="hidden" checked?={ l.Hidden }/> Hide { l.Name }</label>
+					<button>Save { l.Name }</button>
+				</form>
+			}
+			@integrationActions() {
+				<form method="post" action="/settings/mealie/delete">
+					<button class="btn-danger">Disconnect Mealie</button>
+				</form>
+			}
 		}
-		<form method="post" action="/settings/mealie/delete">
-			<button>Disconnect Mealie</button>
-		</form>
-	}
+	</section>
 }

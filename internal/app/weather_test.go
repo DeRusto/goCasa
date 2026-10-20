@@ -64,7 +64,7 @@ func TestWeatherPillRendersFromCacheEvenOffline(t *testing.T) {
 	if code, page := h.Post(t, "/settings/weather", url.Values{"lat": {"51.5"}, "lon": {"-0.12"}, "units": {"metric"}}); code != http.StatusOK || !strings.Contains(page, `value="51.5"`) {
 		t.Fatalf("save weather = %d %q", code, page)
 	}
-	if _, page := h.Get(t, "/calendar"); strings.Contains(page, `class="weather-pill"`) {
+	if _, page := h.Get(t, "/calendar"); strings.Contains(page, `aria-label="Weather"`) {
 		t.Fatal("pill before anything was fetched")
 	}
 	h.RunDue()
@@ -98,7 +98,7 @@ func TestWeatherImperialAsksForFahrenheit(t *testing.T) {
 	}
 	// Switching units hides the old units' cache until the next fetch.
 	h.Post(t, "/settings/weather", url.Values{"lat": {"40.7"}, "lon": {"-74"}, "units": {"metric"}})
-	if _, page := h.Get(t, "/calendar"); strings.Contains(page, `class="weather-pill"`) {
+	if _, page := h.Get(t, "/calendar"); strings.Contains(page, `aria-label="Weather"`) {
 		t.Fatal("pill in the old units")
 	}
 	h.RunDue()

@@ -68,7 +68,7 @@ func TestGoogleEditWritesFirst(t *testing.T) {
 	if code != http.StatusBadGateway || !strings.Contains(page, "reach Google, so nothing changed") {
 		t.Fatalf("an edit Google didn't take = %d:\n%s", code, page)
 	}
-	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(d, "10:00–11:00 Dentist") || !strings.Contains(d, "#22c55e") || len(g.requests()) != n {
+	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(text(d), "10:00–11:00 Dentist") || !strings.Contains(d, "#22c55e") || len(g.requests()) != n {
 		t.Fatalf("a failed edit changed the dentist: %q", d)
 	}
 
@@ -85,7 +85,7 @@ func TestGoogleEditWritesFirst(t *testing.T) {
 		start["dateTime"] != "2026-03-16T14:00:00Z" || start["timeZone"] != "Europe/London" {
 		t.Fatalf("Google got %+v", w)
 	}
-	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(d, "14:00–15:00 Dentist (moved)") || !strings.Contains(d, "#3b82f6") || strings.Contains(d, "#22c55e") {
+	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(text(d), "14:00–15:00 Dentist (moved)") || !strings.Contains(d, "#3b82f6") || strings.Contains(d, "#22c55e") {
 		t.Fatalf("after the edit's sync: %q", d)
 	}
 
@@ -175,7 +175,7 @@ func TestGoogleCreateAndDelete(t *testing.T) {
 	if w.method != http.MethodPost || w.id != "" || w.body["summary"] != "Swim" || fmt.Sprint(w.body["recurrence"]) != "[RRULE:FREQ=WEEKLY;INTERVAL=1]" {
 		t.Fatalf("Google got %+v", w)
 	}
-	if d := day(t, agendaPage(t, h), "2026-03-17"); !strings.Contains(d, "10:00–11:00 Swim") || !strings.Contains(d, "#22c55e") {
+	if d := day(t, agendaPage(t, h), "2026-03-17"); !strings.Contains(text(d), "10:00–11:00 Swim") || !strings.Contains(d, "#22c55e") {
 		t.Fatalf("the new event = %q", d)
 	}
 	var local int
@@ -337,7 +337,7 @@ func TestGoogleSplitMadeInGoogle(t *testing.T) {
 	})
 	h.Post(t, "/calendar/sync", nil)
 	page := agendaPage(t, h)
-	if d := day(t, page, "2026-03-21"); strings.Contains(d, "10:00–11:00 Swim") || !strings.Contains(d, "09:00–10:00 Swim club") {
+	if d := day(t, page, "2026-03-21"); strings.Contains(text(d), "10:00–11:00 Swim") || !strings.Contains(text(d), "09:00–10:00 Swim club") {
 		t.Fatalf("21 March after a Split in Google: %q", d)
 	}
 	eventID(t, h, "swim_20260314") // the series before the Split stays
@@ -376,7 +376,7 @@ func TestGoogleSplitLands(t *testing.T) {
 	}
 	page := agendaPage(t, h)
 	for _, d := range []string{"2026-03-21", "2026-03-28"} {
-		if got := day(t, page, d); strings.Contains(got, "10:00–11:00 Swim") || !strings.Contains(got, "09:00–10:00 Swim club") || !strings.Contains(got, "#3b82f6") {
+		if got := day(t, page, d); strings.Contains(text(got), "10:00–11:00 Swim") || !strings.Contains(text(got), "09:00–10:00 Swim club") || !strings.Contains(got, "#3b82f6") {
 			t.Fatalf("%s after the Split: %q", d, got)
 		}
 	}

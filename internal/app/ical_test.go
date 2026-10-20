@@ -103,8 +103,11 @@ func TestFeedImportUpdateAndSoftDelete(t *testing.T) {
 	f := newFeed(t, vcal(swim, fair))
 	addFeed(t, h, "School", f.URL)
 	page := agendaPage(t, h)
-	for _, want := range []string{"17:00–18:00 Swim meet", "All day Book fair", `title="From a calendar feed: read-only"`} {
-		if !strings.Contains(page, want) {
+	if !strings.Contains(page, `title="From a calendar feed: read-only"`) {
+		t.Fatalf("feed events aren't marked read-only:\n%s", page)
+	}
+	for _, want := range []string{"17:00–18:00 Swim meet", "All day Book fair"} {
+		if !strings.Contains(text(page), want) {
 			t.Fatalf("calendar lacks %q:\n%s", want, page)
 		}
 	}
@@ -137,7 +140,7 @@ func TestFeedImportUpdateAndSoftDelete(t *testing.T) {
 	h.Clock.Advance(15 * time.Minute)
 	h.RunDue()
 	page = agendaPage(t, h)
-	if !strings.Contains(page, "16:00–18:00 Swim gala") || strings.Contains(page, "Swim meet") || strings.Contains(page, "Book fair") {
+	if !strings.Contains(text(page), "16:00–18:00 Swim gala") || strings.Contains(page, "Swim meet") || strings.Contains(page, "Book fair") {
 		t.Fatalf("after the upstream edit and delete:\n%s", page)
 	}
 	var rows int
@@ -169,7 +172,7 @@ func TestFeedSeries(t *testing.T) {
 	page := agendaPage(t, h)
 	for date, want := range map[string]string{"2026-03-16": "17:00–17:30 Recess", "2026-03-18": "18:00–18:30 Recess (late)",
 		"2026-03-20": "20:00–21:00 Extra practice"} {
-		if d := day(t, page, date); !strings.Contains(d, want) {
+		if d := day(t, page, date); !strings.Contains(text(d), want) {
 			t.Fatalf("%s = %q, want %q", date, d, want)
 		}
 	}

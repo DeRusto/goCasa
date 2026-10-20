@@ -204,6 +204,7 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 	rows, err := a.DB.QueryContext(ctx, `SELECT e.id, e.title, e.all_day, coalesce(e.start_utc, 0), coalesce(e.end_utc, 0),
 			coalesce(e.all_day_date, ''), coalesce(e.all_day_end_date, ''), c.color,
 			coalesce((SELECT group_concat(m.color, ',' ORDER BY m.name, m.id) FROM event_members em JOIN members m ON m.id = em.member_id WHERE em.event_id = e.id), ''),
+			coalesce((SELECT group_concat(m.id, ',' ORDER BY m.name, m.id) FROM event_members em JOIN members m ON m.id = em.member_id WHERE em.event_id = e.id), ''),
 			?5 = '' OR NOT EXISTS (SELECT 1 FROM event_members WHERE event_id = e.id)
 				OR EXISTS (SELECT 1 FROM event_members WHERE event_id = e.id AND member_id IN (SELECT value FROM json_each(?5))),
 			coalesce(e.start_tzid, ''), coalesce(e.rrule, ''), e.exdates_json, e.rdates_json,
@@ -226,17 +227,18 @@ func (a *App) eventsIn(ctx context.Context, from, to time.Time, users []int64) (
 	byID := map[int64]*storedSeries{}
 	for rows.Next() {
 		var e calendarEvent
-		var tzid, ex, rd, calendarColor, memberColors string
+		var tzid, ex, rd, calendarColor, memberColors, memberIDs string
 		var s series
 		var o oneOff
 		var masterID int64
-		if err := rows.Scan(&e.id, &e.title, &e.allDay, &e.start, &e.end, &e.date, &e.endDate, &calendarColor, &memberColors, &e.shown,
+		if err := rows.Scan(&e.id, &e.title, &e.allDay, &e.start, &e.end, &e.date, &e.endDate, &calendarColor, &memberColors, &memberIDs, &e.shown,
 			&tzid, &s.rule, &ex, &rd, &masterID, &o.original, &o.cancelled, &e.readOnly, &e.synced); err != nil {
 			return nil, err
 		}
 		e.colors = []string{calendarColor}
 		if memberColors != "" {
 			e.colors = strings.Split(memberColors, ",")
+			e.members = parseIDs([]string{memberIDs})
 		}
 		switch {
 		case masterID != 0:

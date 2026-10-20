@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -90,6 +91,7 @@ type calendarEvent struct {
 	start, end    int64    // timed
 	date, endDate string   // all-day
 	colors        []string // its Members' colours, else its calendar's
+	members       []int64  // its Members, in colors' order
 	shown         bool     // passes the Member filter; eventsIn returns only these
 	readOnly      bool     // on a feed's calendar
 	synced        bool     // from Google: only its Members change here
@@ -122,7 +124,9 @@ func (a *App) getCalendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}, ICS: a.icsURL(), DefaultView: calendarView(view, users)}
+	now := a.Now().In(loc)
+	p := web.CalendarPage{View: view, Date: date, Users: map[int64]bool{}, ICS: a.icsURL(), DefaultView: calendarView(view, users),
+		Clock24: hh.Clock24, NowMin: now.Hour()*60 + now.Minute()}
 	if p.Stale, p.BeyondGoogle, err = a.syncNotices(r.Context(), end); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -173,29 +177,68 @@ func calendarDay(evs []calendarEvent, d0, today time.Time, now int64, clock stri
 	ds := d0.Format(dateLayout)
 	day := web.CalendarDay{Date: d0, Today: d0.Equal(today)}
 	for _, e := range evs {
-		ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, ReadOnly: e.readOnly, Synced: e.synced}
+		ev := web.CalendarEvent{ID: e.id, Original: e.original, Title: e.title, Colors: e.colors, Members: e.members, ReadOnly: e.readOnly, Synced: e.synced}
 		if e.allDay {
 			if e.date > ds || e.endDate <= ds {
 				continue
 			}
-			ev.Time = "All day"
+			ev.Time, ev.AllDay = "All day", true
+			ev.ContinuesBefore, ev.ContinuesAfter = e.date < ds, e.endDate > d1.Format(dateLayout)
 		} else {
 			if e.start >= d1.Unix() || e.end <= d0.Unix() {
 				continue
 			}
 			from, to := "…", "…"
+			ev.To = 24 * 60
 			if e.start >= d0.Unix() {
-				from = time.Unix(e.start, 0).In(loc).Format(clock)
+				t := time.Unix(e.start, 0).In(loc)
+				from, ev.From = t.Format(clock), t.Hour()*60+t.Minute()
 			}
 			if e.end <= d1.Unix() {
-				to = time.Unix(e.end, 0).In(loc).Format(clock)
+				t := time.Unix(e.end, 0).In(loc)
+				to = t.Format(clock)
+				if e.end < d1.Unix() {
+					ev.To = t.Hour()*60 + t.Minute()
+					if ev.To < ev.From { // ends in the hour the clocks go back over: draw its real length
+						ev.To = min(ev.From+int(e.end-max(e.start, d0.Unix()))/60, 24*60)
+					}
+				}
 			}
 			ev.Time = from + "–" + to
 			ev.Past, ev.End = e.end <= now, e.end*1000
 		}
 		day.Events = append(day.Events, ev)
 	}
+	lanes(day.Events)
 	return day
+}
+
+// lanes sets each timed event's Lane and Lanes, so events that overlap sit side
+// by side on the time grid; evs are by start, as eventsIn returns them.
+func lanes(evs []web.CalendarEvent) {
+	var group []*web.CalendarEvent // events chained by overlaps
+	var ends []int                 // each lane's last end in the group
+	for i := range evs {
+		e := &evs[i]
+		if e.AllDay {
+			continue
+		}
+		if len(group) > 0 && e.From >= slices.Max(ends) {
+			for _, g := range group {
+				g.Lanes = len(ends)
+			}
+			group, ends = group[:0], ends[:0]
+		}
+		e.Lane = slices.IndexFunc(ends, func(end int) bool { return end <= e.From })
+		if e.Lane < 0 {
+			e.Lane, ends = len(ends), append(ends, 0)
+		}
+		ends[e.Lane] = max(e.To, e.From+web.MinBlockMinutes) // as tall as it's drawn
+		group = append(group, e)
+	}
+	for _, g := range group {
+		g.Lanes = len(ends)
+	}
 }
 
 func (a *App) activeMembers(r *http.Request) ([]web.Member, error) {
