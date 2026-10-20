@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +155,80 @@ func TestACompletedCopyWithANextCopyCannotBeDeleted(t *testing.T) {
 	post(t, h, "/todos/2/delete", nil) // no next copy any more
 	if got, want := board(t, h, "status=all"), "Bins 2026-03-16"; got != want {
 		t.Fatalf("all = %q, want %q", got, want)
+	}
+}
+
+// A to-do due monthly on the 31st falls on the last day of shorter months,
+// and goes back to the 31st after them.
+func TestMonthlyAndYearlyRepeatsClampToTheMonthsLastDay(t *testing.T) {
+	h := apptest.New(t)
+	h.Clock.Set(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)) // every completion is early
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", recurringTodo("Rent", "2028-01-31", "monthly", nil))
+	for id := 1; id <= 4; id++ {
+		post(t, h, "/todos/"+strconv.Itoa(id)+"/complete", nil)
+	}
+	if got, want := board(t, h, "status=all"), "Rent 2028-01-31|Rent 2028-02-29|Rent 2028-03-31|Rent 2028-04-30|Rent 2028-05-31"; got != want {
+		t.Fatalf("31st = %q, want %q", got, want)
+	}
+
+	post(t, h, "/todos", recurringTodo("Rates", "2027-01-30", "monthly", nil)) // 6
+	post(t, h, "/todos", recurringTodo("Leap", "2028-02-29", "yearly", nil))   // 7
+	post(t, h, "/todos", recurringTodo("Plain", "2027-01-15", "monthly", nil)) // 8
+	for _, id := range []string{"6", "9", "7", "11", "12", "13"} {             // Rates 6, 9, 10; Leap 7, 11 to 14
+		post(t, h, "/todos/"+id+"/complete", nil)
+	}
+	if got, want := board(t, h, "status=all"), "Plain 2027-01-15|Rates 2027-01-30|Rates 2027-02-28|Rates 2027-03-30|"+
+		"Rent 2028-01-31|Rent 2028-02-29|Leap 2028-02-29|Rent 2028-03-31|Rent 2028-04-30|Rent 2028-05-31|"+
+		"Leap 2029-02-28|Leap 2030-02-28|Leap 2031-02-28|Leap 2032-02-29"; got != want {
+		t.Fatalf("all = %q, want %q", got, want)
+	}
+	var rule string
+	h.App.DB.QueryRow("SELECT repeat_rule FROM todos WHERE id = 8").Scan(&rule)
+	if rule != "FREQ=MONTHLY;INTERVAL=1" {
+		t.Errorf("15th rule = %q, want no anchor", rule)
+	}
+	for id, want := range map[string]string{"1": "monthly", "7": "yearly"} {
+		if _, body := h.Get(t, "/todos/"+id); !strings.Contains(body, `value="`+want+`" selected`) {
+			t.Errorf("edit form of %s doesn't show %s", id, want)
+		}
+	}
+}
+
+// Repeat from completion anchors to the completion day, so a to-do done on
+// the 31st lands on a short month's last day and back on the 31st after it.
+func TestRepeatFromCompletionAnchorsToTheCompletionDay(t *testing.T) {
+	h := apptest.New(t)
+	h.Clock.Set(time.Date(2026, 12, 31, 12, 0, 0, 0, time.UTC))
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", recurringTodo("Filter", "2026-12-20", "monthly", url.Values{"repeat_from": {"completion"}, "interval": {"2"}}))
+	post(t, h, "/todos/1/complete", nil) // done Dec 31: two months on is Feb 28
+	h.Clock.Set(time.Date(2027, 2, 15, 12, 0, 0, 0, time.UTC))
+	post(t, h, "/todos/2/complete", nil) // done early on the 15th: the anchor moves
+	if got, want := board(t, h, "status=all"), "Filter 2026-12-20|Filter 2027-02-28|Filter 2027-04-15"; got != want {
+		t.Fatalf("all = %q, want %q", got, want)
+	}
+	var rule2, rule3 string
+	h.App.DB.QueryRow("SELECT repeat_rule FROM todos WHERE id = 2").Scan(&rule2)
+	h.App.DB.QueryRow("SELECT repeat_rule FROM todos WHERE id = 3").Scan(&rule3)
+	if rule2 != "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=28,29,30,31;BYSETPOS=-1" || rule3 != "FREQ=MONTHLY;INTERVAL=2" {
+		t.Errorf("rules = %q, %q, want the 31st anchor then none", rule2, rule3)
+	}
+}
+
+// A chain made before the anchor existed gains it from its due day.
+func TestAChainWithoutTheAnchorGainsItOnItsNextCompletion(t *testing.T) {
+	h := apptest.New(t)
+	h.Clock.Set(time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC))
+	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
+	post(t, h, "/todos", recurringTodo("Rent", "2027-03-31", "monthly", nil))
+	if _, err := h.App.DB.Exec("UPDATE todos SET repeat_rule = 'FREQ=MONTHLY;INTERVAL=1' WHERE id = 1"); err != nil {
+		t.Fatal(err)
+	}
+	post(t, h, "/todos/1/complete", nil)
+	var rule string
+	h.App.DB.QueryRow("SELECT repeat_rule FROM todos WHERE id = 2").Scan(&rule)
+	if got, want := board(t, h, ""), "Rent 2027-04-30"; got != want || rule != "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1" {
+		t.Fatalf("next = %q with %q, want %q anchored to the 31st", got, rule, want)
 	}
 }

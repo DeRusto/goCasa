@@ -180,13 +180,13 @@ func (a *App) completeTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	var next int64
 	if rule.Valid {
-		nextDue, err := nextTodoDue(rule.String, fromCompletion, due, dayAt(now.In(a.location(r.Context())), 0))
+		nextDue, nextRule, err := nextTodoDue(rule.String, fromCompletion, due, dayAt(now.In(a.location(r.Context())), 0))
 		if err != nil {
 			a.serverError(w, r, err)
 			return
 		}
 		if err := tx.QueryRowContext(r.Context(), `INSERT INTO todos (column_id, title, notes, due_date, position, created_at, repeat_rule, repeat_from_completion)
-			SELECT column_id, title, notes, ?, position, ?, repeat_rule, repeat_from_completion FROM todos WHERE id = ? RETURNING id`, nextDue, now.Unix(), id).Scan(&next); err != nil {
+			SELECT column_id, title, notes, ?, position, ?, ?, repeat_from_completion FROM todos WHERE id = ? RETURNING id`, nextDue, now.Unix(), nextRule, id).Scan(&next); err != nil {
 			a.serverError(w, r, err)
 			return
 		}
@@ -210,13 +210,28 @@ func (a *App) completeTodo(w http.ResponseWriter, r *http.Request) {
 // completed copy's due date and the day it was completed. Repeat from
 // schedule takes the first rule date after both, so missed dates are skipped
 // and early completion doesn't use up the next one; Repeat from completion
-// counts one interval from the completion day.
-func nextTodoDue(rule string, fromCompletion bool, due string, today time.Time) (string, error) {
+// counts one interval from the completion day. The next copy's rule is
+// anchored (see anchorRule) to the completed copy's due day, or for Repeat
+// from completion to the completion day, so a chain made before the anchor
+// existed gains it on its next completion.
+func nextTodoDue(rule string, fromCompletion bool, due string, today time.Time) (nextDue, nextRule string, err error) {
+	day := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	start, err := time.Parse(dateLayout, due)
+	if fromCompletion {
+		// A to-do's rule is a preset, with any anchor last; cut it to re-anchor.
+		if i := strings.Index(rule, ";BYMONTH"); i >= 0 {
+			rule = rule[:i]
+		}
+		start, err = day, nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	rule = anchorRule(rule, start)
 	opt, err := rrule.StrToROption(rule)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	day := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
 	if fromCompletion {
 		n := opt.Interval
 		switch opt.Freq {
@@ -229,16 +244,13 @@ func nextTodoDue(rule string, fromCompletion bool, due string, today time.Time) 
 		default:
 			day = day.AddDate(0, 0, n)
 		}
-		return day.Format(dateLayout), nil
-	}
-	start, err := time.Parse(dateLayout, due)
-	if err != nil {
-		return "", err
+		return day.Format(dateLayout), rule, nil
 	}
 	if day.Before(start) {
 		day = start
 	}
-	return ruleDate(opt, start, day, false)
+	nextDue, err = ruleDate(opt, start, day, false)
+	return nextDue, rule, err
 }
 
 // addMonthsClamped adds n months to day, keeping to the target month's last
@@ -358,18 +370,21 @@ func todoFields(r *http.Request, today time.Time) (t web.Todo, rule, msg string)
 	default:
 		return t, "", "Pick how it repeats."
 	}
-	if rule, msg = presetRule(r, t.ByDay); msg != "" || t.Due != "" {
-		return t, rule, msg
+	if rule, msg = presetRule(r, t.ByDay); msg != "" {
+		return t, "", msg
 	}
-	opt, err := rrule.StrToROption(rule)
-	if err == nil {
-		day := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-		t.Due, err = ruleDate(opt, day, day, true)
+	if t.Due == "" {
+		opt, err := rrule.StrToROption(rule)
+		if err == nil {
+			day := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+			t.Due, err = ruleDate(opt, day, day, true)
+		}
+		if err != nil {
+			return t, "", "That repeat rule isn't one GoCasa understands."
+		}
 	}
-	if err != nil {
-		return t, "", "That repeat rule isn't one GoCasa understands."
-	}
-	return t, rule, ""
+	due, _ := time.Parse(dateLayout, t.Due)
+	return t, anchorRule(rule, due), ""
 }
 
 // todoText reads and checks the to-do form's column, title, notes and due date.
