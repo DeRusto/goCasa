@@ -36,11 +36,22 @@ type Harness struct {
 	Client *http.Client // one browser: its own cookies, follows redirects
 }
 
-// Option adjusts the app's options before it is built, e.g. to point an
-// upstream at an httptest fake.
-type Option func(*app.Options)
+// Setup is what New builds from: the app's options, and the Household's
+// timezone ("" is the server's zone, UTC).
+type Setup struct {
+	app.Options
+	HouseholdTimezone string
+}
 
-func WithUpstreams(u app.Upstreams) Option { return func(o *app.Options) { o.Upstreams = u } }
+// Option adjusts the Setup before the app is built, e.g. to point an
+// upstream at an httptest fake.
+type Option func(*Setup)
+
+func WithUpstreams(u app.Upstreams) Option { return func(o *Setup) { o.Upstreams = u } }
+
+// WithHouseholdTimezone sets the Household's timezone, so a test catches a
+// path that uses the server's zone (UTC here) instead.
+func WithHouseholdTimezone(tz string) Option { return func(o *Setup) { o.HouseholdTimezone = tz } }
 
 // Start is the clock's starting time: a fixed instant so tests are repeatable.
 var Start = time.Date(2026, 3, 15, 9, 0, 0, 0, time.UTC)
@@ -51,7 +62,7 @@ func New(t testing.TB, opts ...Option) *Harness {
 	t.Helper()
 	clock := &Clock{t: Start}
 	nowhere := "http://127.0.0.1:1"
-	o := app.Options{
+	o := Setup{Options: app.Options{
 		Config: config.Config{
 			Addr:          ":0",
 			BaseURL:       &url.URL{Scheme: "http", Host: "gocasa.test"},
@@ -65,13 +76,16 @@ func New(t testing.TB, opts ...Option) *Harness {
 		Now:       clock.Now,
 		Upstreams: app.Upstreams{GoogleAuth: nowhere, GoogleAPI: nowhere, GoogleOAuth: nowhere, OpenMeteo: nowhere},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	}}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	a, err := app.New(context.Background(), o)
+	a, err := app.New(context.Background(), o.Options)
 	if err != nil {
 		t.Fatalf("app.New: %v", err)
+	}
+	if _, err := a.DB.Exec("UPDATE household_settings SET timezone = ?", o.HouseholdTimezone); err != nil {
+		t.Fatalf("household timezone: %v", err)
 	}
 	srv := httptest.NewServer(a.Handler())
 	t.Cleanup(func() { srv.Close(); a.Close() })

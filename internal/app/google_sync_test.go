@@ -30,10 +30,10 @@ func gOccurrence(series, id, summary, start, end string) map[string]any {
 
 // syncedGoogle connects Alice's Google account with her calendar shown and
 // Bob (Member 2) as its default Member. It returns the calendar's id.
-func syncedGoogle(t *testing.T, g *fakeGoogle) (*apptest.Harness, int64) {
+func syncedGoogle(t *testing.T, g *fakeGoogle, opts ...apptest.Option) (*apptest.Harness, int64) {
 	t.Helper()
 	g.list(cal("alice@example.com", "Alice", "#9fc6e7", "owner"))
-	h := googleHousehold(t, g)
+	h := googleHousehold(t, g, opts...)
 	h.Post(t, "/integrations/google/connect", nil)
 	var id int64
 	h.App.DB.QueryRow("SELECT id FROM source_calendars WHERE external_id = 'alice@example.com'").Scan(&id)
