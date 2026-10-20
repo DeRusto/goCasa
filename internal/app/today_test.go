@@ -147,3 +147,22 @@ func TestHouseholdTimezoneSetsTheDay(t *testing.T) {
 		t.Fatalf("a blank timezone isn't the server's: %q", page)
 	}
 }
+
+// Today turns its day at the Household's midnight with no timed refetch
+// before it, and each timed event carries its end so the browser greys it.
+func TestTodayTurnsAtTheHouseholdsMidnightAndEventsCarryTheirEnd(t *testing.T) {
+	h := household(t, auckland)
+	h.Clock.Set(aucklandMonday) // 01:00 Monday in Auckland
+	addEvent(t, h, timed("Dentist", "2026-03-16T09:00", "2026-03-16T10:00", "Pacific/Auckland"))
+	_, page := h.Get(t, "/today")
+	if !strings.Contains(page, `data-midnight-in="82800"`) {
+		t.Errorf("Today doesn't turn at Auckland's midnight, 23 hours off: %q", page)
+	}
+	if strings.Contains(page, "60000") {
+		t.Errorf("Today still refetches by the minute: %q", page)
+	}
+	// 10:00 on 16 March in Auckland is 21:00 on the 15th in UTC.
+	if li := todayAgendaItem(t, page, "Dentist"); !strings.Contains(li, `data-end="1773608400000"`) {
+		t.Errorf("the event doesn't carry its end: %q", li)
+	}
+}

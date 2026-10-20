@@ -119,7 +119,7 @@ func TestBlackNightModeReleasesTheWakeLockBetweenItsHours(t *testing.T) {
 	for _, at := range []int{22, 23, 0, 5} {
 		h.Clock.Set(time.Date(2026, 3, 15, at, 0, 0, 0, time.UTC))
 		_, body := h.Get(t, "/screensaver")
-		if strings.Contains(body, "Dentist") || strings.Contains(body, "<time>") || strings.Contains(body, holdsWakeLock) {
+		if strings.Contains(body, "Dentist") || strings.Contains(body, "</time>") || strings.Contains(body, holdsWakeLock) {
 			t.Fatalf("at %02d:00 Black Night mode shows something or holds the wake lock: %q", at, body)
 		}
 		if !strings.Contains(body, `<a id="wake" href="/"`) {
@@ -132,12 +132,36 @@ func TestBlackNightModeReleasesTheWakeLockBetweenItsHours(t *testing.T) {
 	}
 }
 
-func TestTheScreensaverReloadsOnTheHouseholdsHour(t *testing.T) {
+// Night mode 22:00 to 06:00 in New York: the screensaver and Night pages
+// reload when it next starts or ends, at its hours on either side of a DST
+// change, and whenever the Household's settings change.
+func TestNightModeTurnsOnItsHoursAcrossDST(t *testing.T) {
+	h := household(t, apptest.WithHouseholdTimezone("America/New_York"))
+	nightMode(t, h, "black")
+	for _, c := range []struct {
+		at   time.Time
+		want string
+	}{
+		{time.Date(2026, 3, 8, 6, 0, 0, 0, time.UTC), "14400"},   // 01:00 EST; clocks go forward at 02:00; ends 06:00 EDT
+		{time.Date(2026, 3, 8, 12, 30, 0, 0, time.UTC), "48600"}, // 08:30 EDT; starts 22:00 EDT
+		{time.Date(2026, 11, 1, 5, 0, 0, 0, time.UTC), "21600"},  // 01:00 EDT; clocks go back at 02:00; ends 06:00 EST
+		{time.Date(2026, 11, 1, 15, 0, 0, 0, time.UTC), "43200"}, // 10:00 EST; starts 22:00 EST
+	} {
+		h.Clock.Set(c.at)
+		_, body := h.Get(t, "/screensaver")
+		if !strings.Contains(body, `data-reload-seconds="`+c.want+`"`) {
+			t.Errorf("at %s the screensaver doesn't reload in %s s: %q", c.at, c.want, body)
+		}
+		if !strings.Contains(body, `addEventListener("sse:household", () => location.reload())`) {
+			t.Errorf("at %s the screensaver doesn't reload on a household change", c.at)
+		}
+	}
+}
+
+func TestWithNightModeOffTheScreensaverNeverReloads(t *testing.T) {
 	h := household(t)
-	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "timezone": {"Asia/Kolkata"}})
-	h.Clock.Set(time.Date(2026, 3, 15, 9, 10, 0, 0, time.UTC)) // 14:40 in Kolkata
-	if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, `data-reload-seconds="1200"`) {
-		t.Fatalf("the screensaver doesn't reload at 15:00 Kolkata time, when Night mode may start: %q", body)
+	if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, `data-reload-seconds="0"`) || strings.Contains(body, "60000") {
+		t.Fatalf("with Night mode off the screensaver reloads or refetches by the minute: %q", body)
 	}
 }
 
@@ -155,6 +179,10 @@ func TestDimClockNightModeKeepsTheWakeLockAndShowsTheTime(t *testing.T) {
 	}
 	if strings.Contains(body, "Dentist") {
 		t.Fatal("Dim clock shows the agenda")
+	}
+	// Midnight, 55 minutes off, turns its date before Night mode ends at 06:00.
+	if !strings.Contains(body, `data-reload-seconds="3300"`) {
+		t.Fatalf("Dim clock doesn't reload at midnight: %q", body)
 	}
 }
 

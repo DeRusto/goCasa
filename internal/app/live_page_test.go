@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // liveTag is the opening tag of page's #live region, unescaped.
@@ -60,6 +61,29 @@ func TestPagesRefetchOnlyForTheKindsTheyShow(t *testing.T) {
 		}
 		if strings.Contains(page, "new EventSource") {
 			t.Errorf("%s still opens its own EventSource", path)
+		}
+	}
+}
+
+// Night mode's reload rides the page's one htmx stream, which must deliver household.
+func TestNightPagesWatchHouseholdOnTheirOneStream(t *testing.T) {
+	h := household(t)
+	nightMode(t, h, "dim_clock")
+	for at, night := range map[time.Time]bool{
+		time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC): false,
+		time.Date(2026, 3, 15, 23, 0, 0, 0, time.UTC): true,
+	} {
+		h.Clock.Set(at)
+		_, page := h.Get(t, "/screensaver")
+		if strings.Contains(page, "data-night=") != night {
+			t.Fatalf("at %s Night is %v", at, !night)
+		}
+		conns := regexp.MustCompile(`<[^>]* sse-connect="/events/stream"[^>]*>`).FindAllString(page, -1)
+		if len(conns) != 1 || !strings.Contains(attr(conns[0], "hx-trigger"), "sse:household") || strings.Contains(page, "new EventSource") {
+			t.Errorf("at %s the page's streams are %q", at, conns)
+		}
+		if !strings.Contains(page, `addEventListener("sse:household", () => location.reload())`) {
+			t.Errorf("at %s the page doesn't reload on a household change", at)
 		}
 	}
 }
