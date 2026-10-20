@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // mealie mirrors every shopping list of one Mealie household (spec §10):
@@ -296,6 +297,11 @@ func (a *App) hideMealieList(w http.ResponseWriter, r *http.Request) {
 	}
 	a.publish("updated", "shopping_list", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+func (mealie) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+	m, err := a.mealieSettings(ctx, st)
+	return web.MealieSection(m), err
 }
 
 // mealieSettings is the Mealie section of Settings; nil when not connected.

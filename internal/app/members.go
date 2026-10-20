@@ -141,32 +141,7 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	st, err := a.integrations.Statuses(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	fs, err := a.feeds(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	g, err := a.googleSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	wx, err := a.weatherSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	ml, err := a.mealieSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	im, err := a.immichSettings(r.Context(), st)
+	secs, err := a.settingsSections(r.Context(), ms)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -181,7 +156,7 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, wx, hh.Locks, ml, im, fb, hh.Household, errMsg))
+	a.render(w, r, status, web.Settings(ms, hh.Locks, secs, fb, hh.Household, errMsg))
 }
 
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.

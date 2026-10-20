@@ -149,8 +149,8 @@ templ memberFields(m Member) {
 	<label><input type="checkbox" name="pet" checked?={ m.Pet }/> Pet</label>
 }
 
-// Settings is the unlocked Settings page.
-templ Settings(members []Member, feeds []Feed, google Google, weather Weather, locks Locks, mealie *Mealie, immich *Immich, fallback Fallback, household Household, errMsg string) {
+// Settings is the unlocked Settings page; sections are the Integrations' own, in order.
+templ Settings(members []Member, locks Locks, sections []templ.Component, fallback Fallback, household Household, errMsg string) {
 	@layout("Settings") {
 		<main>
 			<h1>Settings</h1>
@@ -227,30 +227,9 @@ templ Settings(members []Member, feeds []Feed, google Google, weather Weather, l
 					</section>
 				}
 			}
-			<h2>Calendar feeds</h2>
-			<p>Read-only iCal or webcal calendars, such as a school's or a sports team's. Their events can't be changed in GoCasa.</p>
-			for _, f := range feeds {
-				<section>
-					<h3>
-						<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color }></span>
-						{ f.Name }
-					</h3>
-					@syncStatus(f.LastSuccess, f.Failures, f.LastError)
-					<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
-						<button>Remove { f.Name }</button>
-					</form>
-				</section>
+			for _, sec := range sections {
+				@sec
 			}
-			<form method="post" action="/settings/feeds">
-				<label>Name <input name="name" required maxlength="50"/></label>
-				<label>Address <input name="url" type="text" inputmode="url" required placeholder="webcal://…"/></label>
-				<label>Colour <input type="color" name="color" value="#f59e0b"/></label>
-				<button>Add feed</button>
-			</form>
-			@googleSection(google, members)
-			@weatherSection(weather)
-			@mealieSection(mealie)
-			@immichSection(immich)
 			@fallbackSection(fallback)
 			@householdSection(household)
 			@thisDevice()
@@ -270,7 +249,31 @@ templ syncStatus(lastSuccess string, failures int, lastError string) {
 	}
 }
 
-templ googleSection(g Google, members []Member) {
+// FeedsSection is the iCal feeds' Settings section.
+templ FeedsSection(feeds []Feed) {
+	<h2>Calendar feeds</h2>
+	<p>Read-only iCal or webcal calendars, such as a school's or a sports team's. Their events can't be changed in GoCasa.</p>
+	for _, f := range feeds {
+		<section>
+			<h3>
+				<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color }></span>
+				{ f.Name }
+			</h3>
+			@syncStatus(f.LastSuccess, f.Failures, f.LastError)
+			<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
+				<button>Remove { f.Name }</button>
+			</form>
+		</section>
+	}
+	<form method="post" action="/settings/feeds">
+		<label>Name <input name="name" required maxlength="50"/></label>
+		<label>Address <input name="url" type="text" inputmode="url" required placeholder="webcal://…"/></label>
+		<label>Colour <input type="color" name="color" value="#f59e0b"/></label>
+		<button>Add feed</button>
+	</form>
+}
+
+templ GoogleSection(g Google, members []Member) {
 	<h2>Google accounts</h2>
 	if !g.Configured {
 		<p>To connect Google calendars, create your own Google Cloud OAuth client and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (see the README). Its redirect URI is <code>{ g.RedirectURI }</code>.</p>
