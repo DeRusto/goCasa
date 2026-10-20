@@ -232,7 +232,7 @@ templ Calendar(p CalendarPage) {
 					<fieldset class="contents">
 						<legend class="sr-only">Show Members (Household events always show)</legend>
 						for _, m := range p.Members {
-							<label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line py-1 pr-4 pl-1 [&_.avatar]:size-8 has-[:checked]:border-transparent has-[:checked]:bg-(--chip) has-[:focus-visible]:outline-2" style={ templ.SafeCSS("--chip:" + pastel(m.Color) + ";") }>
+							<label class="member-chip" style={ memberChip(m) }>
 								<input type="checkbox" name="users" value={ id(m.ID) } checked?={ p.Users[m.ID] } class="sr-only"/>
 								@avatar(m)
 								{ m.Name }
@@ -660,45 +660,50 @@ templ liveDrafts() {
 templ SyncedEventPage(e SyncedEvent, members []Member) {
 	@layout("Event") {
 		<main>
-			<h1>{ e.Title }</h1>
-			<p><a href="/calendar">Back to the calendar</a></p>
-			<p>{ e.When }</p>
-			<p>From Google: change it there. Its Members are GoCasa's own.</p>
-			<form method="post" action={ templ.SafeURL("/calendar/synced/" + id(e.ID)) }>
-				<fieldset>
-					<legend>Members (none: a Household event)</legend>
-					for _, m := range members {
-						<label>
-							<input type="checkbox" name="members" value={ id(m.ID) } checked?={ e.Members[m.ID] }/>
-							@avatar(m)
-							{ m.Name }
-						</label>
-					}
-				</fieldset>
-				<button>Save</button>
+			<p><a href="/calendar">‹ Calendar</a></p>
+			<form method="post" action={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } class="form-card">
+				<h1>{ e.Title }</h1>
+				<p>{ e.When }</p>
+				<p class="text-muted">From Google: change it there. Its Members are GoCasa's own.</p>
+				@eventMembers(members, e.Members)
+				<button class="btn-primary">Save</button>
 			</form>
 		</main>
 	}
+}
+
+// eventMembers is an event form's Members, as pastel avatar chips.
+templ eventMembers(members []Member, checked map[int64]bool) {
+	<fieldset>
+		<legend>Members (none: a Household event)</legend>
+		for _, m := range members {
+			<label class="member-chip" style={ memberChip(m) }>
+				<input type="checkbox" name="members" value={ id(m.ID) } checked?={ checked[m.ID] } class="sr-only"/>
+				@avatar(m)
+				{ m.Name }
+			</label>
+		}
+	</fieldset>
 }
 
 // EventPage is the event dialog: create, edit or delete a single event.
 templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg string) {
 	@layout("Event") {
 		<main>
-			<h1>
-				if f.ID == 0 {
-					New event
-				} else {
-					Edit event
-				}
-			</h1>
-			<p><a href="/calendar">Back to the calendar</a></p>
+			<p><a href="/calendar">‹ Calendar</a></p>
 			@formError(errMsg)
 			if len(cals) == 0 {
-				<p>Add a calendar on the calendar page first.</p>
+				<p role="status">Add a calendar on the calendar page first.</p>
 			}
-			<form method="post" action={ eventURL(f, "") }>
-				<label>Title <input name="title" value={ f.Title } required maxlength="200"/></label>
+			<form method="post" action={ eventURL(f, "") } class="form-card">
+				<h1>
+					if f.ID == 0 {
+						New event
+					} else {
+						Edit event
+					}
+				</h1>
+				<label class="w-full"><span>Title</span> <input name="title" value={ f.Title } required maxlength="200" class="min-w-0 flex-1"/></label>
 				if !f.scoped() && !f.Synced {
 					<label>
 						Calendar
@@ -709,58 +714,53 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 						</select>
 					</label>
 				}
-				<fieldset>
-					<legend>Members (none: a Household event)</legend>
-					for _, m := range members {
-						<label>
-							<input type="checkbox" name="members" value={ id(m.ID) } checked?={ f.Members[m.ID] }/>
-							@avatar(m)
-							{ m.Name }
-						</label>
-					}
-				</fieldset>
-				<label><input type="checkbox" name="all_day" checked?={ f.AllDay }/> All day</label>
-				<fieldset>
-					<legend>Timed</legend>
-					<label>Starts <input type="datetime-local" name="start" value={ f.Start }/></label>
-					<label>Ends <input type="datetime-local" name="end" value={ f.End }/></label>
-					<label>Time zone <input name="tz" value={ f.TZ }/></label>
-				</fieldset>
-				<fieldset>
-					<legend>All day</legend>
-					<label>First day <input type="date" name="start_date" value={ f.StartDate }/></label>
-					<label>Last day <input type="date" name="end_date" value={ f.EndDate }/></label>
-				</fieldset>
+				@eventMembers(members, f.Members)
+				<label class="pick"><input type="checkbox" name="all_day" checked?={ f.AllDay }/> All day</label>
+				<div class="grid w-full gap-4 min-[760px]:grid-cols-2">
+					<fieldset>
+						<legend>Timed</legend>
+						<label>Starts <input type="datetime-local" name="start" value={ f.Start } class="max-w-full"/></label>
+						<label>Ends <input type="datetime-local" name="end" value={ f.End } class="max-w-full"/></label>
+						<label>Time zone <input name="tz" value={ f.TZ } class="max-w-full"/></label>
+					</fieldset>
+					<fieldset>
+						<legend>All day</legend>
+						<label>First day <input type="date" name="start_date" value={ f.StartDate }/></label>
+						<label>Last day <input type="date" name="end_date" value={ f.EndDate }/></label>
+					</fieldset>
+				</div>
 				if f.Synced {
-					<p>From Google: repeat changes are made in Google.</p>
+					<p class="text-muted">From Google: repeat changes are made in Google.</p>
 				} else {
 					<fieldset>
 						<legend>Repeats</legend>
-						<select name="repeat">
+						<select name="repeat" aria-label="Repeats">
 							for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}, {"custom", "Custom (advanced)"}} {
 								<option value={ o[0] } selected?={ o[0] == f.Repeat }>{ o[1] }</option>
 							}
 						</select>
-						<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1"/></label>
-						<span>On (weekly)</span>
-						for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
-							<label><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
-						}
-						<details open?={ f.Repeat == "custom" }>
-							<summary>Advanced</summary>
-							<label>RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
+						<label>Every <input type="number" name="interval" min="1" max="999" value={ f.Interval } placeholder="1" class="w-20"/></label>
+						<div class="flex w-full flex-wrap items-center gap-2">
+							<span class="text-sm text-muted">On (weekly)</span>
+							for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+								<label class="pick"><input type="checkbox" name="byday" value={ d } checked?={ f.ByDay[d] }/> { d }</label>
+							}
+						</div>
+						<details open?={ f.Repeat == "custom" } class="w-full">
+							<summary class="flex min-h-11 cursor-pointer items-center">Advanced</summary>
+							<label class="w-full flex-col items-stretch">RRULE, EXDATE and RDATE lines <textarea name="rrule" placeholder="RRULE:FREQ=MONTHLY;BYDAY=2TU">{ f.Custom }</textarea></label>
 						</details>
 					</fieldset>
 				}
-				<label>Location <input name="location" value={ f.Location } maxlength="200"/></label>
-				<label>Description <textarea name="description" maxlength="5000">{ f.Description }</textarea></label>
+				<label class="w-full"><span>Location</span> <input name="location" value={ f.Location } maxlength="200" class="min-w-0 flex-1"/></label>
+				<label class="w-full flex-col items-stretch">Description <textarea name="description" maxlength="5000">{ f.Description }</textarea></label>
 				if f.scoped() {
 					<fieldset>
 						<legend>Change</legend>
 						for _, s := range scopes {
-							<label><input type="radio" name="scope" value={ s[0] } checked?={ s[0] == f.Scope }/> { s[1] }</label>
+							<label class="pick"><input type="radio" name="scope" value={ s[0] } checked?={ s[0] == f.Scope }/> { s[1] }</label>
 						}
-						<p>All events changes the title, location, description and Members only. Time and repeat changes use This event or This and following, which starts a new Series here.</p>
+						<p class="text-sm text-muted">All events changes the title, location, description and Members only. Time and repeat changes use This event or This and following, which starts a new Series here.</p>
 					</fieldset>
 					if f.Reset > 0 {
 						<input type="hidden" name="reset" value={ strconv.Itoa(f.Reset) }/>
@@ -770,17 +770,17 @@ templ EventPage(f EventForm, cals []CalendarInfo, members []Member, errMsg strin
 				if f.Synced {
 					<input type="hidden" name="etag" value={ f.Etag }/>
 				}
-				<button>Save</button>
+				<button class="btn-primary">Save</button>
 				@savingLabel()
 			</form>
 			if f.ID != 0 {
 				<form method="post" action={ eventURL(f, "/delete") }>
 					if f.scoped() {
 						for _, s := range scopes {
-							<button name="scope" value={ s[0] }>Delete { strings.ToLower(s[1]) }</button>
+							<button name="scope" value={ s[0] } class="btn-danger">Delete { strings.ToLower(s[1]) }</button>
 						}
 					} else {
-						<button>Delete event</button>
+						<button class="btn-danger">Delete event</button>
 					}
 					if f.Synced {
 						<input type="hidden" name="etag" value={ f.Etag }/>

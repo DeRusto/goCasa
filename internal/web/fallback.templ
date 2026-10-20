@@ -9,14 +9,18 @@ type Fallback struct {
 }
 
 templ fallbackSection(f Fallback) {
-	<h2>Fallback folder</h2>
-	<p>When Immich has no photos to show, the screensaver shows the images in the photos folder of the data volume (subfolders included; JPEG, PNG and WebP).</p>
-	<p role="status">Images in the Fallback folder: { strconv.Itoa(f.Images) }</p>
-	<form method="post" action="/settings/fallback-folder">
-		<label><input type="checkbox" name="enabled" checked?={ f.Enabled }/> Use the Fallback folder</label>
-		<button>Save Fallback folder</button>
-	</form>
-	<form method="post" action="/settings/fallback-folder/refresh">
-		<button>Refresh now</button>
-	</form>
+	<section class="card flex flex-col gap-3">
+		<h2>Fallback folder</h2>
+		<p class="text-muted">When Immich has no photos to show, the screensaver shows the images in the photos folder of the data volume (subfolders included; JPEG, PNG and WebP).</p>
+		<p role="status">Images in the Fallback folder: { strconv.Itoa(f.Images) }</p>
+		<form method="post" action="/settings/fallback-folder">
+			<label class="pick"><input type="checkbox" name="enabled" checked?={ f.Enabled }/> Use the Fallback folder</label>
+			<button class="btn-primary">Save Fallback folder</button>
+		</form>
+		@integrationActions() {
+			<form method="post" action="/settings/fallback-folder/refresh">
+				<button>Refresh now</button>
+			</form>
+		}
+	</section>
 }

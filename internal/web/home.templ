@@ -120,6 +120,30 @@ templ page(title string, pill bool) {
 	</html>
 }
 
+// pageHead is a page's title row: its h1, then the weather pill and the page's
+// buttons (children) at the right. Pages using it render with page(title, false).
+templ pageHead(title string) {
+	<div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2">
+		<h1>{ title }</h1>
+		<div class="ml-auto flex flex-wrap items-center gap-2">
+			@weatherPill()
+			{ children... }
+		</div>
+	</div>
+}
+
+// menuButton opens the popover with id target: a page's settings flyout, behind a gear.
+templ menuButton(target, label string) {
+	<button popovertarget={ target } aria-label={ label } class="icon-btn">
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true">
+			@templ.Raw(navPages[len(navPages)-1].Icon)
+		</svg>
+	</button>
+}
+
+// memberChip sets a .member-chip's pastel to m's colour.
+func memberChip(m Member) templ.SafeCSS { return templ.SafeCSS("--chip:" + pastel(m.Color) + ";") }
+
 // defaultViewButton makes view this device's Default view (no Lock).
 templ defaultViewButton(view string) {
 	<form method="post" action="/device/default-view">
@@ -129,118 +153,123 @@ templ defaultViewButton(view string) {
 }
 
 templ householdSection(h Household) {
-	<h2>Household</h2>
-	<form method="post" action="/settings/household">
-		<label>
-			Default view (for devices that haven't set their own)
-			<select name="default_view">
-				@option("today", "Today", h.DefaultView)
-				@option("calendar", "Calendar", h.DefaultView)
-				@option("todos", "To-dos", h.DefaultView)
-				@option("chores", "Chores", h.DefaultView)
-				@option("lists", "Lists", h.DefaultView)
-			</select>
-		</label>
-		<label><input type="checkbox" name="clock_24h" checked?={ h.Clock24 }/> 24-hour clock</label>
-		<label>
-			Week starts on
-			<select name="week_start">
-				for d := range 7 {
-					@option(strconv.Itoa(d), time.Weekday(d).String(), strconv.Itoa(h.WeekStart))
-				}
-			</select>
-		</label>
-		<label>
-			Wall display screensaver after
-			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" max="86400" required/>
-			seconds idle
-		</label>
-		<label>
-			Seconds per photo
-			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
-		</label>
-		<label>
-			Night mode (Wall displays)
-			<select name="night_mode">
-				@option("off", "Off", h.NightMode)
-				@option("black", "Black (screen may turn off)", h.NightMode)
-				@option("dim_clock", "Dim clock", h.NightMode)
-			</select>
-		</label>
-		<label>
-			from hour
-			<input type="number" name="night_start" value={ strconv.Itoa(h.NightStart) } min="0" max="23" required/>
-		</label>
-		<label>
-			to hour
-			<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
-		</label>
-		<label>
-			Timezone (IANA name, e.g. Europe/London; blank uses the server's)
-			<input name="timezone" value={ h.Timezone } maxlength="64"/>
-		</label>
-		<button>Save household</button>
-	</form>
+	<section class="card flex flex-col gap-3">
+		<h2>Household</h2>
+		<form method="post" action="/settings/household" class="flex flex-col items-start gap-3">
+			<label>
+				Default view (for devices that haven't set their own)
+				<select name="default_view">
+					@option("today", "Today", h.DefaultView)
+					@option("calendar", "Calendar", h.DefaultView)
+					@option("todos", "To-dos", h.DefaultView)
+					@option("chores", "Chores", h.DefaultView)
+					@option("lists", "Lists", h.DefaultView)
+				</select>
+			</label>
+			<label><input type="checkbox" name="clock_24h" checked?={ h.Clock24 }/> 24-hour clock</label>
+			<label>
+				Week starts on
+				<select name="week_start">
+					for d := range 7 {
+						@option(strconv.Itoa(d), time.Weekday(d).String(), strconv.Itoa(h.WeekStart))
+					}
+				</select>
+			</label>
+			<label>
+				Wall display screensaver after
+				<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" max="86400" required/>
+				seconds idle
+			</label>
+			<label>
+				Seconds per photo
+				<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
+			</label>
+			<div class="flex flex-wrap items-center gap-3">
+				<label>
+					Night mode (Wall displays)
+					<select name="night_mode">
+						@option("off", "Off", h.NightMode)
+						@option("black", "Black (screen may turn off)", h.NightMode)
+						@option("dim_clock", "Dim clock", h.NightMode)
+					</select>
+				</label>
+				<label>
+					from hour
+					<input type="number" name="night_start" value={ strconv.Itoa(h.NightStart) } min="0" max="23" required/>
+				</label>
+				<label>
+					to hour
+					<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
+				</label>
+			</div>
+			<label>
+				Timezone (IANA name, e.g. Europe/London; blank uses the server's)
+				<input name="timezone" value={ h.Timezone } maxlength="64"/>
+			</label>
+			<button class="btn-primary">Save household</button>
+		</form>
+	</section>
 }
 
 templ thisDevice() {
-	<h2>This device</h2>
-	<p>Kept in this browser only.</p>
-	<p>
-		Default view:
-		if v := device(ctx).DefaultView; v != "" {
-			<a href={ templ.SafeURL(v) }>{ v }</a>
-		} else {
-			Household default
+	<section class="card flex flex-col gap-3">
+		<h2>This device</h2>
+		<p class="text-muted">Kept in this browser only.</p>
+		<p>
+			Default view:
+			if v := device(ctx).DefaultView; v != "" {
+				<a href={ templ.SafeURL(v) }>{ v }</a>
+			} else {
+				Household default
+			}
+		</p>
+		if device(ctx).DefaultView != "" {
+			<form method="post" action="/device/default-view">
+				<input type="hidden" name="default_view" value=""/>
+				<button>Clear default view</button>
+			</form>
 		}
-	</p>
-	if device(ctx).DefaultView != "" {
-		<form method="post" action="/device/default-view">
-			<input type="hidden" name="default_view" value=""/>
-			<button>Clear</button>
+		<form method="post" action="/device/theme">
+			<label>
+				Theme
+				<select name="theme">
+					@option("light", "Light", device(ctx).Theme)
+					@option("dark", "Dark", device(ctx).Theme)
+					@option("auto", "Auto", device(ctx).Theme)
+				</select>
+			</label>
+			<button>Save theme</button>
 		</form>
-	}
-	<form method="post" action="/device/theme">
-		<label>
-			Theme
-			<select name="theme">
-				@option("light", "Light", device(ctx).Theme)
-				@option("dark", "Dark", device(ctx).Theme)
-				@option("auto", "Auto", device(ctx).Theme)
-			</select>
-		</label>
-		<button>Save theme</button>
-	</form>
-	<form method="post" action="/device/wall-display">
-		<label><input type="checkbox" name="wall_display" checked?={ device(ctx).WallDisplay }/> Wall display (goes to the screensaver when idle; Admin PIN needed)</label>
-		<button>Save</button>
-	</form>
-	<p>
-		Screen wake lock:
-		<span id="wake-lock">
-			if device(ctx).WallDisplay {
-				checking…
-			} else {
-				off (not a Wall display)
-			}
-		</span>
-	</p>
-	<form method="post" action="/device/motion-wake">
-		<label><input type="checkbox" name="motion_wake" checked?={ device(ctx).MotionWake }/> Camera motion-wake (a Wall display's screensaver or Dim clock wakes when someone walks up; frames never leave this device; Admin PIN needed)</label>
-		<button>Save</button>
-	</form>
-	<p>
-		Camera:
-		<span id="motion-wake">
-			if device(ctx).MotionWake {
-				checking…
-			} else {
-				off
-			}
-		</span>
-	</p>
-	if device(ctx).MotionWake {
-		<script>
+		<form method="post" action="/device/wall-display">
+			<label><input type="checkbox" name="wall_display" checked?={ device(ctx).WallDisplay }/> Wall display (goes to the screensaver when idle; Admin PIN needed)</label>
+			<button>Save</button>
+		</form>
+		<p>
+			Screen wake lock:
+			<span id="wake-lock">
+				if device(ctx).WallDisplay {
+					checking…
+				} else {
+					off (not a Wall display)
+				}
+			</span>
+		</p>
+		<form method="post" action="/device/motion-wake">
+			<label><input type="checkbox" name="motion_wake" checked?={ device(ctx).MotionWake }/> Camera motion-wake (a Wall display's screensaver or Dim clock wakes when someone walks up; frames never leave this device; Admin PIN needed)</label>
+			<button>Save</button>
+		</form>
+		<p>
+			Camera:
+			<span id="motion-wake">
+				if device(ctx).MotionWake {
+					checking…
+				} else {
+					off
+				}
+			</span>
+		</p>
+		if device(ctx).MotionWake {
+			<script>
 		// Shows the camera permission without opening the camera, which runs only on the
 		// screensaver and Dim clock (spec §8); the Admin asks for it here, by a button,
 		// so the screensaver never waits on a prompt.
@@ -271,5 +300,6 @@ templ thisDevice() {
 			ask();
 		})();
 		</script>
-	}
+		}
+	</section>
 }

@@ -15,40 +15,51 @@ type ShoppingList struct {
 }
 
 // Local list items reorder by drag (sortable) or, from the keyboard, up/down buttons.
+// Each list is a card; adding a list and the default view sit in the header's flyout.
 templ Lists(lists []ShoppingList, msg string) {
-	@layout("Lists") {
+	@page("Lists", false) {
 		<main>
-			<h1>Lists</h1>
-			@defaultViewButton("/lists")
+			@pageHead("Lists") {
+				@menuButton("lists-menu", "List settings")
+			}
+			<div id="lists-menu" popover class="flyout flyout-menu">
+				@defaultViewButton("/lists")
+				<form method="post" action="/lists">
+					<input name="name" required maxlength="50" aria-label="New list name" placeholder="New list name"/>
+					<button class="btn-primary">New list</button>
+				</form>
+			</div>
 			@formError(msg)
-			<div id="live" { live(KindList, KindIntegration)... }>
+			// A list's h2 comes right after its section's data-list, and its items' notes right after data-item: the tests read them so.
+			<div id="live" { live(KindList, KindIntegration)... } class="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-4">
 				for _, l := range lists {
-					<section data-list={ id(l.ID) }>
+					<section class="card flex flex-col gap-3" data-list={ id(l.ID) }>
 						<h2>{ l.Name }</h2>
 						if l.ReadOnly {
 							<p role="status">GoCasa can't reach Mealie, so this list shows its last contents and can't be changed until Mealie answers again.</p>
 						}
-						<ul data-drag={ "list-" + id(l.ID) }>
+						<ul data-drag={ "list-" + id(l.ID) } class="flex flex-col">
 							for i, it := range l.Items {
 								<li
+									class="flex items-center gap-1 border-b border-line last:border-0 [&_[data-checked]]:text-muted [&_[data-checked]]:line-through"
 									if !l.Mirrored {
 										data-move={ "/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/move" }
 									}
 								>
 									if !l.ReadOnly {
-										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } style="display:inline">
+										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID)) } class="contents">
 											if it.Checked {
 												<input type="hidden" name="checked" value="false"/>
-												<button aria-label={ "Uncheck " + it.Note }>☑</button>
+												<button aria-label={ "Uncheck " + it.Note } class="icon-btn border-0 bg-transparent text-2xl text-accent">☑</button>
 											} else {
 												<input type="hidden" name="checked" value="true"/>
-												<button aria-label={ "Check " + it.Note }>☐</button>
+												<button aria-label={ "Check " + it.Note } class="icon-btn border-0 bg-transparent text-2xl text-muted">☐</button>
 											}
 										</form>
 									}
-									<span data-item={ id(it.ID) } data-checked?={ it.Checked } style={ templ.KV("text-decoration:line-through", it.Checked) }>{ it.Note }</span>
+									<span data-item={ id(it.ID) } data-checked?={ it.Checked } class="min-w-0 flex-1 py-2 break-words">{ it.Note }</span>
 									if !l.Mirrored {
-										<span class="handle" aria-hidden="true">⠿</span>
+										<span class="handle order-first grid h-11 w-6 flex-none place-items-center text-muted" aria-hidden="true">⠿</span>
 									}
 									if !l.Mirrored && i > 0 {
 										@moveButton(l.ID, it, i-1, "↑", "Move up ")
@@ -57,29 +68,25 @@ templ Lists(lists []ShoppingList, msg string) {
 										@moveButton(l.ID, it, i+1, "↓", "Move down ")
 									}
 									if !l.ReadOnly {
-										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/delete") } style="display:inline">
-											<button aria-label={ "Delete " + it.Note }>✕</button>
+										<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items/" + id(it.ID) + "/delete") } class="contents">
+											<button aria-label={ "Delete " + it.Note } class="icon-btn border-0 bg-transparent text-muted">✕</button>
 										</form>
 									}
 								</li>
 							}
 						</ul>
 						if !l.ReadOnly {
-							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items") }>
-								<input name="note" required maxlength="200" aria-label={ "Add to " + l.Name }/>
-								<button>Add</button>
+							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/items") } class="flex gap-2">
+								<input name="note" required maxlength="200" aria-label={ "Add to " + l.Name } placeholder="Add an item" class="min-w-0 flex-1"/>
+								<button class="btn-primary">Add</button>
 							</form>
-							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/clear") }>
-								<button>Clear checked from { l.Name }</button>
+							<form method="post" action={ templ.SafeURL("/lists/" + id(l.ID) + "/clear") } class="flex justify-end">
+								<button class="border-0 bg-transparent text-sm text-muted">Clear checked from { l.Name }</button>
 							</form>
 						}
 					</section>
 				}
 			</div>
-			<form method="post" action="/lists">
-				<input name="name" required maxlength="50" aria-label="New list name"/>
-				<button>New list</button>
-			</form>
 		</main>
 		@sortable()
 		@liveDrafts()
@@ -87,7 +94,7 @@ templ Lists(lists []ShoppingList, msg string) {
 }
 
 templ moveButton(list int64, it ShoppingItem, to int, arrow, label string) {
-	<form method="post" action={ templ.SafeURL("/lists/" + id(list) + "/items/" + id(it.ID) + "/move") } style="display:inline">
+	<form method="post" action={ templ.SafeURL("/lists/" + id(list) + "/items/" + id(it.ID) + "/move") } class="kbd-move">
 		<input type="hidden" name="position" value={ id(int64(to)) }/>
 		<button aria-label={ label + it.Note }>{ arrow }</button>
 	</form>
