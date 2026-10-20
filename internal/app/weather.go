@@ -71,12 +71,9 @@ func (openMeteo) Sync(ctx context.Context, a *App, _ integrationRow) error {
 	if err := json.Unmarshal(body, new(forecast)); err != nil {
 		return fmt.Errorf("Open-Meteo's answer isn't a forecast: %w", err)
 	}
-	_, err = a.DB.ExecContext(ctx, `INSERT INTO weather_cache (id, lat, lon, units, fetched_at, body) VALUES (1, ?, ?, ?, ?, ?)
+	_, err = a.exec(ctx, KindIntegration, `INSERT INTO weather_cache (id, lat, lon, units, fetched_at, body) VALUES (1, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET lat = excluded.lat, lon = excluded.lon, units = excluded.units, fetched_at = excluded.fetched_at, body = excluded.body`,
 		lat.Float64, lon.Float64, units, a.Now().Unix(), string(body))
-	if err == nil {
-		a.publish("updated", "weather", 1)
-	}
 	return err
 }
 

@@ -332,11 +332,10 @@ func (a *App) disconnectGoogle(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(plain, &tok)
 		revokeErr = a.revokeGoogle(r.Context(), tok.RefreshToken)
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM integrations WHERE id = ? AND type = ?", id, googleType); err != nil {
+	if _, err := a.exec(r.Context(), KindEvent, "DELETE FROM integrations WHERE id = ? AND type = ?", id, googleType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("deleted", "calendar", id)
 	if revokeErr != nil {
 		// Still disconnected here: being stuck with an account you want gone is worse.
 		a.Log.Warn("revoking a google token failed", "integration", id, "err", revokeErr)
@@ -350,16 +349,10 @@ func (a *App) disconnectGoogle(w http.ResponseWriter, r *http.Request) {
 func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	r.ParseForm()
-	found := true
 	err := a.inTx(r.Context(), func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(r.Context(), "UPDATE source_calendars SET enabled = ? WHERE id = ? AND integration_id IN (SELECT id FROM integrations WHERE type = ?)",
-			r.PostForm.Get("enabled") != "", id, googleType)
-		if err != nil {
+		if err := execOne(r.Context(), tx, "UPDATE source_calendars SET enabled = ? WHERE id = ? AND integration_id IN (SELECT id FROM integrations WHERE type = ?)",
+			r.PostForm.Get("enabled") != "", id, googleType); err != nil {
 			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			found = false
-			return nil
 		}
 		// The form lists only active Members: an archived one's default stays for their return.
 		if _, err := tx.ExecContext(r.Context(), "DELETE FROM source_calendar_members WHERE calendar_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", id); err != nil {
@@ -371,14 +364,13 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return applyDefaultMembers(r.Context(), tx, id, nil)
-	})
+	}, KindEvent)
 	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		http.NotFound(w, r)
 	case err != nil:
 		a.serverError(w, r, err)
-	case !found:
-		http.NotFound(w, r)
 	default:
-		a.publish("updated", "calendar", id)
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 	}
 }

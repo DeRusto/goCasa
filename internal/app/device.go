@@ -133,7 +133,7 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a default view and the day weeks start on.")
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
+	if _, err := a.exec(r.Context(), KindHousehold, `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
 		screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo),
 		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end),
 		timezone = coalesce(?, timezone)`,

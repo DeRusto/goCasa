@@ -158,7 +158,7 @@ func (a *App) deleteAvatar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) setAvatar(w http.ResponseWriter, r *http.Request, id int64, pic []byte) {
-	res, err := a.DB.ExecContext(r.Context(), "UPDATE members SET avatar = ? WHERE id = ?", pic, id)
+	res, err := a.exec(r.Context(), KindMember, "UPDATE members SET avatar = ? WHERE id = ?", pic, id)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -167,7 +167,6 @@ func (a *App) setAvatar(w http.ResponseWriter, r *http.Request, id int64, pic []
 		http.NotFound(w, r)
 		return
 	}
-	a.publish("updated", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 

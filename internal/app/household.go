@@ -38,7 +38,7 @@ func (a *App) access(ctx context.Context) (web.Access, error) {
 
 // setLocks writes the Household's Locks.
 func (a *App) setLocks(ctx context.Context, l web.Locks) error {
-	_, err := a.DB.ExecContext(ctx, "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
+	_, err := a.exec(ctx, KindHousehold, "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
 		l.Calendar, l.Chores, l.Todos)
 	return err
 }

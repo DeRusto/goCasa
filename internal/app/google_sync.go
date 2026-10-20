@@ -140,10 +140,9 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 		if errors.Is(err, errCalendarGone) {
 			// Removed or unshared in Google: hide it, keeping its events and Members, and sync the rest.
 			a.Log.Warn("hiding a google calendar google no longer has", "calendar", c.id)
-			if _, err := a.DB.ExecContext(ctx, "UPDATE source_calendars SET enabled = 0 WHERE id = ?", c.id); err != nil {
+			if _, err := a.exec(ctx, KindEvent, "UPDATE source_calendars SET enabled = 0 WHERE id = ?", c.id); err != nil {
 				return err
 			}
-			a.publish("updated", "calendar", c.id)
 			continue
 		}
 		if err != nil {
@@ -244,7 +243,8 @@ func (a *App) googleEvents(ctx context.Context, access, cal, token string, now t
 func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []googleEvent, calZone string, full bool, cursor string, now time.Time) error {
 	from, to := syncWindow(now)
 	home := a.location(ctx)
-	err := a.inTx(ctx, func(tx *sql.Tx) error {
+	changed := len(items) > 0 // a token sync sends only what changed
+	return a.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
 		seen := []string{}
 		var upserted []int64
 		for _, e := range items {
@@ -288,23 +288,25 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 		}
 		if full {
 			keys, _ := json.Marshal(seen)
-			if _, err := tx.ExecContext(ctx, "DELETE FROM events WHERE calendar_id = ? AND external_id NOT IN (SELECT value FROM json_each(?))", cal, string(keys)); err != nil {
+			res, err := tx.ExecContext(ctx, "DELETE FROM events WHERE calendar_id = ? AND external_id NOT IN (SELECT value FROM json_each(?))", cal, string(keys))
+			if err != nil {
 				return err
 			}
+			n, _ := res.RowsAffected()
+			changed = changed || n > 0
 		}
 		fromDate, toDate := from.In(home).Format(dateLayout), to.In(home).Format(dateLayout)
-		if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE calendar_id = ?1
+		res, err := tx.ExecContext(ctx, `DELETE FROM events WHERE calendar_id = ?1
 			AND (NOT all_day AND (end_utc <= ?2 OR start_utc >= ?3) OR all_day AND (all_day_end_date <= ?4 OR all_day_date >= ?5))`,
-			cal, from.Unix(), to.Unix(), fromDate, toDate); err != nil {
+			cal, from.Unix(), to.Unix(), fromDate, toDate)
+		if err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", cursor, id)
+		n, _ := res.RowsAffected() // events that left the window
+		changed = changed || n > 0
+		_, err = tx.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", cursor, id)
 		return err
-	})
-	if err == nil {
-		a.publish("updated", "calendar", cal)
-	}
-	return err
+	}, KindEvent)
 }
 
 // startKey is an events row's start as a number to compare: the instant, or for all-day the date's UTC midnight.
@@ -489,25 +491,18 @@ func (a *App) saveSynced(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "That form didn't arrive whole. Try again.", http.StatusBadRequest)
 		return
 	}
-	found := true
 	err := a.inTx(r.Context(), func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(r.Context(), "UPDATE events AS e SET local_override = 1 WHERE e.id = ? AND "+googleEventRows, id)
-		if err != nil {
+		if err := execOne(r.Context(), tx, "UPDATE events AS e SET local_override = 1 WHERE e.id = ? AND "+googleEventRows, id); err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			found = false
-			return nil
-		}
 		return setMembers(r.Context(), tx, id, parseIDs(r.PostForm["members"]))
-	})
+	}, KindEvent)
 	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		http.NotFound(w, r)
 	case err != nil:
 		a.serverError(w, r, err)
-	case !found:
-		http.NotFound(w, r)
 	default:
-		a.publish("updated", "event", id)
 		http.Redirect(w, r, "/calendar", http.StatusSeeOther)
 	}
 }

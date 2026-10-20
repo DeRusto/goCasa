@@ -127,7 +127,7 @@ func (s *integrations) WithLock(id int64, fn func() error) error {
 // Down until its next good sync. Call it inside WithLock, so a write waiting
 // there sees it.
 func (s *integrations) RecordFailure(ctx context.Context, id int64, err error) error {
-	_, rerr := s.app.DB.ExecContext(context.WithoutCancel(ctx), "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
+	_, rerr := s.app.exec(context.WithoutCancel(ctx), KindIntegration, "UPDATE integrations SET consecutive_failures = max(consecutive_failures, ?), last_error = ? WHERE id = ?",
 		downAfter, cutError(err), id)
 	return rerr
 }
@@ -310,8 +310,13 @@ func (s *integrations) run(ctx context.Context, id int64) (bool, error) {
 	err := a.runSync(ctx, typ, enc, integrationRow{id: id, cursor: cursor, sealed: enc})
 	cancel()
 	now := a.Now()
+	// Pages hear of its health only when it changes: Failing, Down, or recovered.
+	var health Kind
 	if err == nil {
-		_, err = a.DB.ExecContext(context.WithoutCancel(ctx), `UPDATE integrations SET last_sync_at = ?1, last_success_at = ?1, consecutive_failures = 0, last_error = '', next_sync_at = ?2 WHERE id = ?3`,
+		if failures > 0 {
+			health = KindIntegration
+		}
+		_, err = a.exec(context.WithoutCancel(ctx), health, `UPDATE integrations SET last_sync_at = ?1, last_success_at = ?1, consecutive_failures = 0, last_error = '', next_sync_at = ?2 WHERE id = ?3`,
 			now.Unix(), now.Add(time.Duration(interval)*time.Second).Unix(), id)
 		return err == nil, err
 	}
@@ -321,9 +326,11 @@ func (s *integrations) run(ctx context.Context, id int64) (bool, error) {
 	if errors.As(err, new(transientError)) {
 		delay = time.Duration(interval) * time.Second
 	}
-	_, err = a.DB.ExecContext(context.WithoutCancel(ctx), `UPDATE integrations SET last_sync_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ?, next_sync_at = ? WHERE id = ?`,
+	if failures == 0 || failures+1 == downAfter {
+		health = KindIntegration
+	}
+	_, err = a.exec(context.WithoutCancel(ctx), health, `UPDATE integrations SET last_sync_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ?, next_sync_at = ? WHERE id = ?`,
 		now.Unix(), cutError(err), now.Add(delay).Unix(), id)
-	a.publish("updated", "integration", id) // an open calendar page may now show a stale-sync notice
 	return false, err
 }
 
@@ -478,11 +485,10 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 // removeFeed deletes an iCal feed with its calendar and events.
 func (a *App) removeFeed(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM integrations WHERE id = ? AND type = 'ical'", id); err != nil {
+	if _, err := a.exec(r.Context(), KindEvent, "DELETE FROM integrations WHERE id = ? AND type = 'ical'", id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("deleted", "calendar", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 

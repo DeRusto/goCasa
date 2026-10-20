@@ -92,7 +92,7 @@ GoCasa is general-purpose: it targets any device with a modern browser, never on
   /data/app.db  (+ /data/backups, /data/photo-cache, /data/photos)
 ```
 
-- **Event bus:** any mutation (local CRUD or a sync that changed rows) publishes `{type, entity, id}`. The SSE hub fans it out; browsers use htmx's SSE extension to swap the affected fragment. This replaces SkyLite's sync-manager/WebSocket layer with ~150 lines.
+- **Event bus:** a committed change publishes its **kind**: one of `event` (events and calendars), `todo`, `list`, `chore`, `points`, `member`, `household` (household settings, Locks, the Fallback folder) or `integration` (an integration's health, settings and picks, and the weather). The kind is the SSE event name and its data; there is no entity or id. A change declares its kinds to the transaction helper, which sends each once, only after commit. A sync publishes only when its rows actually changed, and a failing sync only when its health changes (to Failing, to Down, or recovered). Each page refetches its `#live` region for the kinds it lists. This replaces SkyLite's sync-manager/WebSocket layer with ~150 lines.
 - **Scheduler:** one ticker goroutine wakes every 30s and dispatches integrations whose `next_sync_at` is due, plus the nightly backup (§11). Per-integration sync interval is stored on the integration row.
 - **Failure isolation:** a panicking or erroring integration disables only itself, records `last_error` + backoff, and surfaces in Settings. The dashboard never goes down for an integration.
 

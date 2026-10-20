@@ -280,12 +280,10 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	typ := "created"
 	if r.PathValue("id") == "" {
 		err = tx.QueryRowContext(r.Context(), "INSERT INTO chores (name, schedule, days, kind, points, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
 			c.Name, c.Schedule, c.Days, kind, c.Points, a.Now().Unix()).Scan(&c.ID)
 	} else {
-		typ = "updated"
 		c.ID, _ = strconv.ParseInt(r.PathValue("id"), 10, 64)
 		err = tx.QueryRowContext(r.Context(), "UPDATE chores SET name = ?, schedule = ?, days = ?, kind = ?, points = ? WHERE id = ? RETURNING id",
 			c.Name, c.Schedule, c.Days, kind, c.Points, c.ID).Scan(&c.ID)
@@ -303,13 +301,12 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err == nil {
-		err = tx.Commit()
+		err = a.commit(tx, KindChore)
 	}
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish(typ, "chore", c.ID)
 	http.Redirect(w, r, "/chores", http.StatusSeeOther)
 }
 
@@ -345,24 +342,22 @@ func (a *App) getChore(w http.ResponseWriter, r *http.Request) {
 // setChoreArchived archives a Chore (off the board, its completions kept) or restores it.
 func (a *App) setChoreArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a.choreExec(w, r, "updated", "chore", "UPDATE chores SET archived = ? WHERE id = ?", archived)
+		a.choreExec(w, r, []Kind{KindChore}, "UPDATE chores SET archived = ? WHERE id = ?", archived)
 	}
 }
 
 // choreExec runs query with args and the path's id last: 404 if no row
-// changed, else it publishes the change and goes back.
-func (a *App) choreExec(w http.ResponseWriter, r *http.Request, typ, entity, query string, args ...any) {
+// changed, else it publishes kinds and goes back.
+func (a *App) choreExec(w http.ResponseWriter, r *http.Request, kinds []Kind, query string, args ...any) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	res, err := a.DB.ExecContext(r.Context(), query, append(args, id)...)
-	if err != nil {
+	err := a.inTx(r.Context(), func(tx *sql.Tx) error { return execOne(r.Context(), tx, query, append(args, id)...) }, kinds...)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	} else if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	a.publish(typ, entity, id)
 	http.Redirect(w, r, back(r), http.StatusSeeOther)
 }
 
@@ -397,17 +392,15 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "That Round can't be claimed: it's Missed or hasn't started.", http.StatusConflict)
 		return
 	}
-	res, err := a.DB.ExecContext(r.Context(), `INSERT INTO chore_completions (chore_id, member_id, round_start, completed_at, points_awarded)
+	err = a.inTx(r.Context(), func(tx *sql.Tx) error {
+		return execOne(r.Context(), tx, `INSERT INTO chore_completions (chore_id, member_id, round_start, completed_at, points_awarded)
 		SELECT c.id, m.id, ?3, ?4, coalesce((SELECT points_awarded FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 ORDER BY x.id LIMIT 1), c.points) FROM chores c
 			JOIN chore_assignees ca ON ca.chore_id = c.id JOIN members m ON m.id = ca.member_id
 		WHERE c.id = ?1 AND m.id = ?2 AND NOT m.archived AND NOT m.pet
 			AND NOT EXISTS (SELECT 1 FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 AND (c.kind = 'anyone' OR x.member_id = m.id))`,
-		id, member, round, a.Now().Unix())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
+			id, member, round, a.Now().Unix())
+	}, KindChore, KindPoints)
+	if errors.Is(err, sql.ErrNoRows) {
 		var assigned bool
 		if err := a.DB.QueryRowContext(r.Context(), `SELECT EXISTS (SELECT 1 FROM chore_assignees ca JOIN members m ON m.id = ca.member_id
 			WHERE ca.chore_id = ? AND m.id = ? AND NOT m.archived AND NOT m.pet)`, id, member).Scan(&assigned); err != nil {
@@ -418,14 +411,14 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Only someone assigned to this Chore can do it.", http.StatusBadRequest)
 			return
 		}
-	} else {
-		cid, _ := res.LastInsertId()
-		a.publish("created", "chore_completion", cid)
+	} else if err != nil {
+		a.serverError(w, r, err)
+		return
 	}
 	http.Redirect(w, r, back(r), http.StatusSeeOther)
 }
 
 // undoCompletion is an Admin removing a completion, and so its points.
 func (a *App) undoCompletion(w http.ResponseWriter, r *http.Request) {
-	a.choreExec(w, r, "deleted", "chore_completion", "DELETE FROM chore_completions WHERE id = ?")
+	a.choreExec(w, r, []Kind{KindChore, KindPoints}, "DELETE FROM chore_completions WHERE id = ?")
 }

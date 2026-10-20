@@ -87,12 +87,11 @@ func (a *App) createTodoColumn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A column needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	id, err := todos{a}.AddColumn(r.Context(), name)
+	_, err := todos{a}.AddColumn(r.Context(), name)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "todo_column", id)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
@@ -102,18 +101,18 @@ func (a *App) renameTodoColumn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A column needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	a.todoDone(w, r, "updated", "todo_column", pathID(r), todos{a}.RenameColumn(r.Context(), pathID(r), name))
+	a.todoDone(w, r, true, todos{a}.RenameColumn(r.Context(), pathID(r), name))
 }
 
 func (a *App) deleteTodoColumn(w http.ResponseWriter, r *http.Request) {
-	a.todoDone(w, r, "deleted", "todo_column", pathID(r), todos{a}.DeleteColumn(r.Context(), pathID(r)))
+	a.todoDone(w, r, true, todos{a}.DeleteColumn(r.Context(), pathID(r)))
 }
 
 // todoDone answers a to-do module write: the refusal's status and message,
-// or it publishes the change and returns to the board.
-func (a *App) todoDone(w http.ResponseWriter, r *http.Request, typ, entity string, id int64, err error) {
+// or back to the board. column says the write was to the column in the path.
+func (a *App) todoDone(w http.ResponseWriter, r *http.Request, column bool, err error) {
 	switch {
-	case errors.Is(err, errTodoGone), errors.Is(err, errNoColumn) && entity == "todo_column":
+	case errors.Is(err, errTodoGone), errors.Is(err, errNoColumn) && column:
 		http.NotFound(w, r)
 	case errors.Is(err, errNoColumn):
 		http.Error(w, "Pick a column.", http.StatusBadRequest)
@@ -126,7 +125,6 @@ func (a *App) todoDone(w http.ResponseWriter, r *http.Request, typ, entity strin
 	case err != nil:
 		a.serverError(w, r, err)
 	default:
-		a.publish(typ, entity, id)
 		http.Redirect(w, r, "/todos", http.StatusSeeOther)
 	}
 }
@@ -134,29 +132,23 @@ func (a *App) todoDone(w http.ResponseWriter, r *http.Request, typ, entity strin
 // completeTodo completes an open to-do (see todos.Complete). Completing a
 // completed to-do changes nothing.
 func (a *App) completeTodo(w http.ResponseWriter, r *http.Request) {
-	next, err := todos{a}.Complete(r.Context(), pathID(r))
+	_, err := todos{a}.Complete(r.Context(), pathID(r))
 	if errors.Is(err, errTodoCompleted) {
 		http.Redirect(w, r, "/todos", http.StatusSeeOther)
 		return
 	}
-	if next != 0 {
-		defer a.publish("created", "todo", next)
-	}
-	a.todoDone(w, r, "updated", "todo", pathID(r), err)
+	a.todoDone(w, r, false, err)
 }
 
 // reopenTodo un-completes a to-do (see todos.Reopen).
 func (a *App) reopenTodo(w http.ResponseWriter, r *http.Request) {
-	removed, err := todos{a}.Reopen(r.Context(), pathID(r))
-	if removed != 0 {
-		a.publish("deleted", "todo", removed)
-	}
-	a.todoDone(w, r, "updated", "todo", pathID(r), err)
+	_, err := todos{a}.Reopen(r.Context(), pathID(r))
+	a.todoDone(w, r, false, err)
 }
 
 // deleteTodo deletes a to-do (see todos.Delete).
 func (a *App) deleteTodo(w http.ResponseWriter, r *http.Request) {
-	a.todoDone(w, r, "deleted", "todo", pathID(r), todos{a}.Delete(r.Context(), pathID(r)))
+	a.todoDone(w, r, false, todos{a}.Delete(r.Context(), pathID(r)))
 }
 
 // todoFields reads and checks the to-do form, or returns a message for the
@@ -224,8 +216,8 @@ func (a *App) createTodo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	id, err := todos{a}.Create(r.Context(), t, p)
-	a.todoDone(w, r, "created", "todo", id, err)
+	_, err := todos{a}.Create(r.Context(), t, p)
+	a.todoDone(w, r, false, err)
 }
 
 func (a *App) getTodo(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +245,7 @@ func (a *App) updateTodo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	a.todoDone(w, r, "updated", "todo", pathID(r), todos{a}.Edit(r.Context(), pathID(r), t, p))
+	a.todoDone(w, r, false, todos{a}.Edit(r.Context(), pathID(r), t, p))
 }
 
 // reorderTodos sets a column's order (see todos.Reorder).
@@ -267,7 +259,6 @@ func (a *App) reorderTodos(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		a.serverError(w, r, err)
 	default:
-		a.publish("updated", "todo_column", col)
 		http.Redirect(w, r, "/todos", http.StatusSeeOther) // for the up/down buttons; a drag's fetch doesn't follow it
 	}
 }

@@ -415,7 +415,6 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	}
 	defer tx.Rollback()
 	now := a.Now().Unix()
-	typ := "updated"
 	rows := []int64{row} // the rows whose Members become c.members
 	switch {
 	case splitAt != nil:
@@ -461,9 +460,6 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 				all.title, all.location, all.description, now, id, all.editID)
 		}
 	case row == 0:
-		if id == 0 {
-			typ = "created"
-		}
 		err = tx.QueryRowContext(ctx, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 				rrule, exdates_json, rdates_json, recurring_master_id, original_start_utc, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -499,10 +495,9 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			}
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := a.commit(tx, KindEvent); err != nil {
 		return 0, err
 	}
-	a.publish(typ, "event", cmp.Or(id, row))
 	if splitAt != nil {
 		return row, nil
 	}
@@ -519,9 +514,8 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 		return err
 	}
 	ss, occ := fo.ss, fo.occ
-	typ := "deleted"
 	if ss.s.rule == "" {
-		_, err = a.DB.ExecContext(ctx, "DELETE FROM events WHERE id = ?", id)
+		_, err = a.exec(ctx, KindEvent, "DELETE FROM events WHERE id = ?", id)
 	} else {
 		first := sc == scopeAll
 		if sc == scopeFollowing {
@@ -533,33 +527,26 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 		case sc != scopeThis && sc != scopeFollowing && sc != scopeAll:
 			return &refusal{msg: "Pick which events to delete."}
 		case first:
-			_, err = a.DB.ExecContext(ctx, "DELETE FROM events WHERE id = ?", id)
+			_, err = a.exec(ctx, KindEvent, "DELETE FROM events WHERE id = ?", id)
 		case sc == scopeFollowing:
-			typ = "updated"
-			err = a.inTx(ctx, func(tx *sql.Tx) error { return a.endSeriesBefore(ctx, tx, ss, occ.original) })
+			err = a.inTx(ctx, func(tx *sql.Tx) error { return a.endSeriesBefore(ctx, tx, ss, occ.original) }, KindEvent)
 		case fo.editID != 0:
-			typ = "updated"
-			_, err = a.DB.ExecContext(ctx, "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), fo.editID)
+			_, err = a.exec(ctx, KindEvent, "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), fo.editID)
 		default: // a cancelled row keeps the Occurrence's times so the event CHECKs hold
-			typ = "updated"
 			var start, end, date, endDate any
 			if occ.allDay {
 				date, endDate = occ.date, occ.endDate
 			} else {
 				start, end = occ.start, occ.end
 			}
-			_, err = a.DB.ExecContext(ctx, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
+			_, err = a.exec(ctx, KindEvent, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 					recurring_master_id, original_start_utc, status, updated_at)
 				SELECT calendar_id, title, location, description, all_day, ?, ?, start_tzid, ?, ?, id, ?, 'cancelled', ? FROM events WHERE id = ?
 				ON CONFLICT (recurring_master_id, original_start_utc) DO UPDATE SET status = 'cancelled', updated_at = excluded.updated_at`,
 				start, end, date, endDate, occ.original, a.Now().Unix(), id)
 		}
 	}
-	if err != nil {
-		return err
-	}
-	a.publish(typ, "event", id)
-	return nil
+	return err
 }
 
 // activeMemberIDs is the ids of the Members who aren't archived.
@@ -657,17 +644,4 @@ func retype(ds []string, allDay bool, clock string) []string {
 		}
 	}
 	return out
-}
-
-// inTx runs fn in a transaction, committing if it succeeds.
-func (a *App) inTx(ctx context.Context, fn func(*sql.Tx) error) error {
-	tx, err := a.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit()
 }

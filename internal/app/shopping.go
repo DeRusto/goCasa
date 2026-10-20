@@ -80,13 +80,11 @@ func (a *App) createList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A list needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO shopping_lists (name, position)
-		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_lists)) RETURNING id`, name).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), KindList, `INSERT INTO shopping_lists (name, position)
+		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_lists))`, name); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "shopping_list", id)
 	http.Redirect(w, r, "/lists", http.StatusSeeOther)
 }
 
@@ -215,22 +213,17 @@ type localList struct {
 }
 
 func (l localList) Add(ctx context.Context, note string) error {
-	var id int64
-	if err := l.a.DB.QueryRowContext(ctx, `INSERT INTO shopping_items (list_id, note, position)
+	return l.change(ctx, `INSERT INTO shopping_items (list_id, note, position)
 		SELECT id, ?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_items WHERE list_id = ?)
-		FROM shopping_lists WHERE id = ? AND integration_id IS NULL RETURNING id`, note, l.id, l.id).Scan(&id); err != nil {
-		return err
-	}
-	l.a.publish("created", "shopping_item", id)
-	return nil
+		FROM shopping_lists WHERE id = ? AND integration_id IS NULL`, note, l.id, l.id)
 }
 
 func (l localList) Check(ctx context.Context, item int64, checked bool) error {
-	return l.change(ctx, "updated", item, "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, item, l.id)
+	return l.change(ctx, "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, item, l.id)
 }
 
 func (l localList) Delete(ctx context.Context, item int64) error {
-	return l.change(ctx, "deleted", item, "DELETE FROM shopping_items WHERE "+localItem, item, l.id)
+	return l.change(ctx, "DELETE FROM shopping_items WHERE "+localItem, item, l.id)
 }
 
 func (l localList) Clear(ctx context.Context) error {
@@ -241,16 +234,13 @@ func (l localList) Clear(ctx context.Context) error {
 	if !exists {
 		return sql.ErrNoRows
 	}
-	if _, err := l.a.DB.ExecContext(ctx, "DELETE FROM shopping_items WHERE checked AND list_id = ?", l.id); err != nil {
-		return err
-	}
-	l.a.publish("updated", "shopping_list", l.id)
-	return nil
+	_, err := l.a.exec(ctx, KindList, "DELETE FROM shopping_items WHERE checked AND list_id = ?", l.id)
+	return err
 }
 
 // Move renumbers the list with item at position to.
 func (l localList) Move(ctx context.Context, item int64, to int) error {
-	err := l.a.inTx(ctx, func(tx *sql.Tx) error {
+	return l.a.inTx(ctx, func(tx *sql.Tx) error {
 		var exists bool
 		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM shopping_items WHERE "+localItem+")", item, l.id).Scan(&exists); err != nil {
 			return err
@@ -284,26 +274,13 @@ func (l localList) Move(ctx context.Context, item int64, to int) error {
 			}
 		}
 		return nil
-	})
-	if err != nil {
-		return err
-	}
-	l.a.publish("updated", "shopping_list", l.id)
-	return nil
+	}, KindList)
 }
 
 // localItem limits a query on shopping_items to item ? on local list ?; a Mirrored list changes through Mealie.
 const localItem = "id = ? AND list_id = (SELECT id FROM shopping_lists WHERE id = ? AND integration_id IS NULL)"
 
 // change runs query on one item of the list; no row changed is sql.ErrNoRows.
-func (l localList) change(ctx context.Context, typ string, item int64, query string, args ...any) error {
-	res, err := l.a.DB.ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return sql.ErrNoRows
-	}
-	l.a.publish(typ, "shopping_item", item)
-	return nil
+func (l localList) change(ctx context.Context, query string, args ...any) error {
+	return l.a.inTx(ctx, func(tx *sql.Tx) error { return execOne(ctx, tx, query, args...) }, KindList)
 }
