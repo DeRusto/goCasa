@@ -116,6 +116,11 @@ func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.healthz)
 	mux.HandleFunc("GET /events/stream", a.eventStream)
+	static := http.FileServerFS(web.Static)
+	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable") // versioned names
+		static.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("GET /{$}", a.getRoot)
 	mux.HandleFunc("GET /today", a.getToday)
 	mux.HandleFunc("POST /device/default-view", a.setDefaultView)

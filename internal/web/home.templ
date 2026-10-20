@@ -64,6 +64,7 @@ templ page(title string, pill bool) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="color-scheme" content={ colorScheme(ctx) }/>
 			<title>{ title }</title>
+			@htmx()
 		</head>
 		<body>
 			<nav>

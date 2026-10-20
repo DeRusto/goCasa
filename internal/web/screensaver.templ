@@ -15,11 +15,12 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, reloadSeconds int) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="color-scheme" content="dark"/>
 			<title>Screensaver</title>
+			@htmx()
 		</head>
 		<body style="margin:0;background:#000;color:#ddd">
 			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
-				<div id="live">
+				<div id="live" { live("event", "household")... }>
 					<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
 					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 					<ul style="font-size:1.5rem;list-style:none;padding:0">
@@ -29,7 +30,7 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, reloadSeconds int) {
 					</ul>
 				</div>
 			</a>
-			@liveUpdates()
+			@liveDrafts()
 			if device(ctx).WallDisplay {
 				@wallDisplay(0)
 			}

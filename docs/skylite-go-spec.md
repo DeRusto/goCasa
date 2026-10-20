@@ -53,7 +53,7 @@ GoCasa is general-purpose: it targets any device with a modern browser, never on
 | Language | Go (current stable) | Small language, fast builds, static binary, official Google client |
 | HTTP | stdlib `net/http.ServeMux` only (Go 1.22+ method and wildcard patterns); middleware are plain `func(http.Handler) http.Handler` wrappers | No router dependency; moving to chi would be a new decision, not a default |
 | Templates | `a-h/templ` | Type-safe, component-like templates that compile to Go; closest productive analogue to Vue SFCs without a JS build |
-| Interactivity | htmx + Alpine.js, both vendored and embedded | Partial page swaps, dialogs, drag affordances; no npm toolchain |
+| Interactivity | htmx and its SSE extension, vendored at pinned versions and embedded (served from `/static/`); Alpine.js is vendored the same way when a feature first needs it | Partial page swaps, dialogs, drag affordances; no npm toolchain |
 | CSS | Tailwind via standalone CLI at build time, output committed/embedded | Utility styling without a Node pipeline in production |
 | Database | SQLite via `modernc.org/sqlite` (pure Go, **no CGO**) | `CGO_ENABLED=0` gives a true static binary and painless arm64/amd64 cross-compiles |
 | Queries | Hand-written SQL via `sqlc` (generates typed Go from `.sql`) | No ORM magic; SQL is reviewable; compile-time checking like sqlx in Rust |
