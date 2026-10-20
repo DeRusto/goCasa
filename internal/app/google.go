@@ -183,8 +183,10 @@ func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGr
 			}
 		}
 		// A reconnect ends Reconnect needed and any backoff: sync straight away.
-		if _, err := tx.ExecContext(ctx, "UPDATE integrations SET name = ?, credentials_enc = ?, status = 'ok', consecutive_failures = 0, last_error = '', next_sync_at = ? WHERE id = ?",
-			g.email, enc, a.Now().Unix(), id); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE integrations SET name = ?, credentials_enc = ? WHERE id = ?", g.email, enc, id); err != nil {
+			return err
+		}
+		if err := a.integrations.Reconnected(ctx, tx, id); err != nil {
 			return err
 		}
 		for _, c := range cals {
@@ -397,7 +399,7 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
 	g := web.Google{Configured: a.Config.GoogleClientID != "", RedirectURI: a.Config.GoogleRedirectURI}
 	clock := a.clock(ctx)
-	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, i.status = 'reconnect_needed', i.last_success_at, i.consecutive_failures, i.last_error, c.id, c.name, c.color, c.enabled, c.read_only,
+	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, `+reconnectSQL("i")+`, i.last_success_at, i.consecutive_failures, i.last_error, c.id, c.name, c.color, c.enabled, c.read_only,
 			(SELECT json_group_array(member_id) FROM source_calendar_members WHERE calendar_id = c.id)
 		FROM integrations i LEFT JOIN source_calendars c ON c.integration_id = i.id
 		WHERE i.type = ? ORDER BY i.name, i.id, c.name, c.id`, googleType)

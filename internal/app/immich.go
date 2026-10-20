@@ -296,37 +296,25 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	key := strings.TrimSpace(r.PostFormValue("key"))
-	switch {
-	case parseUpstreamURL(raw) == nil:
-		a.settingsPage(w, r, http.StatusBadRequest, "Immich's address starts with https:// or http://.")
-		return
-	case parseUpstreamURL(raw).User != nil: // the address is stored unsealed
-		a.settingsPage(w, r, http.StatusBadRequest, "Leave the user name and password out of Immich's address.")
-		return
-	case key == "":
-		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API key from Immich (Account Settings > API Keys).")
-		return
-	}
-	if a.alreadyConnected(w, r, immichType, "Immich") {
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	c := immichConn{raw, key}
-	var v struct{ Major, Minor, Patch int }
-	if err := c.call(ctx, http.MethodGet, "/api/server/version", nil, &v); err != nil {
-		a.settingsPage(w, r, http.StatusBadRequest, "Couldn't reach Immich at that address.")
-		return
-	}
-	if v.Major < 3 || v.Major == 3 && v.Minor < 2 {
-		a.settingsPage(w, r, http.StatusBadRequest, fmt.Sprintf("GoCasa needs Immich v3.2 or later; this one is v%d.%d.%d.", v.Major, v.Minor, v.Patch))
-		return
-	}
-	if _, _, err := c.pickable(ctx); err != nil {
-		a.settingsPage(w, r, http.StatusBadRequest, "Immich didn't take that API key: "+err.Error())
-		return
-	}
-	a.addIntegration(w, r, immichType, "Immich", immichConfig{URL: raw}, key, immichRelist)
+	msg, err := a.integrations.Connect(r.Context(), connection{typ: immichType, name: "Immich", url: raw, secret: key,
+		missingSecret: "Paste an API key from Immich (Account Settings > API Keys).", cfg: immichConfig{URL: raw}, interval: immichRelist,
+		check: func(ctx context.Context) string {
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			c := immichConn{raw, key}
+			var v struct{ Major, Minor, Patch int }
+			if err := c.call(ctx, http.MethodGet, "/api/server/version", nil, &v); err != nil {
+				return "Couldn't reach Immich at that address."
+			}
+			if v.Major < 3 || v.Major == 3 && v.Minor < 2 {
+				return fmt.Sprintf("GoCasa needs Immich v3.2 or later; this one is v%d.%d.%d.", v.Major, v.Minor, v.Patch)
+			}
+			if _, _, err := c.pickable(ctx); err != nil {
+				return "Immich didn't take that API key: " + err.Error()
+			}
+			return ""
+		}})
+	a.connected(w, r, msg, err)
 }
 
 // disconnectImmich removes Immich, its photo list and their cached bytes.
@@ -359,7 +347,7 @@ func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 	id, _, err := a.immichOf(r.Context())
 	if err == nil && id != 0 {
-		err = a.syncIntegration(context.WithoutCancel(r.Context()), id) // its outcome shows in Settings
+		_, err = a.integrations.Run(context.WithoutCancel(r.Context()), id) // its outcome shows in Settings
 		if err == nil {
 			a.prefetchPhotos(context.WithoutCancel(r.Context()), a.Now())
 		}
