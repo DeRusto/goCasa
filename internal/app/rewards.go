@@ -62,19 +62,17 @@ func (a *App) createReward(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A Reward needs a name of 1 to 100 characters and a cost from 1 to 100000 points.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO rewards (name, points_cost) VALUES (?, ?) RETURNING id", name, cost).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), web.KindPoints, "INSERT INTO rewards (name, points_cost) VALUES (?, ?)", name, cost); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "reward", id)
 	http.Redirect(w, r, "/chores", http.StatusSeeOther)
 }
 
 // setRewardArchived archives a Reward (off the board, its Redemptions kept) or restores it.
 func (a *App) setRewardArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a.choreExec(w, r, "updated", "reward", "UPDATE rewards SET archived = ? WHERE id = ?", archived)
+		a.choreExec(w, r, []web.Kind{web.KindPoints}, "UPDATE rewards SET archived = ? WHERE id = ?", archived)
 	}
 }
 
@@ -105,13 +103,11 @@ func (a *App) redeem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not enough points for that Reward yet.", http.StatusConflict)
 		return
 	}
-	var rid int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO redemptions (reward_id, member_id, requested_at) VALUES (?, ?, ?) RETURNING id",
-		id, member, a.Now().Unix()).Scan(&rid); err != nil {
+	if _, err := a.exec(r.Context(), web.KindPoints, "INSERT INTO redemptions (reward_id, member_id, requested_at) VALUES (?, ?, ?)",
+		id, member, a.Now().Unix()); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "redemption", rid)
 	http.Redirect(w, r, "/chores", http.StatusSeeOther)
 }
 
@@ -120,7 +116,7 @@ func (a *App) redeem(w http.ResponseWriter, r *http.Request) {
 func (a *App) decide(status string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		res, err := a.DB.ExecContext(r.Context(), `UPDATE redemptions SET status = ?1, decided_at = ?2, decided_by = ?3
+		res, err := a.exec(r.Context(), web.KindPoints, `UPDATE redemptions SET status = ?1, decided_at = ?2, decided_by = ?3
 			WHERE id = ?4 AND status = 'pending' AND (?1 = 'declined' OR (SELECT NOT archived FROM members WHERE id = redemptions.member_id) AND (SELECT b.points - rw.points_cost >= 0
 				FROM balances b, rewards rw WHERE b.member_id = redemptions.member_id AND rw.id = redemptions.reward_id))`,
 			status, a.Now().Unix(), unlockedAdmin(r.Context()), id)
@@ -141,7 +137,6 @@ func (a *App) decide(status string) http.HandlerFunc {
 			http.Error(w, "Approving that would take the balance below zero, or they're archived.", http.StatusConflict)
 			return
 		}
-		a.publish("updated", "redemption", id)
 		http.Redirect(w, r, "/chores", http.StatusSeeOther)
 	}
 }
@@ -167,12 +162,10 @@ func (a *App) adjust(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "An Adjustment needs a reason of 1 to 200 characters.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO point_adjustments (member_id, points, reason, created_at, created_by) VALUES (?, ?, ?, ?, ?) RETURNING id",
-		member, points, reason, a.Now().Unix(), unlockedAdmin(r.Context())).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), web.KindPoints, "INSERT INTO point_adjustments (member_id, points, reason, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
+		member, points, reason, a.Now().Unix(), unlockedAdmin(r.Context())); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "point_adjustment", id)
 	http.Redirect(w, r, "/chores", http.StatusSeeOther)
 }

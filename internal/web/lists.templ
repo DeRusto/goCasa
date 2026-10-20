@@ -14,14 +14,14 @@ type ShoppingList struct {
 	Items    []ShoppingItem
 }
 
-// Local list items reorder by drag (dragReorder) or, from the keyboard, up/down buttons.
+// Local list items reorder by drag (sortable) or, from the keyboard, up/down buttons.
 templ Lists(lists []ShoppingList, msg string) {
 	@layout("Lists") {
 		<main>
 			<h1>Lists</h1>
 			@defaultViewButton("/lists")
 			@formError(msg)
-			<div id="live">
+			<div id="live" { live(KindList, KindIntegration)... }>
 				for _, l := range lists {
 					<section data-list={ id(l.ID) }>
 						<h2>{ l.Name }</h2>
@@ -81,8 +81,8 @@ templ Lists(lists []ShoppingList, msg string) {
 				<button>New list</button>
 			</form>
 		</main>
-		@dragReorder()
-		@liveUpdates()
+		@sortable()
+		@liveDrafts()
 	}
 }
 

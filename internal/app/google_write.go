@@ -9,13 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -76,7 +74,7 @@ func (a *App) loadGoogleRow(ctx context.Context, id int64) (googleRow, error) {
 func (a *App) googleCalendarAPI(ctx context.Context, account int64, cal string) (googleAPI, error) {
 	var enc []byte
 	var reconnect bool
-	if err := a.DB.QueryRowContext(ctx, "SELECT credentials_enc, status = 'reconnect_needed' FROM integrations WHERE id = ?", account).Scan(&enc, &reconnect); err != nil {
+	if err := a.DB.QueryRowContext(ctx, "SELECT credentials_enc, "+reconnectSQL("integrations")+" FROM integrations WHERE id = ?", account).Scan(&enc, &reconnect); err != nil {
 		return googleAPI{}, err
 	}
 	plain, err := a.unseal(enc)
@@ -202,12 +200,12 @@ func originalOf(t googleTime) (int64, error) {
 // and the recurrence a new series from o takes: the same rule with an
 // unchanged COUNT less the occurrences before o, its EXDATEs, and the RDATEs
 // from o on, which the old series loses.
-func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, err error) {
+func (a *App) splitRecurrence(ctx context.Context, master googleEvent, o int64) (old, from []string, err error) {
 	for _, line := range master.Recurrence {
 		head, values, _ := strings.Cut(line, ":")
 		switch {
 		case strings.HasPrefix(line, "RDATE"):
-			zone := tzidZone(head, a.seriesZone(master))
+			zone := tzidZone(head, a.seriesZone(ctx, master))
 			var before, after []string
 			for _, v := range strings.Split(values, ",") {
 				if t, ok := recurInstant(v, zone); ok && t.Unix() >= o {
@@ -232,8 +230,8 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 		}
 		rule := values
 		old = append(old, "RRULE:"+untilBefore(rule, o, master.Start.Date != ""))
-		if m := countRE.FindStringSubmatch(rule); m != nil {
-			mc, ok := master.change(master.Start.TimeZone, a.Config.Location)
+		if countRE.MatchString(rule) {
+			mc, ok := master.change(master.Start.TimeZone, a.location(ctx))
 			if !ok {
 				return nil, nil, errors.New("Google sent a series start GoCasa can't read")
 			}
@@ -252,23 +250,34 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 			if to.After(first.AddDate(horizonYears, 0, 0)) {
 				return nil, nil, &refusal{msg: fmt.Sprintf("GoCasa counts a Series' events only %d years from its start: split this one in Google.", horizonYears)}
 			}
-			before, err := occurrences(ev, series{rule: rule}, zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
+			_, after, err := split(ev, series{rule: rule}, zone, o)
 			if err != nil {
 				return nil, nil, err
 			}
-			n, _ := strconv.Atoi(m[1])
-			rule = countRE.ReplaceAllString(rule, "COUNT="+strconv.Itoa(max(n-len(before), 1)))
+			rule = after.rule
 		}
 		from = append(from, "RRULE:"+rule)
 	}
 	return old, from, nil
 }
 
+// reanchorLines is recurrence lines with their RRULE re-anchored (see
+// reanchor) for an Occurrence moving from was to c.
+func reanchorLines(lines []string, was, c eventChange) []string {
+	out := slices.Clone(lines)
+	for i, l := range out {
+		if rule, ok := strings.CutPrefix(l, "RRULE:"); ok {
+			out[i] = "RRULE:" + reanchor(rule, startDay(was), startDay(c))
+		}
+	}
+	return out
+}
+
 // shiftDates is recurrence lines with their EXDATEs and RDATEs moved as a
 // Split moves Series master's Occurrence o to c's start, in c's kind of time
 // and zone, so they keep naming the same Occurrences.
-func (a *App) shiftDates(lines []string, master googleEvent, o int64, c eventChange) []string {
-	oldZone := a.seriesZone(master)
+func (a *App) shiftDates(ctx context.Context, lines []string, master googleEvent, o int64, c eventChange) []string {
+	oldZone := a.seriesZone(ctx, master)
 	// Wall times as UTC (see floating), so a shift keeps 10:00 at 10:00 across DST; all-day keys are midnights already.
 	oldWall := time.Unix(o, 0).UTC()
 	if master.Start.Date == "" {
@@ -284,7 +293,7 @@ func (a *App) shiftDates(lines []string, master googleEvent, o int64, c eventCha
 	delta := newWall.Sub(oldWall)
 	var out []string
 	for _, line := range lines {
-		name, _, _ := strings.Cut(line, ";")
+		name := line[:strings.IndexAny(line+":", ";:")] // "EXDATE;TZID=…:" or bare "EXDATE:"
 		if name != "EXDATE" && name != "RDATE" {
 			out = append(out, line)
 			continue
@@ -313,11 +322,11 @@ func (a *App) shiftDates(lines []string, master googleEvent, o int64, c eventCha
 }
 
 // seriesZone is Google Series master's own zone, else the Household's.
-func (a *App) seriesZone(master googleEvent) *time.Location {
+func (a *App) seriesZone(ctx context.Context, master googleEvent) *time.Location {
 	if z, err := time.LoadLocation(master.Start.TimeZone); master.Start.TimeZone != "" && err == nil {
 		return z
 	}
-	return a.Config.Location
+	return a.location(ctx)
 }
 
 // tzidZone is the zone a recurrence line's head ("EXDATE;TZID=…") names, else zone.
@@ -438,14 +447,18 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 		}
 		return googleResult{target: row.series, series: true}, err
 	case first: // a new start renames every occurrence, so re-import
-		return googleResult{target: row.series, series: true, full: true}, g.call(ctx, http.MethodPatch, row.series, master.Etag, googleBody(c), nil)
+		body := googleBody(c)
+		if rec := reanchorLines(master.Recurrence, was, c); !slices.Equal(rec, master.Recurrence) {
+			body["recurrence"] = rec
+		}
+		return googleResult{target: row.series, series: true, full: true}, g.call(ctx, http.MethodPatch, row.series, master.Etag, body, nil)
 	}
-	old, from, err := a.splitRecurrence(master, o)
+	old, from, err := a.splitRecurrence(ctx, master, o)
 	if err != nil {
 		return googleResult{}, err
 	}
 	body := googleBody(c)
-	body["recurrence"] = a.shiftDates(from, master, o, c)
+	body["recurrence"] = a.shiftDates(ctx, reanchorLines(from, was, c), master, o, c)
 	var made googleEvent
 	if err := g.call(ctx, http.MethodPost, "", "", body, &made); err != nil {
 		return googleResult{}, err
@@ -486,7 +499,7 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 	if sc == scopeAll || first {
 		return googleResult{}, g.call(ctx, http.MethodDelete, row.series, master.Etag, nil, nil)
 	}
-	old, _, err := a.splitRecurrence(master, o)
+	old, _, err := a.splitRecurrence(ctx, master, o)
 	if err != nil {
 		return googleResult{}, err
 	}
@@ -500,25 +513,21 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResult, members, base []int64) (err error) {
 	if res.full {
 		// Under the sync's lock: a sync running now would write back the token it read.
-		mu, _ := a.syncLocks.LoadOrStore(account, &sync.Mutex{})
-		mu.(*sync.Mutex).Lock()
-		_, err := a.DB.ExecContext(ctx, `UPDATE integrations SET sync_cursor = json_remove(sync_cursor, '$.tokens.' || json_quote((SELECT external_id FROM source_calendars WHERE id = ?)))
-			WHERE id = ? AND json_valid(sync_cursor)`, cal, account)
-		mu.(*sync.Mutex).Unlock()
+		err := a.integrations.WithLock(account, func() error {
+			_, err := a.DB.ExecContext(ctx, `UPDATE integrations SET sync_cursor = json_remove(sync_cursor, '$.tokens.' || json_quote((SELECT external_id FROM source_calendars WHERE id = ?)))
+				WHERE id = ? AND json_valid(sync_cursor)`, cal, account)
+			return err
+		})
 		if err != nil {
 			return err
 		}
 	}
 	landed := true
 	if !res.local {
-		if err := a.syncIntegration(ctx, account); err != nil {
+		// The sync's own outcome, not the row read after: another sync may have run since.
+		if landed, err = a.integrations.Run(ctx, account); err != nil {
 			return err
 		}
-		var failures int
-		if err := a.DB.QueryRowContext(ctx, "SELECT consecutive_failures FROM integrations WHERE id = ?", account).Scan(&failures); err != nil {
-			return err
-		}
-		landed = failures == 0
 	}
 	if !landed {
 		defer func() { err = cmp.Or(err, error(errNotLanded)) }()
@@ -534,7 +543,8 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		return nil
 	}
 	var ids []int64
-	err = a.inTx(ctx, func(tx *sql.Tx) error {
+	changed := false
+	return a.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `UPDATE events SET local_override = 1 WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2)
 				AND (?3 = 0 OR `+startKey+` >= (SELECT `+startKey+` FROM events WHERE id = ?3))
 			RETURNING id`, cal, res.target, res.from)
@@ -553,6 +563,7 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		if err := rows.Err(); err != nil {
 			return err
 		}
+		changed = len(ids) > 0
 		for _, id := range ids {
 			if err := setMembers(ctx, tx, id, members); err != nil {
 				return err
@@ -570,11 +581,7 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		_, err = tx.ExecContext(ctx, `INSERT INTO google_series_members (calendar_id, series_id, from_key, members)
 			VALUES (?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4)`, cal, res.target, res.from, string(list))
 		return err
-	})
-	if err == nil && len(ids) > 0 {
-		a.publish("updated", "event", ids[0])
-	}
-	return err
+	}, web.KindEvent)
 }
 
 // setMembers gives event id Members members. The form lists only active
@@ -606,7 +613,7 @@ func (a *App) googlePage(w http.ResponseWriter, r *http.Request, status int, id 
 		a.serverError(w, r, err)
 		return
 	}
-	f, err := a.eventForm(was)
+	f, err := a.eventForm(r.Context(), was)
 	if err != nil {
 		a.serverError(w, r, err)
 		return

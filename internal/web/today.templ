@@ -7,21 +7,22 @@ import (
 
 // TodayPage is the Today page: always the whole Household, no Member filter.
 type TodayPage struct {
-	Now     time.Time // in the household's timezone
-	Clock   string    // Now's time, 12- or 24-hour as the Household has it
-	Clock24 bool
-	Weather *WeatherHeader // nil: no cached weather
-	Days    [2]CalendarDay // today and tomorrow
-	Chores  []Chore        // with a Round that can be claimed today
-	Todos   []Todo         // open, due today or overdue, oldest due first
+	Now        time.Time // in the household's timezone
+	Clock      string    // Now's time, 12- or 24-hour as the Household has it
+	Clock24    bool
+	MidnightIn int            // seconds to the household's next midnight, when the day turns
+	Weather    *WeatherHeader // nil: no cached weather
+	Days       [2]CalendarDay // today and tomorrow
+	Chores     []Chore        // with a Round that can be claimed today
+	Todos      []Todo         // open, due today or overdue, oldest due first
 }
 
 // Today is the at-a-glance page of the day (spec §8).
 templ Today(p TodayPage) {
 	@page("Today", false) {
-		<div id="live">
+		<div id="live" { live(KindEvent, KindTodo, KindChore, KindMember, KindHousehold, KindIntegration)... }>
 			<header>
-				<p style="font-size:4rem;margin:0"><time id="clock" data-tz={ p.Now.Location().String() } data-h24={ strconv.FormatBool(p.Clock24) }>{ p.Clock }</time></p>
+				<p style="font-size:4rem;margin:0">@clock(p)</p>
 				<h1>{ p.Now.Format("Monday 2 January") }</h1>
 				if w := p.Weather; w != nil {
 					<p style="font-size:2rem;margin:0">
@@ -69,24 +70,53 @@ templ Today(p TodayPage) {
 				</section>
 			</main>
 		</div>
-		@liveUpdates()
-		<script>
-		(() => {
-			// Tick the clock, and refresh each minute so past events grey and midnight turns the day.
-			const h24 = document.getElementById("clock").dataset.h24 === "true";
-			const opts = h24 ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "numeric", minute: "2-digit", hourCycle: "h12" };
-			try { opts.timeZone = document.getElementById("clock").dataset.tz; new Intl.DateTimeFormat("en-US", opts); } catch { delete opts.timeZone; }
-			// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).
-			let minute = Math.floor(Date.now() / 60000);
-			setInterval(() => {
-				document.getElementById("clock").textContent = new Date().toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
-				const m = Math.floor(Date.now() / 60000); // not the text, which a swap of #live re-renders
-				if (m !== minute) {
-					minute = m;
-					document.dispatchEvent(new Event("refresh-live"));
-				}
-			}, 5000);
-		})();
-		</script>
+		@liveDrafts()
+		@ticker()
 	}
+}
+
+// clock is the household's time, ticked by ticker in the browser.
+templ clock(p TodayPage) {
+	<time id="clock" data-tz={ p.Now.Location().String() } data-offset={ p.Now.Format("-07:00") } data-h24={ strconv.FormatBool(p.Clock24) } data-midnight-in={ strconv.Itoa(p.MidnightIn) }>{ p.Clock }</time>
+}
+
+// ticker runs a page's day in the browser, with no request: it ticks #clock
+// each second, greys each event once its data-end has passed, and when #clock's
+// data-midnight-in seconds are up dispatches refresh-live, so the page refetches
+// and turns the day. A refetched #clock is a new element and starts its own count.
+templ ticker() {
+	<script>
+	(() => {
+		let seen, due;
+		setInterval(() => {
+			const clock = document.getElementById("clock");
+			if (!clock) return;
+			const opts = clock.dataset.h24 === "true" ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "numeric", minute: "2-digit", hourCycle: "h12" };
+			let at = new Date();
+			try { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat("en-US", opts); } catch {
+				// A zone the browser can't name (Go's "Local"): the household's offset at render, shown as UTC.
+				// shortcut: a DST change before the next refetch (at midnight) shows an hour off until then; send a named zone if that bites.
+				const [, sign, h, m] = /([+-])(\d\d):(\d\d)/.exec(clock.dataset.offset) || [, "+", "00", "00"];
+				at = new Date(at.getTime() + (sign === "-" ? -1 : 1) * (h * 60 + Number(m)) * 6e4); // minutes to ms
+				opts.timeZone = "UTC";
+			}
+			// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).
+			clock.textContent = at.toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
+			const now = Date.now();
+			if (clock !== seen) {
+				seen = clock;
+				due = Number(clock.dataset.midnightIn) > 0 ? now + Number(clock.dataset.midnightIn) * 1000 : 0;
+			} else if (due && now >= due) {
+				due = 0;
+				document.dispatchEvent(new Event("refresh-live"));
+			}
+			for (const li of document.querySelectorAll("[data-end]")) {
+				if (Number(li.dataset.end) <= now) {
+					li.classList.add("past");
+					li.style.opacity = ".5";
+				}
+			}
+		}, 1000);
+	})();
+	</script>
 }

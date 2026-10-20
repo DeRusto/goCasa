@@ -141,32 +141,7 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	fs, err := a.feeds(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	g, err := a.googleSettings(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	wx, err := a.weatherSettings(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	var l web.Locks
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT lock_calendar, lock_chores, lock_todos FROM household_settings").Scan(&l.Calendar, &l.Chores, &l.Todos); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	ml, err := a.mealieSettings(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	im, err := a.immichSettings(r.Context())
+	secs, err := a.settingsSections(r.Context(), ms)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -181,34 +156,33 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, ml, im, fb, hh, errMsg))
+	a.render(w, r, status, web.Settings(ms, hh.Locks, secs, fb, hh.Household, errMsg))
 }
 
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
 func (a *App) saveLocks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET lock_calendar = ?, lock_chores = ?, lock_todos = ?",
-		r.PostForm.Has("lock_calendar"), r.PostForm.Has("lock_chores"), r.PostForm.Has("lock_todos")); err != nil {
+	if err := a.setLocks(r.Context(), web.Locks{Calendar: r.PostForm.Has("lock_calendar"),
+		Chores: r.PostForm.Has("lock_chores"), Todos: r.PostForm.Has("lock_todos")}); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-// requireLock wraps an action behind the Lock in column: while that Lock is on,
-// a locked device goes to the PIN pad. One unlock covers every Lock (spec §9).
-func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
+// requireLock wraps an action behind lock: while that Lock is on, a locked
+// device goes to the PIN pad. One unlock covers every Lock (spec §9).
+func (a *App) requireLock(lock web.Lock, h http.HandlerFunc) http.HandlerFunc {
+	web.Locks{}.On(lock) // an unknown Lock panics at startup, not per request
 	return func(w http.ResponseWriter, r *http.Request) {
-		if unlockedAdmin(r.Context()) == 0 {
-			var on bool
-			if err := a.DB.QueryRowContext(r.Context(), "SELECT "+column+" FROM household_settings").Scan(&on); err != nil {
-				a.serverError(w, r, err)
-				return
-			}
-			if on {
-				toLock(w, r)
-				return
-			}
+		acc, err := a.access(r.Context())
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		if !acc.CanDo(lock) {
+			toLock(w, r)
+			return
 		}
 		h(w, r)
 	}
@@ -270,7 +244,7 @@ func (a *App) postSetup(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	res, err := a.DB.ExecContext(r.Context(), `INSERT INTO members (name, color, role, pin_hash, created_at)
+	res, err := a.exec(r.Context(), web.KindMember, `INSERT INTO members (name, color, role, pin_hash, created_at)
 		SELECT ?, ?, 'admin', ?, ? WHERE NOT EXISTS (SELECT 1 FROM members)`,
 		f.name, f.color, f.pinHash, a.Now().Unix())
 	if err != nil {
@@ -283,7 +257,6 @@ func (a *App) postSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := res.LastInsertId()
 	a.setUnlock(w, id)
-	a.publish("created", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -299,7 +272,7 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 		http.Redirect(w, r, "/settings", http.StatusSeeOther) // first run
 		return
 	}
-	a.render(w, r, status, web.Lock(admins, errMsg, safeNext(r.FormValue("next"))))
+	a.render(w, r, status, web.PINPad(admins, errMsg, safeNext(r.FormValue("next"))))
 }
 
 // Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
@@ -369,13 +342,11 @@ func (a *App) createMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO members (name, color, role, pin_hash, created_at, pet) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-		f.name, f.color, f.role, f.pinHash, a.Now().Unix(), f.pet).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), web.KindMember, "INSERT INTO members (name, color, role, pin_hash, created_at, pet) VALUES (?, ?, ?, ?, ?, ?)",
+		f.name, f.color, f.role, f.pinHash, a.Now().Unix(), f.pet); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -400,7 +371,7 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 	// One guarded statement, so another device's change between the read above
 	// and this write can't demote the last Admin or leave an Admin without a PIN.
-	res, err := a.DB.ExecContext(r.Context(), `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6,
+	res, err := a.exec(r.Context(), web.KindMember, `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6,
 			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END,
 			-- A new PIN clears a wrong-PIN block: this is how an Admin resets another's.
 			pin_failures = CASE WHEN ?4 IS NULL THEN pin_failures ELSE 0 END,
@@ -432,7 +403,6 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusConflict, msg)
 		return
 	}
-	a.publish("updated", "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -440,27 +410,27 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 // members with no ON DELETE action, so the foreign key refuses the rest.
 func (a *App) deleteMember(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	res, err := a.DB.ExecContext(r.Context(), "DELETE FROM members WHERE id = ? AND "+keepsAnAdmin, id)
+	res, err := a.exec(r.Context(), web.KindMember, "DELETE FROM members WHERE id = ? AND "+keepsAnAdmin, id)
 	var serr *sqlite.Error
 	if errors.As(err, &serr) && serr.Code() == sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY {
 		a.settingsPage(w, r, http.StatusConflict, "They have history, so they can't be deleted. Archive them instead.")
 		return
 	}
-	a.guardedMemberChange(w, r, "deleted", id, res, err)
+	a.guardedMemberChange(w, r, id, res, err)
 }
 
 // setArchived archives (hides, keeping their history) or restores a Member.
 func (a *App) setArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		res, err := a.DB.ExecContext(r.Context(), "UPDATE members SET archived = ? WHERE id = ? AND (NOT ? OR "+keepsAnAdmin+")", archived, id, archived)
-		a.guardedMemberChange(w, r, "updated", id, res, err)
+		res, err := a.exec(r.Context(), web.KindMember, "UPDATE members SET archived = ? WHERE id = ? AND (NOT ? OR "+keepsAnAdmin+")", archived, id, archived)
+		a.guardedMemberChange(w, r, id, res, err)
 	}
 }
 
 // guardedMemberChange finishes a change to Member id that keepsAnAdmin guarded:
 // no row changed means no such Member, or the last active Admin.
-func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, typ string, id int64, res sql.Result, err error) {
+func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, id int64, res sql.Result, err error) {
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -478,7 +448,6 @@ func (a *App) guardedMemberChange(w http.ResponseWriter, r *http.Request, typ st
 		a.settingsPage(w, r, http.StatusConflict, errLastAdmin)
 		return
 	}
-	a.publish(typ, "member", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 

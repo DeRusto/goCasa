@@ -16,8 +16,8 @@ func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	clock := clockLayout(hh.Clock24)
-	p := web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}
+	clock := hh.Clock()
+	p := web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, MidnightIn: secondsTo(now, dayAt(today, 1))}
 	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 2), nil)
 	if err != nil {
 		a.serverError(w, r, err)
@@ -40,22 +40,7 @@ func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	ds := today.Format(dateLayout)
-	rows, err := a.DB.QueryContext(r.Context(), "SELECT id, title, due_date FROM todos WHERE completed_at IS NULL AND due_date <= ? ORDER BY due_date, position, id", ds)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var t web.Todo
-		if err := rows.Scan(&t.ID, &t.Title, &t.Due); err != nil {
-			a.serverError(w, r, err)
-			return
-		}
-		t.Overdue = t.Due < ds
-		p.Todos = append(p.Todos, t)
-	}
-	if err := rows.Err(); err != nil {
+	if p.Todos, err = (todos{a}).List(r.Context(), todoFilter{Status: "open", To: ds, ByDue: true}, ds); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

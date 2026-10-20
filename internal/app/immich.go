@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // immich lists the photos of the albums and people an Admin picked (spec
@@ -296,42 +297,30 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	key := strings.TrimSpace(r.PostFormValue("key"))
-	switch {
-	case parseUpstreamURL(raw) == nil:
-		a.settingsPage(w, r, http.StatusBadRequest, "Immich's address starts with https:// or http://.")
-		return
-	case parseUpstreamURL(raw).User != nil: // the address is stored unsealed
-		a.settingsPage(w, r, http.StatusBadRequest, "Leave the user name and password out of Immich's address.")
-		return
-	case key == "":
-		a.settingsPage(w, r, http.StatusBadRequest, "Paste an API key from Immich (Account Settings > API Keys).")
-		return
-	}
-	if a.alreadyConnected(w, r, immichType, "Immich") {
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	c := immichConn{raw, key}
-	var v struct{ Major, Minor, Patch int }
-	if err := c.call(ctx, http.MethodGet, "/api/server/version", nil, &v); err != nil {
-		a.settingsPage(w, r, http.StatusBadRequest, "Couldn't reach Immich at that address.")
-		return
-	}
-	if v.Major < 3 || v.Major == 3 && v.Minor < 2 {
-		a.settingsPage(w, r, http.StatusBadRequest, fmt.Sprintf("GoCasa needs Immich v3.2 or later; this one is v%d.%d.%d.", v.Major, v.Minor, v.Patch))
-		return
-	}
-	if _, _, err := c.pickable(ctx); err != nil {
-		a.settingsPage(w, r, http.StatusBadRequest, "Immich didn't take that API key: "+err.Error())
-		return
-	}
-	a.addIntegration(w, r, immichType, "Immich", immichConfig{URL: raw}, key, immichRelist)
+	msg, err := a.integrations.Connect(r.Context(), newIntegration{typ: immichType, name: "Immich", url: raw, secret: key,
+		missingSecret: "Paste an API key from Immich (Account Settings > API Keys).", cfg: immichConfig{URL: raw}, interval: immichRelist, unique: true,
+		check: func(ctx context.Context) string {
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			c := immichConn{raw, key}
+			var v struct{ Major, Minor, Patch int }
+			if err := c.call(ctx, http.MethodGet, "/api/server/version", nil, &v); err != nil {
+				return "Couldn't reach Immich at that address."
+			}
+			if v.Major < 3 || v.Major == 3 && v.Minor < 2 {
+				return fmt.Sprintf("GoCasa needs Immich v3.2 or later; this one is v%d.%d.%d.", v.Major, v.Minor, v.Patch)
+			}
+			if _, _, err := c.pickable(ctx); err != nil {
+				return "Immich didn't take that API key: " + err.Error()
+			}
+			return ""
+		}})
+	a.connected(w, r, msg, err)
 }
 
 // disconnectImmich removes Immich, its photo list and their cached bytes.
 func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
-	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM integrations WHERE type = ?", immichType); err != nil {
+	if _, err := a.exec(r.Context(), web.KindIntegration, "DELETE FROM integrations WHERE type = ?", immichType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -347,7 +336,7 @@ func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	albums, _ := json.Marshal(append([]string{}, r.PostForm["album"]...))
 	people, _ := json.Marshal(append([]string{}, r.PostForm["person"]...))
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
+	if _, err := a.exec(r.Context(), web.KindIntegration, "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
 		string(albums), string(people), immichType); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -359,7 +348,7 @@ func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 	id, _, err := a.immichOf(r.Context())
 	if err == nil && id != 0 {
-		err = a.syncIntegration(context.WithoutCancel(r.Context()), id) // its outcome shows in Settings
+		_, err = a.integrations.Run(context.WithoutCancel(r.Context()), id) // its outcome shows in Settings
 		if err == nil {
 			a.prefetchPhotos(context.WithoutCancel(r.Context()), a.Now())
 		}
@@ -371,13 +360,17 @@ func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
+func (immich) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
+	m, err := a.immichSettings(ctx, st)
+	return web.ImmichSection(m), err
+}
+
 // immichSettings is the Immich section of Settings; nil when not connected.
-func (a *App) immichSettings(ctx context.Context) (*web.Immich, error) {
+func (a *App) immichSettings(ctx context.Context, st map[int64]integrationHealth) (*web.Immich, error) {
 	var m web.Immich
 	var raw string
-	var ok sql.NullInt64
-	err := a.DB.QueryRowContext(ctx, `SELECT config_json, last_success_at, consecutive_failures, last_error FROM integrations WHERE type = ?`, immichType).
-		Scan(&raw, &ok, &m.Failures, &m.LastError)
+	var id int64
+	err := a.DB.QueryRowContext(ctx, `SELECT id, config_json FROM integrations WHERE type = ?`, immichType).Scan(&id, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -386,7 +379,8 @@ func (a *App) immichSettings(ctx context.Context) (*web.Immich, error) {
 	}
 	var cfg immichConfig
 	json.Unmarshal([]byte(raw), &cfg)
-	m.URL, m.LastSuccess = cfg.URL, a.lastSync(ctx, ok, a.clock(ctx))
+	x := st[id]
+	m.URL, m.Failures, m.LastError, m.LastSuccess = cfg.URL, x.Failures, x.LastError, x.LastSuccess
 	picked := map[string]bool{}
 	for _, id := range append(cfg.PickedAlbums, cfg.PickedPeople...) {
 		picked[id] = true

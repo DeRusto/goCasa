@@ -70,7 +70,7 @@ templ TodosBoard(p TodosPage) {
 				</label>
 				<button>Apply</button>
 			</form>
-			<div id="live">
+			<div id="live" { live(KindTodo, KindMember, KindHousehold)... }>
 				for _, c := range p.Columns {
 					<section data-column={ strconv.FormatInt(c.ID, 10) }>
 						<h2>{ c.Name }</h2>
@@ -128,9 +128,9 @@ templ TodosBoard(p TodosPage) {
 			</form>
 		</main>
 		if p.Draggable {
-			@dragReorder()
+			@sortable()
 		}
-		@liveUpdates()
+		@liveDrafts()
 	}
 }
 
@@ -164,59 +164,6 @@ func swapped(todos []Todo, i, j int) []string {
 	}
 	ids[i], ids[j] = ids[j], ids[i]
 	return ids
-}
-
-// dragReorder lets an item be dragged by its handle within its list, or
-// across lists sharing a data-drag group, with pointer events so it works on
-// touch screens too. On drop, to-do columns post their whole order; any other
-// item posts its new position to its data-move address. Up/down buttons are
-// the keyboard way.
-// shortcut: hand-rolled instead of vendored SortableJS (no network to vendor it); swap in SortableJS for animation and auto-scroll.
-templ dragReorder() {
-	<style>.handle { touch-action: none; cursor: grab; }</style>
-	<script>
-	(() => {
-		let item, from;
-		document.addEventListener("pointerdown", e => {
-			const h = e.target.closest(".handle");
-			if (!h) return;
-			e.preventDefault();
-			item = h.closest("li");
-			from = item.closest("ul");
-			item.style.opacity = "0.5";
-		});
-		document.addEventListener("pointermove", e => {
-			if (!item) return;
-			const over = document.elementFromPoint(e.clientX, e.clientY);
-			const ul = over?.closest("section")?.querySelector("ul[data-drag]");
-			if (!ul || ul.dataset.drag !== from.dataset.drag) return;
-			const li = over.closest("ul[data-drag] > li");
-			if (li && li !== item) {
-				const r = li.getBoundingClientRect();
-				li.parentNode.insertBefore(item, e.clientY < r.top + r.height / 2 ? li : li.nextSibling);
-			} else if (!li && !ul.contains(item)) {
-				ul.appendChild(item);
-			}
-		});
-		const drop = () => {
-			if (!item) return;
-			item.style.opacity = "";
-			const to = item.closest("ul");
-			if (item.dataset.move) {
-				fetch(item.dataset.move, { method: "POST", redirect: "manual", body: new URLSearchParams({ position: [...to.children].indexOf(item) }) });
-			} else {
-				for (const ul of new Set([from, to])) {
-					const body = new URLSearchParams({ column_id: ul.closest("section").dataset.column });
-					ul.querySelectorAll("li[data-todo]").forEach(li => body.append("ids", li.dataset.todo));
-					fetch("/todos/reorder", { method: "POST", redirect: "manual", body });
-				}
-			}
-			item = null;
-		};
-		document.addEventListener("pointerup", drop);
-		document.addEventListener("pointercancel", drop); // what shows is what's kept
-	})();
-	</script>
 }
 
 // TodoEditPage edits one to-do; it can move to another column.

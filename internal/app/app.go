@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/config"
 	"github.com/DeRusto/goCasa/internal/db"
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // Upstreams are the fixed third-party base URLs; tests point them at fakes.
@@ -43,19 +45,21 @@ type Options struct {
 }
 
 type App struct {
-	Config    config.Config
-	DB        *sql.DB
-	Now       func() time.Time
-	Upstreams Upstreams
-	Log       *slog.Logger
-	Scheduler *Scheduler
-	Bus       *Bus
-	handler   http.Handler
-	syncLocks sync.Map // integration id → *sync.Mutex; see syncIntegration
-	photos    photoDeck
+	Config       config.Config
+	DB           *sql.DB
+	Now          func() time.Time
+	Upstreams    Upstreams
+	Log          *slog.Logger
+	Scheduler    *Scheduler
+	Bus          *Bus
+	handler      http.Handler
+	integrations integrations
+	photos       photoDeck
 
 	folderMu      sync.Mutex
 	folderScanned time.Time // the Fallback folder's last scan
+
+	householdReads atomic.Int64 // queries on household_settings, for a test
 }
 
 // New opens DATA_DIR/app.db, runs migrations and builds the handler.
@@ -91,6 +95,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		Log:       o.Logger,
 		Bus:       newBus(),
 	}
+	a.integrations.app = a
 	a.Scheduler = &Scheduler{now: o.Now, log: o.Logger}
 	if err := a.startBackups(ctx); err != nil {
 		d.Close()
@@ -111,6 +116,11 @@ func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.healthz)
 	mux.HandleFunc("GET /events/stream", a.eventStream)
+	static := http.FileServerFS(web.Static)
+	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable") // versioned names
+		static.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("GET /{$}", a.getRoot)
 	mux.HandleFunc("GET /today", a.getToday)
 	mux.HandleFunc("POST /device/default-view", a.setDefaultView)
@@ -153,16 +163,16 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/locks", a.requireUnlock(a.saveLocks))
 	mux.HandleFunc("GET /calendar", a.getCalendar)
 	mux.HandleFunc("GET /calendar.ics", a.getICS)
-	mux.HandleFunc("POST /calendar/calendars", a.requireLock("lock_calendar", a.createCalendar))
+	mux.HandleFunc("POST /calendar/calendars", a.requireLock(web.LockCalendar, a.createCalendar))
 	mux.HandleFunc("GET /calendar/event/new", a.newEvent)
-	mux.HandleFunc("POST /calendar/event", a.requireLock("lock_calendar", a.saveEvent))
+	mux.HandleFunc("POST /calendar/event", a.requireLock(web.LockCalendar, a.saveEvent))
 	mux.HandleFunc("GET /calendar/event/{id}", a.getEvent)
-	mux.HandleFunc("POST /calendar/event/{id}", a.requireLock("lock_calendar", a.saveEvent))
-	mux.HandleFunc("POST /calendar/event/{id}/delete", a.requireLock("lock_calendar", a.deleteEvent))
+	mux.HandleFunc("POST /calendar/event/{id}", a.requireLock(web.LockCalendar, a.saveEvent))
+	mux.HandleFunc("POST /calendar/event/{id}/delete", a.requireLock(web.LockCalendar, a.deleteEvent))
 	mux.HandleFunc("GET /calendar/synced/{id}", a.getSynced)
-	mux.HandleFunc("POST /calendar/synced/{id}", a.requireLock("lock_calendar", a.saveSynced))
-	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.requireLock("lock_calendar", a.saveGoogle))
-	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.requireLock("lock_calendar", a.deleteGoogle))
+	mux.HandleFunc("POST /calendar/synced/{id}", a.requireLock(web.LockCalendar, a.saveSynced))
+	mux.HandleFunc("POST /calendar/synced/{id}/edit", a.requireLock(web.LockCalendar, a.saveGoogle))
+	mux.HandleFunc("POST /calendar/synced/{id}/delete", a.requireLock(web.LockCalendar, a.deleteGoogle))
 	mux.HandleFunc("POST /calendar/sync", a.syncNow)
 	mux.HandleFunc("GET /lists", a.getLists)
 	mux.HandleFunc("POST /lists", a.createList)
@@ -176,8 +186,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /todos/reorder", a.reorderTodos)
 	mux.HandleFunc("GET /todos/{id}", a.getTodo)
 	mux.HandleFunc("POST /todos/{id}", a.updateTodo)
-	mux.HandleFunc("POST /todos/{id}/complete", a.requireLock("lock_todos", a.completeTodo))
-	mux.HandleFunc("POST /todos/{id}/reopen", a.requireLock("lock_todos", a.reopenTodo))
+	mux.HandleFunc("POST /todos/{id}/complete", a.requireLock(web.LockTodos, a.completeTodo))
+	mux.HandleFunc("POST /todos/{id}/reopen", a.requireLock(web.LockTodos, a.reopenTodo))
 	mux.HandleFunc("POST /todos/{id}/delete", a.deleteTodo)
 	mux.HandleFunc("GET /chores", a.getChores)
 	mux.HandleFunc("POST /chores", a.requireUnlock(a.saveChore))
@@ -185,7 +195,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /chores/{id}", a.requireUnlock(a.saveChore))
 	mux.HandleFunc("POST /chores/{id}/archive", a.requireUnlock(a.setChoreArchived(true)))
 	mux.HandleFunc("POST /chores/{id}/restore", a.requireUnlock(a.setChoreArchived(false)))
-	mux.HandleFunc("POST /chores/{id}/complete", a.requireLock("lock_chores", a.completeChore))
+	mux.HandleFunc("POST /chores/{id}/complete", a.requireLock(web.LockChores, a.completeChore))
 	mux.HandleFunc("POST /chores/completions/{id}/delete", a.requireUnlock(a.undoCompletion))
 	mux.HandleFunc("POST /rewards", a.requireUnlock(a.createReward))
 	mux.HandleFunc("POST /rewards/{id}/archive", a.requireUnlock(a.setRewardArchived(true)))
@@ -203,7 +213,7 @@ func (a *App) routes() http.Handler {
 	if err := csrf.AddTrustedOrigin(a.Config.BaseURL.Scheme + "://" + a.Config.BaseURL.Host); err != nil {
 		panic(err) // BASE_URL is validated by config.Load
 	}
-	return csrf.Handler(a.withUnlock(mux))
+	return csrf.Handler(a.withUnlock(a.withHousehold(mux)))
 }
 
 func (a *App) healthz(w http.ResponseWriter, r *http.Request) {

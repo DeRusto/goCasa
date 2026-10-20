@@ -458,3 +458,53 @@ func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 		t.Fatalf("%d Series Member choices outlived their calendar", n)
 	}
 }
+
+// Google gets the clamped rule a monthly preset on the 31st makes.
+func TestGoogleMonthlyPresetSendsTheClampedRule(t *testing.T) {
+	g := newGoogle(t)
+	h, alice := syncedWith(t, g)
+	form := googleEdit("Rent", "2026-03-31T10:00", "2026-03-31T11:00", "calendar_id", fmt.Sprint(alice), "repeat", "monthly")
+	if code, _ := h.Post(t, "/calendar/event", form); code != http.StatusOK {
+		t.Fatalf("creating = %d", code)
+	}
+	if w := g.sent()[0]; fmt.Sprint(w.body["recurrence"]) != "[RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1]" {
+		t.Fatalf("Google got %+v", w)
+	}
+}
+
+// Moving a Google Series made from a monthly preset on the 31st to the 15th
+// re-anchors its month-end rule there, as a new preset would.
+func TestGoogleMovedMonthEndSeriesIsReanchored(t *testing.T) {
+	g := newGoogle(t)
+	var occs []map[string]any
+	for i, d := range []string{"2026-03-31", "2026-04-30"} {
+		id := "rent_" + strings.ReplaceAll(d, "-", "")
+		o := withEtag(gOccurrence("rent", id, "Rent", d+"T10:00:00Z", d+"T11:00:00Z"), fmt.Sprintf("o%d", i))
+		o["originalStartTime"] = map[string]any{"dateTime": d + "T10:00:00Z"}
+		o["start"].(map[string]any)["timeZone"] = "UTC"
+		occs = append(occs, o)
+		g.got[id] = o
+	}
+	master := withEtag(gTimed("rent", "Rent", "2026-03-31T10:00:00Z", "2026-03-31T11:00:00Z"), "m1")
+	master["start"].(map[string]any)["timeZone"] = "UTC"
+	master["recurrence"] = []string{"RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1"}
+	g.got["rent"], g.etags["rent"] = master, "m1"
+	h, _ := syncedWith(t, g, occs...)
+	edit := func(start string) url.Values {
+		v := googleEdit("Rent", start+"T10:00", start+"T11:00", "scope", "following")
+		v.Set("tz", "UTC")
+		return v
+	}
+
+	if code, _ := submit(t, h, fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "rent_20260430")), "/edit", edit("2026-04-15")); code != http.StatusOK {
+		t.Fatalf("This and following = %d", code)
+	}
+	if w := g.sent()[0]; w.method != http.MethodPost || fmt.Sprint(w.body["recurrence"]) != "[RRULE:FREQ=MONTHLY;INTERVAL=1]" {
+		t.Fatalf("the Split sent %+v", w)
+	}
+	n := len(g.sent())
+	submit(t, h, fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "rent_20260331")), "/edit", edit("2026-03-15"))
+	if w := g.sent()[n:]; len(w) != 1 || w[0].id != "rent" || fmt.Sprint(w[0].body["recurrence"]) != "[RRULE:FREQ=MONTHLY;INTERVAL=1]" {
+		t.Fatalf("This and following from the first sent %+v", w)
+	}
+}

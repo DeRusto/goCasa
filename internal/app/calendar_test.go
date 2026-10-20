@@ -12,9 +12,9 @@ import (
 )
 
 // household sets up Ada (Admin, 1), Bob (2), Carol (3) and one local calendar (1).
-func household(t *testing.T) *apptest.Harness {
+func household(t *testing.T, opts ...apptest.Option) *apptest.Harness {
 	t.Helper()
-	h := apptest.New(t)
+	h := apptest.New(t, opts...)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "member", ""))
 	h.Post(t, "/settings/members", member("Carol", "#ef4444", "member", ""))
@@ -432,4 +432,72 @@ func TestEditScopesOverHTTP(t *testing.T) {
 	if code, _ := h.Post(t, occurrence(1, at(16), "/delete"), url.Values{"scope": {"sideways"}}); code != http.StatusBadRequest {
 		t.Errorf("unknown scope delete = %d, want 400", code)
 	}
+}
+
+// A monthly preset on the 31st falls on a short month's last day (spec §8).
+func TestMonthlyPresetClampsToTheMonthsLastDay(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Rent", "2026-01-31T09:00", "2026-01-31T10:00", "UTC"), "monthly"))
+	for d, m := range map[string]string{"2026-02-28": "2026-02-15", "2026-03-31": "2026-03-15", "2026-04-30": "2026-04-15"} {
+		if _, page := h.Get(t, "/calendar?view=month&date="+m); !strings.Contains(day(t, page, d), "Rent") {
+			t.Errorf("%s doesn't show Rent", d)
+		}
+	}
+}
+
+// shows checks which days of their months show title.
+func shows(t *testing.T, h *apptest.Harness, title string, days map[string]bool) {
+	t.Helper()
+	for d, want := range days {
+		if _, page := h.Get(t, "/calendar?view=month&date="+d[:8]+"15"); strings.Contains(day(t, page, d), title) != want {
+			t.Errorf("%s shows %s: %v, want %v", d, title, !want, want)
+		}
+	}
+}
+
+// The dialog posts a Series' rule back as custom text; moving the 31st's
+// Series to the 15th re-anchors its month-end rule, as a new preset would.
+func TestMovingAMonthEndSeriesReanchorsItsRule(t *testing.T) {
+	const anchored = "RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1"
+	at := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 9, 0, 0, 0, time.UTC) }
+	move := func(start string) url.Values {
+		f := repeating(timed("Rent", start+"T09:00", start+"T10:00", "UTC"), "custom", "rrule", anchored)
+		f.Set("scope", "following")
+		return f
+	}
+	t.Run("this and following", func(t *testing.T) {
+		h := household(t)
+		addEvent(t, h, repeating(timed("Rent", "2026-01-31T09:00", "2026-01-31T10:00", "UTC"), "monthly"))
+		if code, body := h.Post(t, occurrence(1, at(4, 30), ""), move("2026-04-15")); code != http.StatusOK {
+			t.Fatalf("move = %d %q", code, body)
+		}
+		shows(t, h, "Rent", map[string]bool{"2026-03-31": true, "2026-04-15": true, "2026-04-30": false, "2026-05-15": true, "2026-05-31": false, "2026-06-15": true})
+	})
+	t.Run("from the first event", func(t *testing.T) {
+		h := household(t)
+		addEvent(t, h, repeating(timed("Rent", "2026-01-31T09:00", "2026-01-31T10:00", "UTC"), "monthly"))
+		if code, body := h.Post(t, occurrence(1, at(1, 31), ""), move("2026-01-15")); code != http.StatusOK {
+			t.Fatalf("move = %d %q", code, body)
+		}
+		shows(t, h, "Rent", map[string]bool{"2026-01-15": true, "2026-01-31": false, "2026-02-15": true, "2026-02-28": false, "2026-04-15": true, "2026-04-30": false})
+	})
+	t.Run("a retitle keeps the month-end", func(t *testing.T) {
+		h := household(t)
+		addEvent(t, h, repeating(timed("Rent", "2026-01-31T09:00", "2026-01-31T10:00", "UTC"), "monthly"))
+		if code, body := h.Post(t, occurrence(1, at(4, 30), ""), move("2026-04-30")); code != http.StatusOK {
+			t.Fatalf("retitle = %d %q", code, body)
+		}
+		shows(t, h, "Rent", map[string]bool{"2026-04-30": true, "2026-05-31": true, "2026-06-30": true})
+	})
+	t.Run("a custom rule is kept", func(t *testing.T) {
+		h := household(t)
+		custom := "RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15"
+		addEvent(t, h, repeating(timed("Rent", "2026-01-01T09:00", "2026-01-01T10:00", "UTC"), "custom", "rrule", custom))
+		f := repeating(timed("Rent", "2026-02-02T09:00", "2026-02-02T10:00", "UTC"), "custom", "rrule", custom)
+		f.Set("scope", "following")
+		if code, body := h.Post(t, occurrence(1, at(2, 1), ""), f); code != http.StatusOK {
+			t.Fatalf("move = %d %q", code, body)
+		}
+		shows(t, h, "Rent", map[string]bool{"2026-02-15": true, "2026-03-01": true, "2026-03-15": true, "2026-03-02": false})
+	})
 }

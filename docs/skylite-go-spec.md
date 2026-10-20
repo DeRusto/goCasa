@@ -53,7 +53,7 @@ GoCasa is general-purpose: it targets any device with a modern browser, never on
 | Language | Go (current stable) | Small language, fast builds, static binary, official Google client |
 | HTTP | stdlib `net/http.ServeMux` only (Go 1.22+ method and wildcard patterns); middleware are plain `func(http.Handler) http.Handler` wrappers | No router dependency; moving to chi would be a new decision, not a default |
 | Templates | `a-h/templ` | Type-safe, component-like templates that compile to Go; closest productive analogue to Vue SFCs without a JS build |
-| Interactivity | htmx + Alpine.js, both vendored and embedded | Partial page swaps, dialogs, drag affordances; no npm toolchain |
+| Interactivity | htmx and its SSE extension, vendored at pinned versions and embedded (served from `/static/`); Alpine.js is vendored the same way when a feature first needs it | Partial page swaps, dialogs, drag affordances; no npm toolchain |
 | CSS | Tailwind via standalone CLI at build time, output committed/embedded | Utility styling without a Node pipeline in production |
 | Database | SQLite via `modernc.org/sqlite` (pure Go, **no CGO**) | `CGO_ENABLED=0` gives a true static binary and painless arm64/amd64 cross-compiles |
 | Queries | Hand-written SQL via `sqlc` (generates typed Go from `.sql`) | No ORM magic; SQL is reviewable; compile-time checking like sqlx in Rust |
@@ -92,7 +92,7 @@ GoCasa is general-purpose: it targets any device with a modern browser, never on
   /data/app.db  (+ /data/backups, /data/photo-cache, /data/photos)
 ```
 
-- **Event bus:** any mutation (local CRUD or a sync that changed rows) publishes `{type, entity, id}`. The SSE hub fans it out; browsers use htmx's SSE extension to swap the affected fragment. This replaces SkyLite's sync-manager/WebSocket layer with ~150 lines.
+- **Event bus:** a committed change publishes its **kind**: one of `event` (events and calendars), `todo`, `list`, `chore`, `points`, `member`, `household` (household settings, Locks, the Fallback folder) or `integration` (an integration's health, settings and picks, and the weather). The kind is the SSE event name and its data; there is no entity or id. A change declares its kinds to the transaction helper, which sends each once, only after commit. A sync publishes only when its rows actually changed (an iCal feed answering 200 with the same events publishes nothing), and a failing sync only when its health changes (to Failing, to Down, or recovered); the exception is the weather, whose every fetch publishes `integration`. Each page refetches its `#live` region for the kinds it lists. This replaces SkyLite's sync-manager/WebSocket layer with ~150 lines.
 - **Scheduler:** one ticker goroutine wakes every 30s and dispatches integrations whose `next_sync_at` is due, plus the nightly backup (§11). Per-integration sync interval is stored on the integration row.
 - **Failure isolation:** a panicking or erroring integration disables only itself, records `last_error` + backoff, and surfaces in Settings. The dashboard never goes down for an integration.
 
@@ -131,8 +131,9 @@ A Member's balance = sum of `chore_completions.points_awarded` − approved Rede
 1. **Local Series: expand on read, store the master.** Local recurring masters are stored once with their `rrule` and expanded with rrule-go only for the requested window, with a hard expansion horizon and a per-series occurrence cap. Google calendars store Google's own occurrences instead (§7.2).
 2. **One-off edits are rows, not mutations of the master.** An edited or deleted Occurrence becomes a row keyed by `(recurring_master_id, original_start_utc)`; expansion skips originals that have rows and merges the rows in. EXDATEs and cancelled rows are both honoured.
 3. **Timezone discipline.** Timed events: keep `start_tzid`; build DTSTART with `time.LoadLocation(start_tzid)` (in UTC, DST is silently ignored); store UTC for indexing. Floating/all-day events never pass through a timezone conversion. RFC 5545 DST rules on top of rrule-go: an Occurrence whose local time doesn't exist (spring-forward gap) is **skipped**; an ambiguous time (fall-back) takes the **first** offset.
-4. **Idempotent sync.** Upsert by `(calendar_id, external_id)` inside one transaction per sync run; a crashed sync leaves either the old or the new state, never half.
-5. **Members.** A synced event takes its calendar's default Members; a Member change made in GoCasa sets `local_override` and survives later syncs (an upstream title or time edit doesn't reset it). It resets only if the event is deleted upstream and returns as a new event. No attendee-email matching in v1. Colour: the Member's colour (every Member's if several); a Household event uses its calendar's colour.
+4. **Monthly and yearly presets clamp.** A monthly or yearly preset Series made in GoCasa (local or Google) on a day some months lack falls on those months' last day instead of skipping them as RFC 5545 does. The anchor is in the RRULE itself, so it stays standard: the 29th adds `BYMONTHDAY=28,29;BYSETPOS=-1`, the 30th `BYMONTHDAY=28,29,30;BYSETPOS=-1`, the 31st `BYMONTHDAY=28,29,30,31;BYSETPOS=-1`, yearly on February 29 `BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1`. Custom rules and Series made in Google's own UI keep their rule (and skip).
+5. **Idempotent sync.** Upsert by `(calendar_id, external_id)` inside one transaction per sync run; a crashed sync leaves either the old or the new state, never half.
+6. **Members.** A synced event takes its calendar's default Members; a Member change made in GoCasa sets `local_override` and survives later syncs (an upstream title or time edit doesn't reset it). It resets only if the event is deleted upstream and returns as a new event. No attendee-email matching in v1. Colour: the Member's colour (every Member's if several); a Household event uses its calendar's colour.
 
 ### 7.2 Google Calendar
 
@@ -186,6 +187,7 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 
 **Recurring to-dos:** a chain with one open copy at a time; completing it creates the next copy (never pre-generated).
 - **Repeat from schedule** (default): next due = first rule date strictly after both the completed copy's due date and today (early completion doesn't consume the next slot; missed dates are skipped, not stacked). **Repeat from completion:** next due = completion date + interval.
+- Monthly and yearly repeats clamp to the month's last day without drifting, with the same RRULE anchor as calendar presets (§7.1): due on the 31st goes Jan 31 → Feb 28/29 → Mar 31 → Apr 30. Repeat from schedule anchors to the due day, Repeat from completion to the completion day. A chain whose rule lacks the anchor gains it at its next completion, from its due day.
 - Rules are the presets only (daily / weekly on days / monthly / yearly, every N); no custom RRULE, no COUNT/UNTIL. A chain ends by turning repeat off or "delete all future". A due date is required to repeat (defaults to the first matching date from today).
 - Un-completing deletes the next copy if it's still open; if it's already completed, refuse ("re-open the later one first").
 - Edits carry forward: the next copy is cloned from the completed one; completed copies are history. A rule change takes effect at the next completion. No edit scopes for to-dos.
@@ -213,7 +215,7 @@ Pages are full `templ` renders; htmx targets swap the inner content region only.
 - **Wrong PINs:** 5 wrong tries in a row for an Admin block that Admin's PIN for 5 minutes on every device.
 - **Recovery:** any Admin can reset another Admin's PIN in Settings; the last Admin uses `gocasa reset-pin <member>`.
 - OAuth tokens, the Immich API key and the Mealie token: AES-GCM encrypted at rest; the master key comes from env and is never stored in the DB or repo. Losing the key = reconnect integrations (documented, acceptable).
-- All forms CSRF-token protected; htmx requests carry the token header.
+- Cross-site requests are refused: Go's `http.CrossOriginProtection` rejects any unsafe (non-GET/HEAD/OPTIONS) request whose `Sec-Fetch-Site` or `Origin` says it came from another site (`BASE_URL`'s origin is trusted). There are no CSRF tokens, so forms and htmx requests carry none.
 - No credentials, tokens, or personal values hard-coded in source (placeholder config only — the PuppyPad security.txt lesson).
 
 ## 10. Integrations (v1 scope per integration)

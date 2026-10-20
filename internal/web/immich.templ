@@ -20,7 +20,7 @@ type ImmichPick struct {
 	Picked   bool
 }
 
-templ immichSection(m *Immich) {
+templ ImmichSection(m *Immich) {
 	<h2>Immich photos</h2>
 	if m == nil {
 		<p>No Immich photos show: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p>

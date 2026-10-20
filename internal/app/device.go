@@ -85,43 +85,12 @@ func deviceOf(r *http.Request) web.Device {
 	return d
 }
 
-// household is the household settings the pages follow.
-func (a *App) household(ctx context.Context) (web.Household, error) {
-	var h web.Household
-	err := a.DB.QueryRowContext(ctx, "SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, night_mode, night_start, night_end, timezone FROM household_settings").
-		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.NightMode, &h.NightStart, &h.NightEnd, &h.Timezone)
-	return h, err
-}
-
-// location is the Household's timezone, else the server's (TZ). An unreadable
-// setting falls back too rather than failing the page.
-func (a *App) location(ctx context.Context) *time.Location {
-	var tz string
-	if err := a.DB.QueryRowContext(ctx, "SELECT timezone FROM household_settings").Scan(&tz); err != nil {
-		a.Log.Error("reading household timezone", "err", err)
-	}
-	if loc, err := time.LoadLocation(tz); tz != "" && err == nil {
-		return loc
-	}
-	return a.Config.Location
-}
-
 // clockLayout is how times show under the Household's 12/24-hour setting.
 func clockLayout(h24 bool) string {
 	if h24 {
 		return "15:04"
 	}
 	return "3:04 PM"
-}
-
-// clock is clockLayout for pages that only mention a time in passing: an
-// unreadable setting falls back to 24-hour rather than failing the page.
-func (a *App) clock(ctx context.Context) string {
-	h, err := a.household(ctx)
-	if err != nil {
-		a.Log.Error("reading household settings", "err", err)
-	}
-	return clockLayout(err != nil || h.Clock24)
 }
 
 // saveHousehold sets the household Default view, clock, week start and
@@ -164,7 +133,7 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a default view and the day weeks start on.")
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
+	if _, err := a.exec(r.Context(), web.KindHousehold, `UPDATE household_settings SET default_view = ?, clock_24h = ?, week_start = ?,
 		screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo),
 		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end),
 		timezone = coalesce(?, timezone)`,
@@ -252,9 +221,13 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	clock := clockLayout(hh.Clock24)
+	clock := hh.Clock()
+	midnight, turn := dayAt(today, 1), nightChange(hh, now)
 	if mode := nightModeAt(hh, now.Hour()); mode != "off" {
-		a.render(w, r, http.StatusOK, web.Night(mode, web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}))
+		if midnight.Before(turn) { // a new day: the Dim clock's date
+			turn = midnight
+		}
+		a.render(w, r, http.StatusOK, web.Night(mode, web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}, secondsTo(now, turn)))
 		return
 	}
 	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 1), nil)
@@ -268,20 +241,39 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
-		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
+		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, MidnightIn: secondsTo(now, midnight),
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
-	}, src, left, nextHour(now)))
+	}, src, left, secondsTo(now, turn)))
 }
 
-// nextHour is the seconds until the next hour starts in now's zone (the
-// household's), when Night mode may begin; the browser's own zone may differ.
-func nextHour(now time.Time) int {
-	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, now.Location())
-	return int(next.Sub(now).Seconds() + .999)
+// secondsTo is the whole seconds from now until t, rounded up; 0 for a zero t.
+// Relative, so the browser's own clock and zone don't matter.
+func secondsTo(now, t time.Time) int {
+	if t.IsZero() {
+		return 0
+	}
+	return int(t.Sub(now).Seconds() + .999)
+}
+
+// nightChange is when Night mode next starts or ends after now: the first
+// top of a local hour (the household's zone) whose mode differs, stepping real
+// hours so a DST gap or fold can't skip or repeat a change; zero if it never does.
+func nightChange(h Household, now time.Time) time.Time {
+	if h.NightMode == "off" || h.NightStart == h.NightEnd {
+		return time.Time{}
+	}
+	mode := nightModeAt(h, now.Hour())
+	t := now.Add(-time.Duration(now.Minute())*time.Minute - time.Duration(now.Second())*time.Second - time.Duration(now.Nanosecond()))
+	for range 49 {
+		if t = t.Add(time.Hour); nightModeAt(h, t.Hour()) != mode {
+			return t
+		}
+	}
+	return time.Time{} // unreachable: both modes come round within a day
 }
 
 // photoNow is the screensaver photo's address ("" for none) and the seconds it has left.
-func (a *App) photoNow(ctx context.Context, now time.Time, hh web.Household) (string, int, error) {
+func (a *App) photoNow(ctx context.Context, now time.Time, hh Household) (string, int, error) {
 	photo, left, err := a.currentPhoto(ctx, now, time.Duration(hh.SecondsPerPhoto)*time.Second)
 	if err != nil || photo == 0 {
 		return "", int(left.Seconds() + .999), err
@@ -313,7 +305,7 @@ func (a *App) getScreensaverPhoto(w http.ResponseWriter, r *http.Request) {
 // nightModeAt is the Night mode in force at hour (0-23): the household's
 // between night_start and night_end (wrapping past midnight), else "off".
 // Equal start and end means no night.
-func nightModeAt(h web.Household, hour int) string {
+func nightModeAt(h Household, hour int) string {
 	s, e := h.NightStart, h.NightEnd
 	if (s < e && hour >= s && hour < e) || (s > e && (hour >= s || hour < e)) {
 		return h.NightMode

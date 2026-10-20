@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // openMeteo fetches the current conditions and daily forecast for the
@@ -26,16 +27,16 @@ const openMeteoType = "open_meteo"
 var meteoClient = feedClient
 
 func (openMeteo) Sync(ctx context.Context, a *App, _ integrationRow) error {
-	var lat, lon sql.NullFloat64
-	var units string
-	if err := a.DB.QueryRowContext(ctx, "SELECT weather_lat, weather_lon, units FROM household_settings").Scan(&lat, &lon, &units); err != nil {
+	hh, err := a.household(ctx)
+	if err != nil {
 		return err
 	}
+	lat, lon, units := hh.WeatherLat, hh.WeatherLon, hh.Units
 	if !lat.Valid || !lon.Valid {
 		return nil
 	}
 	// Daily dates in the household timezone, so they match the pages' today.
-	tz := a.location(ctx).String()
+	tz := hh.Zone.String()
 	if tz == "Local" { // an unnamed zone: the location's own
 		tz = "auto"
 	}
@@ -70,12 +71,9 @@ func (openMeteo) Sync(ctx context.Context, a *App, _ integrationRow) error {
 	if err := json.Unmarshal(body, new(forecast)); err != nil {
 		return fmt.Errorf("Open-Meteo's answer isn't a forecast: %w", err)
 	}
-	_, err = a.DB.ExecContext(ctx, `INSERT INTO weather_cache (id, lat, lon, units, fetched_at, body) VALUES (1, ?, ?, ?, ?, ?)
+	_, err = a.exec(ctx, web.KindIntegration, `INSERT INTO weather_cache (id, lat, lon, units, fetched_at, body) VALUES (1, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET lat = excluded.lat, lon = excluded.lon, units = excluded.units, fetched_at = excluded.fetched_at, body = excluded.body`,
 		lat.Float64, lon.Float64, units, a.Now().Unix(), string(body))
-	if err == nil {
-		a.publish("updated", "weather", 1)
-	}
 	return err
 }
 
@@ -106,9 +104,12 @@ func (a *App) weatherPill(ctx context.Context) (*web.WeatherPill, error) {
 // weatherHeader is the cached weather as Today's header shows it: today and up
 // to 5 days ahead. nil when there is none for the current location and units.
 func (a *App) weatherHeader(ctx context.Context) (*web.WeatherHeader, error) {
-	var units, body string
-	err := a.DB.QueryRowContext(ctx, `SELECT w.units, w.body FROM weather_cache w JOIN household_settings h
-		ON w.lat = h.weather_lat AND w.lon = h.weather_lon AND w.units = h.units`).Scan(&units, &body)
+	hh, err := a.household(ctx)
+	if err != nil {
+		return nil, err
+	}
+	units, body := hh.Units, ""
+	err = a.DB.QueryRowContext(ctx, "SELECT body FROM weather_cache WHERE lat = ? AND lon = ? AND units = ?", hh.WeatherLat, hh.WeatherLon, units).Scan(&body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -124,7 +125,7 @@ func (a *App) weatherHeader(ctx context.Context) (*web.WeatherHeader, error) {
 		unit = "F"
 	}
 	h := &web.WeatherHeader{WeatherPill: web.WeatherPill{Current: int(math.Round(f.Current.Temperature)), Unit: unit}, Conditions: conditions(f.Current.Code)}
-	today := a.Now().In(a.location(ctx)).Format(dateLayout)
+	today := hh.Today(a.Now()).Format(dateLayout)
 	for i, d := range f.Daily.Time {
 		if d < today || i >= len(f.Daily.Max) || i >= len(f.Daily.Min) {
 			continue
@@ -168,17 +169,29 @@ func conditions(code int) string {
 	return ""
 }
 
+func (openMeteo) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
+	w, err := a.weatherSettings(ctx, st)
+	return web.WeatherSection(w), err
+}
+
 // weatherSettings is the Weather section of Settings.
-func (a *App) weatherSettings(ctx context.Context) (web.Weather, error) {
-	var w web.Weather
-	var lat, lon sql.NullFloat64
-	var ok sql.NullInt64
-	err := a.DB.QueryRowContext(ctx, `SELECT h.weather_lat, h.weather_lon, h.units, i.last_success_at, i.consecutive_failures, i.last_error
-		FROM household_settings h, integrations i WHERE i.type = ?`, openMeteoType).Scan(&lat, &lon, &w.Units, &ok, &w.Failures, &w.LastError)
+func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationHealth) (web.Weather, error) {
+	hh, err := a.household(ctx)
+	if err != nil {
+		return web.Weather{}, err
+	}
+	w := web.Weather{Units: hh.Units}
+	lat, lon := hh.WeatherLat, hh.WeatherLon
+	var id int64
+	err = a.DB.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ?", openMeteoType).Scan(&id)
 	if lat.Valid && lon.Valid {
 		w.Lat, w.Lon = strconv.FormatFloat(lat.Float64, 'f', -1, 64), strconv.FormatFloat(lon.Float64, 'f', -1, 64)
 	}
-	w.LastSuccess = a.lastSync(ctx, ok, a.clock(ctx))
+	x, ok := st[id]
+	if !ok {
+		x.LastSuccess = "never"
+	}
+	w.Failures, w.LastError, w.LastSuccess = x.Failures, x.LastError, x.LastSuccess
 	return w, err
 }
 

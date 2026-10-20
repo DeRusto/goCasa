@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DeRusto/goCasa/internal/web"
 )
 
 // scope is an Edit scope: which Occurrences of a Series a change or deletion applies to.
@@ -317,10 +318,10 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			return 0, err
 		}
 	}
-	row := id                // the row to update; 0 inserts
-	var editOf, original any // set for a This event edit: its Series and Occurrence
-	var split, resetFrom any // set for This and following: the Occurrence a Split starts at; the first original whose One-off edits go
-	var all *allEdit         // set for All events
+	row := id                  // the row to update; 0 inserts
+	var editOf, original any   // set for a This event edit: its Series and Occurrence
+	var splitAt, resetFrom any // set for This and following: the Occurrence a Split starts at; the first original whose One-off edits go
+	var all *allEdit           // set for All events
 	if ss.s.rule != "" {
 		was, err := a.occurrenceNow(ctx, fo)
 		if err != nil {
@@ -381,23 +382,25 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			}
 			resetFrom = occ.original
 			if !first {
-				row, split = 0, occ.original
+				row, splitAt = 0, occ.original
 				// The new Series takes only the RDATEs from the Split on, and an unchanged COUNT less the Occurrences before it.
+				// c's RDATEs are split in c's own zone and kind, which a change may have moved from the Series'.
 				var rds []string
-				if rule, ok := c.rrule.(string); ok && json.Unmarshal([]byte(c.rdates), &rds) == nil {
+				if _, ok := c.rrule.(string); ok && json.Unmarshal([]byte(c.rdates), &rds) == nil {
 					_, rds = splitRDates(rds, zone, occ.original)
 					b, _ := json.Marshal(append([]string{}, rds...))
 					c.rdates = string(b)
-					if m := countRE.FindStringSubmatch(rule); m != nil && !c.rerule {
-						to := time.Unix(occ.original, 0).UTC()
-						before, err := occurrences(ss.ev, series{rule: ss.s.rule}, ss.zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
+					if !c.rerule {
+						_, after, err := split(ss.ev, series{rule: ss.s.rule}, ss.zone, occ.original)
 						if err != nil {
 							return 0, err
 						}
-						n, _ := strconv.Atoi(m[1])
-						c.rrule = countRE.ReplaceAllString(rule, "COUNT="+strconv.Itoa(max(n-len(before), 1)))
+						c.rrule = after.rule
 					}
 				}
+			}
+			if !c.rerule { // the rule posted back as it was: still re-anchor a moved month-end preset
+				c.rrule = reanchor(c.rrule.(string), startDay(was), startDay(c))
 			}
 		default:
 			return 0, &refusal{msg: "Pick which events to change."}
@@ -417,11 +420,10 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	}
 	defer tx.Rollback()
 	now := a.Now().Unix()
-	typ := "updated"
 	rows := []int64{row} // the rows whose Members become c.members
 	switch {
-	case split != nil:
-		err = a.endSeriesBefore(ctx, tx, ss, split.(int64))
+	case splitAt != nil:
+		err = a.endSeriesBefore(ctx, tx, ss, splitAt.(int64))
 	case resetFrom != nil:
 		_, err = tx.ExecContext(ctx, "DELETE FROM events WHERE recurring_master_id = ? AND original_start_utc >= ?", id, resetFrom)
 	}
@@ -463,9 +465,6 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 				all.title, all.location, all.description, now, id, all.editID)
 		}
 	case row == 0:
-		if id == 0 {
-			typ = "created"
-		}
 		err = tx.QueryRowContext(ctx, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 				rrule, exdates_json, rdates_json, recurring_master_id, original_start_utc, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -501,11 +500,10 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 			}
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := a.commit(tx, web.KindEvent); err != nil {
 		return 0, err
 	}
-	a.publish(typ, "event", cmp.Or(id, row))
-	if split != nil {
+	if splitAt != nil {
 		return row, nil
 	}
 	return cmp.Or(id, row), nil
@@ -521,9 +519,8 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 		return err
 	}
 	ss, occ := fo.ss, fo.occ
-	typ := "deleted"
 	if ss.s.rule == "" {
-		_, err = a.DB.ExecContext(ctx, "DELETE FROM events WHERE id = ?", id)
+		_, err = a.exec(ctx, web.KindEvent, "DELETE FROM events WHERE id = ?", id)
 	} else {
 		first := sc == scopeAll
 		if sc == scopeFollowing {
@@ -535,33 +532,26 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 		case sc != scopeThis && sc != scopeFollowing && sc != scopeAll:
 			return &refusal{msg: "Pick which events to delete."}
 		case first:
-			_, err = a.DB.ExecContext(ctx, "DELETE FROM events WHERE id = ?", id)
+			_, err = a.exec(ctx, web.KindEvent, "DELETE FROM events WHERE id = ?", id)
 		case sc == scopeFollowing:
-			typ = "updated"
-			err = a.inTx(ctx, func(tx *sql.Tx) error { return a.endSeriesBefore(ctx, tx, ss, occ.original) })
+			err = a.inTx(ctx, func(tx *sql.Tx) error { return a.endSeriesBefore(ctx, tx, ss, occ.original) }, web.KindEvent)
 		case fo.editID != 0:
-			typ = "updated"
-			_, err = a.DB.ExecContext(ctx, "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), fo.editID)
+			_, err = a.exec(ctx, web.KindEvent, "UPDATE events SET status = 'cancelled', updated_at = ? WHERE id = ?", a.Now().Unix(), fo.editID)
 		default: // a cancelled row keeps the Occurrence's times so the event CHECKs hold
-			typ = "updated"
 			var start, end, date, endDate any
 			if occ.allDay {
 				date, endDate = occ.date, occ.endDate
 			} else {
 				start, end = occ.start, occ.end
 			}
-			_, err = a.DB.ExecContext(ctx, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
+			_, err = a.exec(ctx, web.KindEvent, `INSERT INTO events (calendar_id, title, location, description, all_day, start_utc, end_utc, start_tzid, all_day_date, all_day_end_date,
 					recurring_master_id, original_start_utc, status, updated_at)
 				SELECT calendar_id, title, location, description, all_day, ?, ?, start_tzid, ?, ?, id, ?, 'cancelled', ? FROM events WHERE id = ?
 				ON CONFLICT (recurring_master_id, original_start_utc) DO UPDATE SET status = 'cancelled', updated_at = excluded.updated_at`,
 				start, end, date, endDate, occ.original, a.Now().Unix(), id)
 		}
 	}
-	if err != nil {
-		return err
-	}
-	a.publish(typ, "event", id)
-	return nil
+	return err
 }
 
 // activeMemberIDs is the ids of the Members who aren't archived.
@@ -630,7 +620,11 @@ func (a *App) startsAt(ctx context.Context, ss storedSeries, o int64) (bool, err
 
 // endSeriesBefore ends Series ss just before its Occurrence o and drops its One-off edits from o on.
 func (a *App) endSeriesBefore(ctx context.Context, tx *sql.Tx, ss storedSeries, o int64) error {
-	rule, _, rd := storedRule(endBefore(ss.s, ss.zone, o))
+	before, _, err := split(ss.ev, ss.s, ss.zone, o)
+	if err != nil {
+		return err
+	}
+	rule, _, rd := storedRule(before)
 	oldRule, _, oldRD := storedRule(ss.s)
 	// Only if the Series is still as loaded: a concurrent Split must not end it twice and start two new ones.
 	res, err := tx.ExecContext(ctx, "UPDATE events SET rrule = ?, rdates_json = ?, updated_at = ? WHERE id = ? AND rrule IS ? AND rdates_json IS ?",
@@ -655,17 +649,4 @@ func retype(ds []string, allDay bool, clock string) []string {
 		}
 	}
 	return out
-}
-
-// inTx runs fn in a transaction, committing if it succeeds.
-func (a *App) inTx(ctx context.Context, fn func(*sql.Tx) error) error {
-	tx, err := a.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit()
 }

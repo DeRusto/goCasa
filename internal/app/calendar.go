@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -190,7 +191,7 @@ func calendarDay(evs []calendarEvent, d0, today time.Time, now int64, clock stri
 				to = time.Unix(e.end, 0).In(loc).Format(clock)
 			}
 			ev.Time = from + "–" + to
-			ev.Past = e.end <= now
+			ev.Past, ev.End = e.end <= now, e.end*1000
 		}
 		day.Events = append(day.Events, ev)
 	}
@@ -233,12 +234,10 @@ func (a *App) createCalendar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A calendar needs a name of 1 to 50 characters and a colour.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color) VALUES ((SELECT id FROM integrations WHERE type = 'local'), ?, ?) RETURNING id", name, color).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), web.KindEvent, "INSERT INTO source_calendars (integration_id, name, color) VALUES ((SELECT id FROM integrations WHERE type = 'local'), ?, ?)", name, color); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "calendar", id)
 	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
 }
 
@@ -267,6 +266,51 @@ func presetRule(r *http.Request, byDay map[string]bool) (rule, msg string) {
 		rule += ";BYDAY=" + strings.Join(r.PostForm["byday"], ",")
 	}
 	return rule, ""
+}
+
+// anchorRule makes a monthly or yearly preset rule that starts on day keep to
+// the last day of months without day's date (spec §8), instead of skipping
+// them as RFC 5545 does: the 31st falls on April 30 and February 28 or 29. A
+// rule with any BY part is a custom or already anchored one, and is kept.
+func anchorRule(rule string, day time.Time) string {
+	d := day.Day()
+	switch {
+	case d < 29 || strings.Contains(rule, "BY"):
+		return rule
+	case strings.Contains(rule, "FREQ=MONTHLY"):
+		return rule + ";BYMONTHDAY=" + "28,29,30,31"[:3*(d-27)-1] + ";BYSETPOS=-1" // 28 to d
+	case strings.Contains(rule, "FREQ=YEARLY") && day.Month() == time.February:
+		return rule + ";BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1"
+	}
+	return rule
+}
+
+// reanchor is the rule of a Series whose Occurrence on day was moves to day
+// to: a rule that is a preset plus anchorRule's own month-end anchor is
+// anchored afresh from to, as a new preset Series would be; any other rule,
+// or the same month and day, keeps it.
+func reanchor(rule string, was, to time.Time) string {
+	if was.Month() == to.Month() && was.Day() == to.Day() {
+		return rule
+	}
+	base, _, _ := strings.Cut(rule, ";BYMONTH") // a preset's anchor is its only BY part, and last
+	for _, d := range []time.Time{time.Date(2026, 1, 29, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 30, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC), time.Date(2028, 2, 29, 0, 0, 0, 0, time.UTC)} {
+		if base != rule && anchorRule(base, d) == rule {
+			return anchorRule(base, to)
+		}
+	}
+	return rule
+}
+
+// startDay is c's first day, as a date in its own zone.
+func startDay(c eventChange) time.Time {
+	if c.allDay {
+		d, _ := time.Parse(dateLayout, c.date.(string))
+		return d
+	}
+	zone, _ := time.LoadLocation(c.tzid.(string)) // parseEventForm or the store checked it
+	return time.Unix(c.start.(int64), 0).In(zone)
 }
 
 // parseRepeat reads the dialog's repeat fields into a rule and its EXDATEs and
@@ -397,6 +441,9 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 			return f, e, "Pick a first and last day, the last not before the first."
 		}
 		e.date, e.endDate, e.firstDay = f.StartDate, d1.AddDate(0, 0, 1).Format(dateLayout), f.StartDate
+		if rule != "" && f.Repeat != "custom" {
+			e.rrule = anchorRule(rule, d0)
+		}
 		return f, e, ""
 	}
 	zone, err := time.LoadLocation(f.TZ)
@@ -413,6 +460,9 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 		return f, e, "That time doesn't exist in " + f.TZ + ": the clocks change then."
 	}
 	e.start, e.end, e.tzid = t0.Unix(), t1.Unix(), f.TZ
+	if rule != "" && f.Repeat != "custom" {
+		e.rrule = anchorRule(rule, t0)
+	}
 	e.firstDay = t0.In(a.location(r.Context())).Format(dateLayout)
 	return f, e, ""
 }
@@ -448,7 +498,7 @@ func (a *App) newEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 // eventForm is c as the dialog shows it.
-func (a *App) eventForm(c eventChange) (web.EventForm, error) {
+func (a *App) eventForm(ctx context.Context, c eventChange) (web.EventForm, error) {
 	f := web.EventForm{CalendarID: c.calendarID, Title: c.title, Location: c.location, Description: c.description, AllDay: c.allDay,
 		Members: map[int64]bool{}, ByDay: map[string]bool{}}
 	for _, m := range c.members {
@@ -457,7 +507,7 @@ func (a *App) eventForm(c eventChange) (web.EventForm, error) {
 	if c.allDay {
 		last, _ := time.Parse(dateLayout, c.endDate.(string))
 		f.StartDate, f.EndDate = c.date.(string), last.AddDate(0, 0, -1).Format(dateLayout)
-		f.TZ = a.Config.Location.String()
+		f.TZ = a.location(ctx).String()
 		f.Start, f.End = f.StartDate+"T09:00", f.StartDate+"T10:00"
 		return f, nil
 	}
@@ -487,7 +537,7 @@ func (a *App) getEvent(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	f, err := a.eventForm(c)
+	f, err := a.eventForm(r.Context(), c)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
