@@ -80,6 +80,7 @@ func TestNext(t *testing.T) {
 		{"schedule leap day", yearly, "2028-02-29", "2028-02-29", false, "2029-02-28", "2030-02-28"},
 		{"completion daily", todoRepeat{Freq: "daily", Interval: 3}, "2026-03-01", "2026-03-15", true, "2026-03-18", "2026-03-21"},
 		{"completion weekly", todoRepeat{Freq: "weekly", Interval: 2}, "2026-03-01", "2026-03-15", true, "2026-03-29", "2026-04-12"},
+		{"completion weekly by day counts from the completion day", todoRepeat{Freq: "weekly", Interval: 1, ByDay: []string{"MO", "TH"}}, "2026-03-16", "2026-03-18", true, "2026-03-25", "2026-04-01"},
 		{"completion month end clamps", monthly, "2026-01-02", "2026-01-31", true, "2026-02-28", "2026-03-28"},
 		{"completion leap day clamps", yearly, "2027-01-01", "2028-02-29", true, "2029-02-28", "2030-02-28"},
 	} {
@@ -87,6 +88,9 @@ func TestNext(t *testing.T) {
 		if err != nil || next != c.wantDue {
 			t.Errorf("%s: Next = %q, %v; want %q", c.name, next, err, c.wantDue)
 			continue
+		}
+		if got := decodeRepeat(rule).ByDay; !slices.Equal(got, c.p.ByDay) {
+			t.Errorf("%s: the next copy repeats on %v, want %v", c.name, got, c.p.ByDay)
 		}
 		after, _, err := decodeRepeat(rule).Next(date(next), date(next), c.fromCompletion)
 		if err != nil || after != c.chain2 {
