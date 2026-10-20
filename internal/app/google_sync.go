@@ -157,7 +157,7 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 	}
 	if full {
 		// A random time tomorrow, so Households don't all re-import at once.
-		cur.NextFull = dayAt(now.In(a.Config.Location), 1).Add(rand.N(24 * time.Hour)).Unix()
+		cur.NextFull = dayAt(now.In(a.location(ctx)), 1).Add(rand.N(24 * time.Hour)).Unix()
 		cursor, _ := json.Marshal(cur)
 		_, err = a.DB.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", string(cursor), in.id)
 	}
@@ -243,6 +243,7 @@ func (a *App) googleEvents(ctx context.Context, access, cal, token string, now t
 // out. Events outside the window are dropped, whether sent or not.
 func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []googleEvent, calZone string, full bool, cursor string, now time.Time) error {
 	from, to := syncWindow(now)
+	home := a.location(ctx)
 	err := a.inTx(ctx, func(tx *sql.Tx) error {
 		seen := []string{}
 		var upserted []int64
@@ -258,7 +259,7 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 				continue
 			}
 			seen = append(seen, e.ID)
-			c, ok := e.change(cmp.Or(e.Start.TimeZone, calZone), a.Config.Location)
+			c, ok := e.change(cmp.Or(e.Start.TimeZone, calZone), home)
 			if !ok {
 				continue // its last good copy stays
 			}
@@ -291,7 +292,7 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 				return err
 			}
 		}
-		fromDate, toDate := from.In(a.Config.Location).Format(dateLayout), to.In(a.Config.Location).Format(dateLayout)
+		fromDate, toDate := from.In(home).Format(dateLayout), to.In(home).Format(dateLayout)
 		if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE calendar_id = ?1
 			AND (NOT all_day AND (end_utc <= ?2 OR start_utc >= ?3) OR all_day AND (all_day_end_date <= ?4 OR all_day_date >= ?5))`,
 			cal, from.Unix(), to.Unix(), fromDate, toDate); err != nil {

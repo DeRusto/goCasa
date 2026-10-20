@@ -78,7 +78,7 @@ func (icalFeed) Sync(ctx context.Context, a *App, in integrationRow) error {
 		return fmt.Errorf("that isn't an iCal feed: %w", err)
 	}
 	next, _ := json.Marshal(feedCursor{ETag: res.Header.Get("ETag"), LastModified: res.Header.Get("Last-Modified")})
-	evs, kept := parseFeed(cal, a.Config.Location)
+	evs, kept := parseFeed(cal, a.location(ctx))
 	return a.storeFeed(ctx, in.id, evs, kept, string(next))
 }
 

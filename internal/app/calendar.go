@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -471,7 +472,7 @@ func (a *App) newEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 // eventForm is c as the dialog shows it.
-func (a *App) eventForm(c eventChange) (web.EventForm, error) {
+func (a *App) eventForm(ctx context.Context, c eventChange) (web.EventForm, error) {
 	f := web.EventForm{CalendarID: c.calendarID, Title: c.title, Location: c.location, Description: c.description, AllDay: c.allDay,
 		Members: map[int64]bool{}, ByDay: map[string]bool{}}
 	for _, m := range c.members {
@@ -480,7 +481,7 @@ func (a *App) eventForm(c eventChange) (web.EventForm, error) {
 	if c.allDay {
 		last, _ := time.Parse(dateLayout, c.endDate.(string))
 		f.StartDate, f.EndDate = c.date.(string), last.AddDate(0, 0, -1).Format(dateLayout)
-		f.TZ = a.Config.Location.String()
+		f.TZ = a.location(ctx).String()
 		f.Start, f.End = f.StartDate+"T09:00", f.StartDate+"T10:00"
 		return f, nil
 	}
@@ -510,7 +511,7 @@ func (a *App) getEvent(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	f, err := a.eventForm(c)
+	f, err := a.eventForm(r.Context(), c)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
