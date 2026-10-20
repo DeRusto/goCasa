@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // Connecting Google accounts (spec §7.2) with the Household's own OAuth client.
@@ -380,6 +381,11 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 		a.publish("updated", "calendar", id)
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 	}
+}
+
+func (googleSync) Section(ctx context.Context, a *App, st map[int64]integrationStatus, members []web.Member) (templ.Component, error) {
+	g, err := a.googleSettings(ctx, st)
+	return web.GoogleSection(g, members), err
 }
 
 // googleSettings is the Google section of Settings.

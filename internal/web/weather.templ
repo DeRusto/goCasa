@@ -55,7 +55,7 @@ templ weatherPill() {
 	}
 }
 
-templ weatherSection(w Weather) {
+templ WeatherSection(w Weather) {
 	<h2>Weather</h2>
 	<p>Where the weather is for, from Open-Meteo. Leave both blank for no weather.</p>
 	@syncStatus(w.LastSuccess, w.Failures, w.LastError)

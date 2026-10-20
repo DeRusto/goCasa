@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // openMeteo fetches the current conditions and daily forecast for the
@@ -166,6 +167,11 @@ func conditions(code int) string {
 		return "Thunderstorm"
 	}
 	return ""
+}
+
+func (openMeteo) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+	w, err := a.weatherSettings(ctx, st)
+	return web.WeatherSection(w), err
 }
 
 // weatherSettings is the Weather section of Settings.

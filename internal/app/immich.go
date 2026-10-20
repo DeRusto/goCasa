@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // immich lists the photos of the albums and people an Admin picked (spec
@@ -357,6 +358,11 @@ func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+func (immich) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+	m, err := a.immichSettings(ctx, st)
+	return web.ImmichSection(m), err
 }
 
 // immichSettings is the Immich section of Settings; nil when not connected.

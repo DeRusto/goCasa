@@ -141,38 +141,13 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	st, err := a.integrations.Statuses(r.Context())
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	fs, err := a.feeds(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	g, err := a.googleSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	wx, err := a.weatherSettings(r.Context(), st)
+	secs, err := a.settingsSections(r.Context(), ms)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	var l web.Locks
 	if err := a.DB.QueryRowContext(r.Context(), "SELECT lock_calendar, lock_chores, lock_todos FROM household_settings").Scan(&l.Calendar, &l.Chores, &l.Todos); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	ml, err := a.mealieSettings(r.Context(), st)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	im, err := a.immichSettings(r.Context(), st)
-	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -186,7 +161,7 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, fs, g, wx, l, ml, im, fb, hh, errMsg))
+	a.render(w, r, status, web.Settings(ms, l, secs, fb, hh, errMsg))
 }
 
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
