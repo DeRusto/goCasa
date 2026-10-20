@@ -77,7 +77,7 @@ templ Today(p TodayPage) {
 
 // clock is the household's time, ticked by ticker in the browser.
 templ clock(p TodayPage) {
-	<time id="clock" data-tz={ p.Now.Location().String() } data-h24={ strconv.FormatBool(p.Clock24) } data-midnight-in={ strconv.Itoa(p.MidnightIn) }>{ p.Clock }</time>
+	<time id="clock" data-tz={ p.Now.Location().String() } data-offset={ p.Now.Format("-07:00") } data-h24={ strconv.FormatBool(p.Clock24) } data-midnight-in={ strconv.Itoa(p.MidnightIn) }>{ p.Clock }</time>
 }
 
 // ticker runs a page's day in the browser, with no request: it ticks #clock
@@ -92,9 +92,16 @@ templ ticker() {
 			const clock = document.getElementById("clock");
 			if (!clock) return;
 			const opts = clock.dataset.h24 === "true" ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } : { hour: "numeric", minute: "2-digit", hourCycle: "h12" };
-			try { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat("en-US", opts); } catch { delete opts.timeZone; }
+			let at = new Date();
+			try { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat("en-US", opts); } catch {
+				// A zone the browser can't name (Go's "Local"): the household's offset at render, shown as UTC.
+				// shortcut: a DST change before the next refetch (at midnight) shows an hour off until then; send a named zone if that bites.
+				const [, sign, h, m] = /([+-])(\d\d):(\d\d)/.exec(clock.dataset.offset) || [, "+", "00", "00"];
+				at = new Date(at.getTime() + (sign === "-" ? -1 : 1) * (h * 60 + Number(m)) * 6e4); // minutes to ms
+				opts.timeZone = "UTC";
+			}
 			// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).
-			clock.textContent = new Date().toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
+			clock.textContent = at.toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
 			const now = Date.now();
 			if (clock !== seen) {
 				seen = clock;
