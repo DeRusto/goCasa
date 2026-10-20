@@ -281,7 +281,7 @@ func (a *App) shiftDates(ctx context.Context, lines []string, master googleEvent
 	delta := newWall.Sub(oldWall)
 	var out []string
 	for _, line := range lines {
-		name, _, _ := strings.Cut(line, ";")
+		name := line[:strings.IndexAny(line+":", ";:")] // "EXDATE;TZID=…:" or bare "EXDATE:"
 		if name != "EXDATE" && name != "RDATE" {
 			out = append(out, line)
 			continue
