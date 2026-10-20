@@ -199,6 +199,9 @@ func calendarDay(evs []calendarEvent, d0, today time.Time, now int64, clock stri
 				to = t.Format(clock)
 				if e.end < d1.Unix() {
 					ev.To = t.Hour()*60 + t.Minute()
+					if ev.To < ev.From { // ends in the hour the clocks go back over: draw its real length
+						ev.To = min(ev.From+int(e.end-max(e.start, d0.Unix()))/60, 24*60)
+					}
 				}
 			}
 			ev.Time = from + "–" + to
@@ -230,7 +233,7 @@ func lanes(evs []web.CalendarEvent) {
 		if e.Lane < 0 {
 			e.Lane, ends = len(ends), append(ends, 0)
 		}
-		ends[e.Lane] = max(e.To, e.From+1) // a zero-length event still takes its lane
+		ends[e.Lane] = max(e.To, e.From+web.MinBlockMinutes) // as tall as it's drawn
 		group = append(group, e)
 	}
 	for _, g := range group {

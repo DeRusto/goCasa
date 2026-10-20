@@ -249,7 +249,7 @@ templ Calendar(p CalendarPage) {
 			</div>
 			// The header above stays put; this scrolls, and keeps its place across live refetches of #live.
 			<div class="relative -mx-5 -mb-5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5" data-scroll>
-				<div id="live" { live(KindEvent, KindMember, KindHousehold, KindIntegration)... } class={ "flex flex-col gap-4", templ.KV("h-full", p.View == "month") }>
+				<div id="live" { live(KindEvent, KindMember, KindHousehold, KindIntegration)... } hx-select-oob="#calendar-list" class={ "flex flex-col gap-4", templ.KV("h-full", p.View == "month") }>
 					for _, s := range p.Stale {
 						<p role="status">
 							{ s.Name }: last updated { s.LastUpdated }.
@@ -307,7 +307,7 @@ templ Calendar(p CalendarPage) {
 					</form>
 					@defaultViewButton(p.DefaultView)
 				</div>
-				<section class="flex flex-col gap-2">
+				<section id="calendar-list" class="flex flex-col gap-2">
 					<h2>Calendars</h2>
 					<ul class="flex flex-col gap-1">
 						for _, c := range p.Calendars {
@@ -399,12 +399,16 @@ const hourRem = 5.0
 
 func remAt(min int) string { return strconv.FormatFloat(float64(min)*hourRem/60, 'f', 3, 64) + "rem" }
 
+// MinBlockMinutes is the least a timed event is drawn as on the time grid, so a
+// short one stays readable; lanes keeps its lane taken that long too.
+const MinBlockMinutes = 21
+
 // blockStyle places a timed event on its day's column: by its minutes down, and
-// across by its Lane, with a floor so a short event stays readable.
+// across by its Lane.
 func blockStyle(e CalendarEvent) templ.SafeCSS {
 	lanes := max(e.Lanes, 1)
-	return templ.SafeCSS(fmt.Sprintf("top:%s;height:max(%s,1.75rem);left:%.4f%%;width:%.4f%%;",
-		remAt(e.From), remAt(e.To-e.From), 100*float64(e.Lane)/float64(lanes), 100/float64(lanes)))
+	return templ.SafeCSS(fmt.Sprintf("top:%s;height:%s;left:%.4f%%;width:%.4f%%;",
+		remAt(e.From), remAt(max(e.To-e.From, MinBlockMinutes)), 100*float64(e.Lane)/float64(lanes), 100/float64(lanes)))
 }
 
 // allDayRows makes every day column's header as tall as the one with the most all-day events.
@@ -443,7 +447,7 @@ func memberIndex(ms []Member) map[int64]Member {
 // other all-day events differ; give all-day events fixed rows if that bites.
 templ timeGrid(p CalendarPage) {
 	{{ members := memberIndex(p.Members) }}
-	<div class="card flex p-0 max-[760px]:overflow-x-auto">
+	<div class="card flex min-w-fit p-0">
 		<div class="w-16 flex-none">
 			<div class="sticky top-0 z-10 rounded-tl-[14px] border-b border-line bg-card" style={ allDayRows(p.Days) }></div>
 			<div class="relative" style={ templ.SafeCSS("height:" + remAt(24*60) + ";") }>
