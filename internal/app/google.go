@@ -155,8 +155,8 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGrant, cals []googleCalendar) (msg string, err error) {
 	tok, _ := json.Marshal(googleToken{RefreshToken: g.refresh})
 	// A reconnect ends Reconnect needed and any backoff: sync straight away.
-	return a.integrations.Connect(ctx, connection{typ: googleType, name: g.email, secret: string(tok), interval: googleSyncInterval, sub: g.sub,
-		reconnect: func(tx *sql.Tx) (id int64, msg string, err error) {
+	return a.integrations.Connect(ctx, newIntegration{typ: googleType, name: g.email, secret: string(tok), interval: googleSyncInterval,
+		login: &integrationLogin{sub: g.sub, find: func(tx *sql.Tx) (id int64, msg string, err error) {
 			if account == "" {
 				// Connecting a login that's already here reconnects it.
 				err = tx.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ? AND account_sub = ?", googleType, g.sub).Scan(&id)
@@ -173,10 +173,10 @@ func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGr
 			case err != nil:
 				return 0, "", err
 			case sub != g.sub:
-				return 0, "That's a different Google account. Add it as a new connection instead.", nil
+				return 0, "That's a different Google account. Connect it as another Google account instead.", nil
 			}
 			return id, "", nil
-		},
+		}},
 		then: func(tx *sql.Tx, id int64) error {
 			for _, c := range cals {
 				name := []rune(strings.TrimSpace(c.SummaryOverride))

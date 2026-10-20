@@ -163,7 +163,7 @@ func (a *App) listDone(w http.ResponseWriter, r *http.Request, err error) {
 		http.Redirect(w, r, "/lists", http.StatusSeeOther)
 	case errors.Is(err, ErrReadOnly):
 		a.listsPage(w, r, http.StatusServiceUnavailable, mealieUnreachable)
-	case errors.Is(err, ErrGoneUpstream):
+	case errors.Is(err, ErrGoneFromMealie):
 		a.listsPage(w, r, http.StatusNotFound, errMealieRemoved)
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
@@ -189,9 +189,9 @@ type shoppingList interface {
 var (
 	// ErrReadOnly is a change to a Mirrored list while Mealie is Down or failing.
 	ErrReadOnly = errors.New("Mealie can't be reached: the list is read-only")
-	// ErrGoneUpstream is a change to an item removed in Mealie; the list was re-pulled.
-	ErrGoneUpstream = errors.New("the item was removed in Mealie")
-	errBadPosition  = errors.New("bad position")
+	// ErrGoneFromMealie is a change to an item removed in Mealie; the list was re-pulled.
+	ErrGoneFromMealie = errors.New("the item was removed in Mealie")
+	errBadPosition    = errors.New("bad position")
 )
 
 // shoppingList is list id; a missing list is a Local list with no rows.

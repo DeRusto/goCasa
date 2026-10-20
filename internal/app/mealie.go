@@ -271,7 +271,7 @@ func mealieVersionOK(v string) bool {
 func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	token := strings.TrimSpace(r.PostFormValue("token"))
-	msg, err := a.integrations.Connect(r.Context(), connection{typ: mealieType, name: "Mealie", url: raw, secret: token,
+	msg, err := a.integrations.Connect(r.Context(), newIntegration{typ: mealieType, name: "Mealie", url: raw, secret: token,
 		missingSecret: "Paste an API token from Mealie (Profile > API Tokens).", cfg: mealieConfig{URL: raw}, interval: mealiePoll, unique: true,
 		check: func(ctx context.Context) string {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -378,7 +378,7 @@ func (a *App) mirrorOf(ctx context.Context, list int64) (*mirror, error) {
 const mealieUnreachable = "GoCasa can't reach Mealie, so its lists show their last contents and can't be changed until it answers again."
 
 // mealieWrite runs write against Mealie on Mirrored list m: a gone item
-// re-pulls the list (ErrGoneUpstream), any other failure makes the lists
+// re-pulls the list (ErrGoneFromMealie), any other failure makes the lists
 // read-only until the next good poll (ErrReadOnly).
 func (a *App) mealieWrite(ctx context.Context, m *mirror, write func(ctx context.Context) error) error {
 	if m.down {
@@ -418,7 +418,7 @@ func (a *App) mealieWrite(ctx context.Context, m *mirror, write func(ctx context
 	}
 	switch {
 	case errors.Is(err, errMealieGone):
-		return ErrGoneUpstream
+		return ErrGoneFromMealie
 	case recErr != nil:
 		return fmt.Errorf("recording a Mealie failure: %v", recErr)
 	case err != nil:

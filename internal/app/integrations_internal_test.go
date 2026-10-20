@@ -191,7 +191,7 @@ func TestConnectChecksTheAddress(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	probed := false
-	c := connection{typ: "fake", name: "Fake", secret: "s", missingSecret: "Paste a key.", interval: 60, unique: true,
+	c := newIntegration{typ: "fake", name: "Fake", secret: "s", missingSecret: "Paste a key.", interval: 60, unique: true,
 		check: func(context.Context) string { probed = true; return "" }}
 	for raw, want := range map[string]string{
 		"ftp://x":            "Fake's address starts with https:// or http://.",
@@ -226,7 +226,7 @@ func TestConnectAddsAnotherWithItsOwnRows(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	_, _, calls := fake(t, a)
-	c := connection{typ: "fake", name: "Fake", url: "https://u:p@x.test/feed", urlSealed: true, secret: "https://u:p@x.test/feed", interval: 60,
+	c := newIntegration{typ: "fake", name: "Fake", url: "https://u:p@x.test/feed", urlSealed: true, secret: "https://u:p@x.test/feed", interval: 60,
 		then: func(tx *sql.Tx, id int64) error {
 			_, err := tx.Exec("INSERT INTO source_calendars (integration_id, name, color) VALUES (?, 'Fake', '#000000')", id)
 			return err
@@ -255,8 +255,8 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 		a.integrations.Run(ctx, id)
 	}
 	a.integrations.NeedsReconnect(ctx, id, nil)
-	login := connection{typ: "fake", name: "ada@example.com", secret: "token",
-		reconnect: func(*sql.Tx) (int64, string, error) { return id, "", nil }}
+	login := newIntegration{typ: "fake", name: "ada@example.com", secret: "token",
+		login: &integrationLogin{find: func(*sql.Tx) (int64, string, error) { return id, "", nil }}}
 	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
 		t.Fatalf("reconnect: %q, %v", msg, err)
 	}
@@ -268,12 +268,12 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 	if *calls != before+1 {
 		t.Fatal("a reconnect isn't due straight away")
 	}
-	login.reconnect = func(*sql.Tx) (int64, string, error) { return 0, "Wrong login.", nil }
+	login.login.find = func(*sql.Tx) (int64, string, error) { return 0, "Wrong login.", nil }
 	if msg, _ := a.integrations.Connect(ctx, login); msg != "Wrong login." {
 		t.Fatalf("refused login: %q", msg)
 	}
-	login.reconnect = func(*sql.Tx) (int64, string, error) { return 0, "", nil }
-	login.sub = "bob"
+	login.login.find = func(*sql.Tx) (int64, string, error) { return 0, "", nil }
+	login.login.sub = "bob"
 	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
 		t.Fatalf("new login: %q, %v", msg, err)
 	}
@@ -331,8 +331,8 @@ func TestReconnectNeededAndAReconnectReachOpenPages(t *testing.T) {
 	if ks := published(ch); len(ks) != 1 || ks[0] != KindIntegration {
 		t.Fatalf("becoming Reconnect needed published %v", ks)
 	}
-	login := connection{typ: "fake", name: "ada@example.com", secret: "token",
-		reconnect: func(*sql.Tx) (int64, string, error) { return id, "", nil }}
+	login := newIntegration{typ: "fake", name: "ada@example.com", secret: "token",
+		login: &integrationLogin{find: func(*sql.Tx) (int64, string, error) { return id, "", nil }}}
 	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
 		t.Fatalf("reconnect: %q, %v", msg, err)
 	}

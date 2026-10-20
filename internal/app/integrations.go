@@ -158,31 +158,37 @@ func cutError(err error) string {
 	return string(msg[:min(len(msg), maxErrRunes)])
 }
 
-// connection is an integration to Connect.
-type connection struct {
+// newIntegration is an Integration to Connect: one at an address (an iCal
+// feed, Mealie, Immich), or a login (a Google account) when login is set.
+type newIntegration struct {
 	typ, name     string // name as Settings shows it
-	url           string // its address
-	badURL        string // refuses an address that isn't http(s); "" says so for name
-	urlSealed     bool   // the address is the secret, so may name a user and password
 	secret        string
-	missingSecret string                                 // refuses an empty secret; "" allows one
-	cfg           any                                    // config_json; nil keeps {} (a login keeps its own)
-	interval      int                                    // seconds between syncs
-	unique        bool                                   // one per typ
-	check         func(ctx context.Context) (msg string) // probes the upstream; msg refuses it
-	then          func(tx *sql.Tx, id int64) error       // its own rows, in the same transaction
+	missingSecret string                           // refuses an empty secret; "" allows one
+	interval      int                              // seconds between syncs
+	then          func(tx *sql.Tx, id int64) error // its own rows, in the same transaction
 
-	// reconnect makes this a login with no address: it finds the row this
-	// login reconnects (0 adds one) or refuses it. A login's connect resets
-	// its health and syncs on the next scheduler tick, not straight away.
-	reconnect func(tx *sql.Tx) (id int64, msg string, err error)
-	sub       string // a login's account_sub
+	// An address's.
+	url       string                                 // its address
+	badURL    string                                 // refuses an address that isn't http(s); "" says so for name
+	urlSealed bool                                   // the address is the secret, so may name a user and password
+	cfg       any                                    // config_json; nil keeps {}
+	unique    bool                                   // one per typ
+	check     func(ctx context.Context) (msg string) // tries the address; msg refuses it
+
+	login *integrationLogin
+}
+
+// integrationLogin is a newIntegration with no address. Its connect resets
+// its health and syncs on the next scheduler tick, not straight away.
+type integrationLogin struct {
+	sub  string                                             // its account_sub
+	find func(tx *sql.Tx) (id int64, msg string, err error) // the row it reconnects (0 adds one), or msg refusing it
 }
 
 // Connect checks c and adds it, syncing it once (its outcome shows in
 // Settings), or reconnects a login. msg refuses it, for the person.
-func (s *integrations) Connect(ctx context.Context, c connection) (msg string, err error) {
-	if c.reconnect == nil {
+func (s *integrations) Connect(ctx context.Context, c newIntegration) (msg string, err error) {
+	if c.login == nil {
 		switch u := parseUpstreamURL(c.url); {
 		case u == nil:
 			return cmp.Or(c.badURL, c.name+"'s address starts with https:// or http://."), nil
@@ -219,13 +225,13 @@ func (s *integrations) Connect(ctx context.Context, c connection) (msg string, e
 	var id int64
 	changed := false // a refusal publishes nothing
 	err = s.app.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
-		if c.reconnect != nil {
+		if c.login != nil {
 			var err error
-			if id, msg, err = c.reconnect(tx); err != nil || msg != "" {
+			if id, msg, err = c.login.find(tx); err != nil || msg != "" {
 				return err
 			}
 			if id == 0 {
-				if err := tx.QueryRowContext(ctx, "INSERT INTO integrations (type, name, account_sub, sync_interval_seconds) VALUES (?, ?, ?, ?) RETURNING id", c.typ, c.name, c.sub, c.interval).Scan(&id); err != nil {
+				if err := tx.QueryRowContext(ctx, "INSERT INTO integrations (type, name, account_sub, sync_interval_seconds) VALUES (?, ?, ?, ?) RETURNING id", c.typ, c.name, c.login.sub, c.interval).Scan(&id); err != nil {
 					return err
 				}
 			}
@@ -253,7 +259,7 @@ func (s *integrations) Connect(ctx context.Context, c connection) (msg string, e
 		}
 		return nil
 	}, KindIntegration) // a reconnect resets its health, so its next good sync publishes nothing
-	if err != nil || msg != "" || c.reconnect != nil {
+	if err != nil || msg != "" || c.login != nil {
 		return msg, err
 	}
 	_, err = s.Run(ctx, id)
@@ -476,7 +482,7 @@ func (a *App) addFeed(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick a colour.")
 		return
 	}
-	msg, err := a.integrations.Connect(r.Context(), connection{typ: "ical", name: name, url: feedURL(raw), urlSealed: true, secret: raw, interval: icalInterval,
+	msg, err := a.integrations.Connect(r.Context(), newIntegration{typ: "ical", name: name, url: feedURL(raw), urlSealed: true, secret: raw, interval: icalInterval,
 		badURL: "A feed's address starts with webcal://, https:// or http://.",
 		then: func(tx *sql.Tx, id int64) error {
 			_, err := tx.ExecContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color, read_only) VALUES (?, ?, ?, 1)", id, name, color)

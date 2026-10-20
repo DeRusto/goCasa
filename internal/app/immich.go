@@ -297,7 +297,7 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	key := strings.TrimSpace(r.PostFormValue("key"))
-	msg, err := a.integrations.Connect(r.Context(), connection{typ: immichType, name: "Immich", url: raw, secret: key,
+	msg, err := a.integrations.Connect(r.Context(), newIntegration{typ: immichType, name: "Immich", url: raw, secret: key,
 		missingSecret: "Paste an API key from Immich (Account Settings > API Keys).", cfg: immichConfig{URL: raw}, interval: immichRelist, unique: true,
 		check: func(ctx context.Context) string {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
