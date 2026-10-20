@@ -433,3 +433,14 @@ func TestEditScopesOverHTTP(t *testing.T) {
 		t.Errorf("unknown scope delete = %d, want 400", code)
 	}
 }
+
+// A monthly preset on the 31st falls on a short month's last day (spec §8).
+func TestMonthlyPresetClampsToTheMonthsLastDay(t *testing.T) {
+	h := household(t)
+	addEvent(t, h, repeating(timed("Rent", "2026-01-31T09:00", "2026-01-31T10:00", "UTC"), "monthly"))
+	for d, m := range map[string]string{"2026-02-28": "2026-02-15", "2026-03-31": "2026-03-15", "2026-04-30": "2026-04-15"} {
+		if _, page := h.Get(t, "/calendar?view=month&date="+m); !strings.Contains(day(t, page, d), "Rent") {
+			t.Errorf("%s doesn't show Rent", d)
+		}
+	}
+}

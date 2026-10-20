@@ -458,3 +458,16 @@ func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 		t.Fatalf("%d Series Member choices outlived their calendar", n)
 	}
 }
+
+// Google gets the clamped rule a monthly preset on the 31st makes.
+func TestGoogleMonthlyPresetSendsTheClampedRule(t *testing.T) {
+	g := newGoogle(t)
+	h, alice := syncedWith(t, g)
+	form := googleEdit("Rent", "2026-03-31T10:00", "2026-03-31T11:00", "calendar_id", fmt.Sprint(alice), "repeat", "monthly")
+	if code, _ := h.Post(t, "/calendar/event", form); code != http.StatusOK {
+		t.Fatalf("creating = %d", code)
+	}
+	if w := g.sent()[0]; fmt.Sprint(w.body["recurrence"]) != "[RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1]" {
+		t.Fatalf("Google got %+v", w)
+	}
+}
