@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -232,7 +231,7 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 		}
 		rule := values
 		old = append(old, "RRULE:"+untilBefore(rule, o, master.Start.Date != ""))
-		if m := countRE.FindStringSubmatch(rule); m != nil {
+		if countRE.MatchString(rule) {
 			mc, ok := master.change(master.Start.TimeZone, a.Config.Location)
 			if !ok {
 				return nil, nil, errors.New("Google sent a series start GoCasa can't read")
@@ -252,12 +251,11 @@ func (a *App) splitRecurrence(master googleEvent, o int64) (old, from []string, 
 			if to.After(first.AddDate(horizonYears, 0, 0)) {
 				return nil, nil, &refusal{msg: fmt.Sprintf("GoCasa counts a Series' events only %d years from its start: split this one in Google.", horizonYears)}
 			}
-			before, err := occurrences(ev, series{rule: rule}, zone, nil, to.AddDate(-horizonYears, 0, 0), to, math.MaxInt)
+			_, after, err := split(ev, series{rule: rule}, zone, o)
 			if err != nil {
 				return nil, nil, err
 			}
-			n, _ := strconv.Atoi(m[1])
-			rule = countRE.ReplaceAllString(rule, "COUNT="+strconv.Itoa(max(n-len(before), 1)))
+			rule = after.rule
 		}
 		from = append(from, "RRULE:"+rule)
 	}

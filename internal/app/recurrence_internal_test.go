@@ -164,27 +164,70 @@ func TestExpandCapCountsOneOffEdits(t *testing.T) {
 	}
 }
 
-func TestEndBeforeAddsUntilAndDropsLaterRDates(t *testing.T) {
-	london := zone(t, "Europe/London")
+func TestSplitAddsUntilAndSplitsRDates(t *testing.T) {
+	m, london := timedMaster(t, "Europe/London", "2026-06-01T09:00", "2026-06-01T10:00")
 	o := time.Date(2026, 6, 10, 9, 0, 0, 0, london).Unix() // 08:00 UTC
-	got := endBefore(series{rule: "FREQ=DAILY;COUNT=10;INTERVAL=1", rdates: []string{"2026-06-09T09:00", "2026-06-10T09:00", "2026-06-12T09:00"}}, london, o)
+	before, after, err := split(m, series{rule: "FREQ=DAILY;COUNT=10;INTERVAL=1", rdates: []string{"2026-06-09T09:00", "2026-06-10T09:00", "2026-06-12T09:00"}}, london, o)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// COUNT stays: it ends the Series sooner if it already did.
-	if want := "FREQ=DAILY;COUNT=10;INTERVAL=1;UNTIL=20260610T075959Z"; got.rule != want {
-		t.Errorf("rule = %q, want %q", got.rule, want)
+	if want := "FREQ=DAILY;COUNT=10;INTERVAL=1;UNTIL=20260610T075959Z"; before.rule != want {
+		t.Errorf("before = %q, want %q", before.rule, want)
 	}
-	if len(got.rdates) != 1 || got.rdates[0] != "2026-06-09T09:00" {
-		t.Errorf("rdates = %v, want only the one before the Split", got.rdates)
+	if len(before.rdates) != 1 || before.rdates[0] != "2026-06-09T09:00" {
+		t.Errorf("before rdates = %v, want only the one before the Split", before.rdates)
 	}
-	day := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC).Unix()
-	if got := endBefore(series{rule: "FREQ=WEEKLY;UNTIL=20270101T000000Z", rdates: []string{"2026-06-10"}}, nil, day); got.rule != "FREQ=WEEKLY;UNTIL=20260609T235959Z" || len(got.rdates) != 0 {
-		t.Errorf("all-day = %+v", got)
+	if len(after.rdates) != 2 || after.rdates[0] != "2026-06-10T09:00" || after.rdates[1] != "2026-06-12T09:00" {
+		t.Errorf("after rdates = %v, want those from the Split on", after.rdates)
+	}
+	// RDATEs aren't counted against COUNT: 9 rule Occurrences before 10 June.
+	if after.rule != "FREQ=DAILY;COUNT=1;INTERVAL=1" {
+		t.Errorf("after = %q", after.rule)
 	}
 }
 
-func TestEndBeforeKeepsAnEarlierUntil(t *testing.T) {
+func TestSplitAllDayUntil(t *testing.T) {
+	m := calendarEvent{allDay: true, date: "2026-06-03", endDate: "2026-06-04"}
+	day := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC).Unix()
+	before, after, err := split(m, series{rule: "FREQ=WEEKLY;UNTIL=20270101T000000Z", rdates: []string{"2026-06-10"}}, nil, day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.rule != "FREQ=WEEKLY;UNTIL=20260609T235959Z" || len(before.rdates) != 0 {
+		t.Errorf("before = %+v", before)
+	}
+	if after.rule != "FREQ=WEEKLY;UNTIL=20270101T000000Z" || len(after.rdates) != 1 {
+		t.Errorf("after = %+v, want its own UNTIL and the RDATE", after)
+	}
+}
+
+func TestSplitKeepsAnEarlierUntil(t *testing.T) {
+	m, utc := timedMaster(t, "UTC", "2026-03-01T09:00", "2026-03-01T10:00")
 	o := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC).Unix()
-	if got := endBefore(series{rule: "FREQ=DAILY;UNTIL=20260303T090000Z"}, time.UTC, o); got.rule != "FREQ=DAILY;UNTIL=20260303T090000Z" {
-		t.Errorf("rule = %q, want its own earlier UNTIL", got.rule)
+	before, _, err := split(m, series{rule: "FREQ=DAILY;UNTIL=20260303T090000Z"}, utc, o)
+	if err != nil || before.rule != "FREQ=DAILY;UNTIL=20260303T090000Z" {
+		t.Errorf("before = %q, %v; want its own earlier UNTIL", before.rule, err)
+	}
+}
+
+func TestSplitAcrossDST(t *testing.T) {
+	// Clocks go forward at 01:00 on 29 March 2026 in London.
+	m, london := timedMaster(t, "Europe/London", "2026-03-25T09:00", "2026-03-25T10:00")
+	o := time.Date(2026, 3, 31, 9, 0, 0, 0, london).Unix() // 08:00 UTC, BST
+	before, after, err := split(m, series{rule: "FREQ=DAILY;COUNT=10"}, london, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.rule != "FREQ=DAILY;COUNT=10;UNTIL=20260331T075959Z" || after.rule != "FREQ=DAILY;COUNT=4" {
+		t.Errorf("before = %q, after = %q", before.rule, after.rule)
+	}
+
+	// 01:30 on 29 March falls in the gap: it isn't an Occurrence, so isn't counted.
+	m, _ = timedMaster(t, "Europe/London", "2026-03-27T01:30", "2026-03-27T02:00")
+	o = time.Date(2026, 3, 31, 1, 30, 0, 0, london).Unix()
+	if _, after, err = split(m, series{rule: "FREQ=DAILY;COUNT=5"}, london, o); err != nil || after.rule != "FREQ=DAILY;COUNT=2" {
+		t.Errorf("gap: after = %q, %v; want COUNT=2", after.rule, err)
 	}
 }
 
@@ -194,5 +237,21 @@ func TestRetypeMovesStoredDatesBetweenKinds(t *testing.T) {
 	}
 	if got := retype([]string{"2026-03-25"}, false, "18:30"); got[0] != "2026-03-25T18:30" {
 		t.Errorf("to timed = %v", got)
+	}
+}
+
+func TestSplitRecountsCount(t *testing.T) {
+	m, z := timedMaster(t, "Europe/London", "2026-06-01T09:00", "2026-06-01T10:00")
+	o := time.Date(2026, 6, 5, 9, 0, 0, 0, z).Unix()
+	before, after, err := split(m, series{rule: "FREQ=DAILY;COUNT=10", exdates: []string{"2026-06-07T09:00"}}, z, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "FREQ=DAILY;COUNT=10;UNTIL=20260605T075959Z"; before.rule != want {
+		t.Errorf("before = %q, want %q", before.rule, want)
+	}
+	// 4 before the Split, so 6 from it on; the EXDATE goes with both.
+	if after.rule != "FREQ=DAILY;COUNT=6" || len(after.exdates) != 1 || len(before.exdates) != 1 {
+		t.Errorf("after = %+v, before = %+v", after, before)
 	}
 }
