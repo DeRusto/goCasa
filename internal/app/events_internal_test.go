@@ -133,7 +133,7 @@ func TestThisEventEditsAndDeletesOneOccurrence(t *testing.T) {
 	changes := a.Bus.subscribe()
 	defer a.Bus.unsubscribe(changes)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1, 2), "FREQ=DAILY", nil, nil))
-	if c := <-changes; c != (Change{Type: "created", Entity: "event", ID: id}) {
+	if c := <-changes; c != KindEvent {
 		t.Errorf("published %+v", c)
 	}
 	write(t, a, id, key(at(16, 9)), scopeThis, timedAt("Long walk", at(16, 11), 2, 3))

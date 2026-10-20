@@ -94,13 +94,11 @@ func (a *App) createList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A list needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), `INSERT INTO shopping_lists (name, position)
-		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_lists)) RETURNING id`, name).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), KindList, `INSERT INTO shopping_lists (name, position)
+		VALUES (?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_lists))`, name); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "shopping_list", id)
 	http.Redirect(w, r, "/lists", http.StatusSeeOther)
 }
 
@@ -114,20 +112,9 @@ func (a *App) addItem(w http.ResponseWriter, r *http.Request) {
 	if a.mirrored(w, r, list, func(m *mirror) { a.mealieAdd(w, r, m, note) }) {
 		return
 	}
-	var id int64
-	err := a.DB.QueryRowContext(r.Context(), `INSERT INTO shopping_items (list_id, note, position)
+	a.localChange(w, r, `INSERT INTO shopping_items (list_id, note, position)
 		SELECT id, ?, (SELECT coalesce(max(position), -1) + 1 FROM shopping_items WHERE list_id = ?)
-		FROM shopping_lists WHERE id = ? AND integration_id IS NULL RETURNING id`, note, list, list).Scan(&id)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		http.NotFound(w, r)
-		return
-	case err != nil:
-		a.serverError(w, r, err)
-		return
-	}
-	a.publish("created", "shopping_item", id)
-	http.Redirect(w, r, "/lists", http.StatusSeeOther)
+		FROM shopping_lists WHERE id = ? AND integration_id IS NULL`, note, list, list)
 }
 
 var errBadPosition = errors.New("bad position")
@@ -173,7 +160,7 @@ func (a *App) moveItem(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return nil
-	})
+	}, KindList)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
@@ -182,7 +169,6 @@ func (a *App) moveItem(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		a.serverError(w, r, err)
 	default:
-		a.publish("updated", "shopping_list", list)
 		http.Redirect(w, r, "/lists", http.StatusSeeOther)
 	}
 }
@@ -207,7 +193,7 @@ func (a *App) checkItem(w http.ResponseWriter, r *http.Request) {
 	if a.mirrored(w, r, list, func(m *mirror) { a.mealieCheck(w, r, m, id, checked) }) {
 		return
 	}
-	a.localChange(w, r, "updated", id, "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, id, list)
+	a.localChange(w, r, "UPDATE shopping_items SET checked = ? WHERE "+localItem, checked, id, list)
 }
 
 func (a *App) deleteItem(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +201,7 @@ func (a *App) deleteItem(w http.ResponseWriter, r *http.Request) {
 	if a.mirrored(w, r, list, func(m *mirror) { a.mealieDelete(w, r, m, id) }) {
 		return
 	}
-	a.localChange(w, r, "deleted", id, "DELETE FROM shopping_items WHERE "+localItem, id, list)
+	a.localChange(w, r, "DELETE FROM shopping_items WHERE "+localItem, id, list)
 }
 
 // clearChecked deletes a list's checked items.
@@ -233,17 +219,16 @@ func (a *App) clearChecked(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM shopping_items WHERE checked AND list_id = ?", list); err != nil {
+	if _, err := a.exec(r.Context(), KindList, "DELETE FROM shopping_items WHERE checked AND list_id = ?", list); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("updated", "shopping_list", list)
 	http.Redirect(w, r, "/lists", http.StatusSeeOther)
 }
 
 // localChange runs query on one item of a local list; no row changed is a 404.
-func (a *App) localChange(w http.ResponseWriter, r *http.Request, typ string, id int64, query string, args ...any) {
-	res, err := a.DB.ExecContext(r.Context(), query, args...)
+func (a *App) localChange(w http.ResponseWriter, r *http.Request, query string, args ...any) {
+	res, err := a.exec(r.Context(), KindList, query, args...)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -252,6 +237,5 @@ func (a *App) localChange(w http.ResponseWriter, r *http.Request, typ string, id
 		http.NotFound(w, r)
 		return
 	}
-	a.publish(typ, "shopping_item", id)
 	http.Redirect(w, r, "/lists", http.StatusSeeOther)
 }

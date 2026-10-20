@@ -125,12 +125,10 @@ func (a *App) createTodoColumn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A column needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO todo_columns (name, position) VALUES (?, (SELECT coalesce(max(position) + 1, 0) FROM todo_columns)) RETURNING id", name).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), KindTodo, "INSERT INTO todo_columns (name, position) VALUES (?, (SELECT coalesce(max(position) + 1, 0) FROM todo_columns))", name); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "todo_column", id)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
@@ -140,11 +138,11 @@ func (a *App) renameTodoColumn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A column needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	a.todoExec(w, r, "updated", "todo_column", "UPDATE todo_columns SET name = ? WHERE id = ?", name)
+	a.todoExec(w, r, "UPDATE todo_columns SET name = ? WHERE id = ?", name)
 }
 
 func (a *App) deleteTodoColumn(w http.ResponseWriter, r *http.Request) {
-	a.todoExec(w, r, "deleted", "todo_column", "DELETE FROM todo_columns WHERE id = ?")
+	a.todoExec(w, r, "DELETE FROM todo_columns WHERE id = ?")
 }
 
 // completeTodo completes an open to-do; a Recurring to-do's completion also
@@ -195,13 +193,9 @@ func (a *App) completeTodo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := a.commit(tx, KindTodo); err != nil {
 		a.serverError(w, r, err)
 		return
-	}
-	a.publish("updated", "todo", id)
-	if next != 0 {
-		a.publish("created", "todo", next)
 	}
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
@@ -309,14 +303,10 @@ func (a *App) reopenTodo(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	if err := tx.Commit(); err != nil {
+	if err := a.commit(tx, KindTodo); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	if next.Valid {
-		a.publish("deleted", "todo", next.Int64)
-	}
-	a.publish("updated", "todo", id)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
@@ -333,14 +323,14 @@ func (a *App) deleteTodo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "This to-do's next copy still exists: delete or re-open that one first.", http.StatusConflict)
 		return
 	}
-	a.todoExec(w, r, "deleted", "todo", "DELETE FROM todos WHERE id = ? AND next_id IS NULL")
+	a.todoExec(w, r, "DELETE FROM todos WHERE id = ? AND next_id IS NULL")
 }
 
 // todoExec runs query with args and the path's id last: 404 if no row changed,
 // else it publishes the change and returns to the board.
-func (a *App) todoExec(w http.ResponseWriter, r *http.Request, typ, entity, query string, args ...any) {
+func (a *App) todoExec(w http.ResponseWriter, r *http.Request, query string, args ...any) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	res, err := a.DB.ExecContext(r.Context(), query, append(args, id)...)
+	res, err := a.exec(r.Context(), KindTodo, query, append(args, id)...)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -349,7 +339,6 @@ func (a *App) todoExec(w http.ResponseWriter, r *http.Request, typ, entity, quer
 		http.NotFound(w, r)
 		return
 	}
-	a.publish(typ, entity, id)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
@@ -421,9 +410,10 @@ func (a *App) createTodo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	var id int64
-	err := a.DB.QueryRowContext(r.Context(), "INSERT INTO todos (column_id, title, notes, due_date, position, created_at, repeat_rule, repeat_from_completion) SELECT id, ?, ?, ?, "+appendPosition+", ?, ?, ? FROM todo_columns WHERE id = ? RETURNING id",
-		t.Title, t.Notes, nullable(t.Due), t.ColumnID, a.Now().Unix(), nullable(rule), t.FromCompletion, t.ColumnID).Scan(&id)
+	err := a.inTx(r.Context(), func(tx *sql.Tx) error {
+		return execOne(r.Context(), tx, "INSERT INTO todos (column_id, title, notes, due_date, position, created_at, repeat_rule, repeat_from_completion) SELECT id, ?, ?, ?, "+appendPosition+", ?, ?, ? FROM todo_columns WHERE id = ?",
+			t.Title, t.Notes, nullable(t.Due), t.ColumnID, a.Now().Unix(), nullable(rule), t.FromCompletion, t.ColumnID)
+	}, KindTodo)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "Pick a column.", http.StatusBadRequest)
 		return
@@ -431,7 +421,6 @@ func (a *App) createTodo(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "todo", id)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
@@ -487,7 +476,7 @@ func (a *App) updateTodo(w http.ResponseWriter, r *http.Request) {
 	// Completed copies are never touched (spec §8): the WHERE checks it in the
 	// same statement, so a completion racing this edit can't be overwritten.
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	res, err := a.DB.ExecContext(r.Context(), `UPDATE todos SET title = ?1, notes = ?2, due_date = ?3,
+	res, err := a.exec(r.Context(), KindTodo, `UPDATE todos SET title = ?1, notes = ?2, due_date = ?3,
 		position = CASE WHEN column_id = ?4 THEN position ELSE (SELECT coalesce(max(position) + 1, 0) FROM todos WHERE column_id = ?4) END,
 		column_id = ?4, repeat_rule = ?5, repeat_from_completion = ?6 WHERE id = ?7 AND completed_at IS NULL`,
 		t.Title, t.Notes, nullable(t.Due), t.ColumnID, nullable(rule), t.FromCompletion, id)
@@ -506,7 +495,6 @@ func (a *App) updateTodo(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	a.publish("updated", "todo", id)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
@@ -541,10 +529,9 @@ func (a *App) reorderTodos(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := a.commit(tx, KindTodo); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("updated", "todo_column", col)
 	http.Redirect(w, r, "/todos", http.StatusSeeOther) // for the up/down buttons; a drag's fetch doesn't follow it
 }

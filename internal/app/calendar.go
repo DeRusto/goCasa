@@ -234,12 +234,10 @@ func (a *App) createCalendar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A calendar needs a name of 1 to 50 characters and a colour.", http.StatusBadRequest)
 		return
 	}
-	var id int64
-	if err := a.DB.QueryRowContext(r.Context(), "INSERT INTO source_calendars (integration_id, name, color) VALUES ((SELECT id FROM integrations WHERE type = 'local'), ?, ?) RETURNING id", name, color).Scan(&id); err != nil {
+	if _, err := a.exec(r.Context(), KindEvent, "INSERT INTO source_calendars (integration_id, name, color) VALUES ((SELECT id FROM integrations WHERE type = 'local'), ?, ?)", name, color); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("created", "calendar", id)
 	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
 }
 

@@ -154,7 +154,7 @@ func (a *App) refreshFolder(w http.ResponseWriter, r *http.Request) {
 // saveFallbackFolder switches the Fallback folder on or off.
 func (a *App) saveFallbackFolder(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE household_settings SET fallback_folder_enabled = ?", r.PostForm.Has("enabled")); err != nil {
+	if _, err := a.exec(r.Context(), KindHousehold, "UPDATE household_settings SET fallback_folder_enabled = ?", r.PostForm.Has("enabled")); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

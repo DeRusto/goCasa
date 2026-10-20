@@ -527,7 +527,8 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		return nil
 	}
 	var ids []int64
-	err = a.inTx(ctx, func(tx *sql.Tx) error {
+	changed := false
+	return a.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `UPDATE events SET local_override = 1 WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2)
 				AND (?3 = 0 OR `+startKey+` >= (SELECT `+startKey+` FROM events WHERE id = ?3))
 			RETURNING id`, cal, res.target, res.from)
@@ -546,6 +547,7 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		if err := rows.Err(); err != nil {
 			return err
 		}
+		changed = len(ids) > 0
 		for _, id := range ids {
 			if err := setMembers(ctx, tx, id, members); err != nil {
 				return err
@@ -563,11 +565,7 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		_, err = tx.ExecContext(ctx, `INSERT INTO google_series_members (calendar_id, series_id, from_key, members)
 			VALUES (?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4)`, cal, res.target, res.from, string(list))
 		return err
-	})
-	if err == nil && len(ids) > 0 {
-		a.publish("updated", "event", ids[0])
-	}
-	return err
+	}, KindEvent)
 }
 
 // setMembers gives event id Members members. The form lists only active

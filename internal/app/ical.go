@@ -161,10 +161,7 @@ func (a *App) storeFeed(ctx context.Context, id int64, evs []feedEvent, kept []s
 		}
 		_, err := tx.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", cursor, id)
 		return err
-	})
-	if err == nil {
-		a.publish("updated", "calendar", cal)
-	}
+	}, KindEvent) // shortcut: a 200 with the same feed still publishes (a 304 doesn't); compare a body hash in the cursor if feeds without ETags refetch pages too often
 	return err
 }
 

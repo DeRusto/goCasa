@@ -164,7 +164,12 @@ func (mealie) Sync(ctx context.Context, a *App, in integrationRow) error {
 		}
 		lists = append(lists, full)
 	}
-	err = a.inTx(ctx, func(tx *sql.Tx) error {
+	changed := false // a poll that found nothing new publishes nothing
+	return a.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
+		before, err := totalChanges(ctx, tx)
+		if err != nil {
+			return err
+		}
 		keep := []any{in.id}
 		for _, l := range lists {
 			id, err := upsertMealieList(ctx, tx, in.id, l)
@@ -176,13 +181,20 @@ func (mealie) Sync(ctx context.Context, a *App, in integrationRow) error {
 			}
 			keep = append(keep, l.ID)
 		}
-		_, err := tx.ExecContext(ctx, "DELETE FROM shopping_lists WHERE integration_id = ? AND external_id NOT IN ("+placeholders(len(keep)-1)+")", keep...)
+		if _, err := tx.ExecContext(ctx, "DELETE FROM shopping_lists WHERE integration_id = ? AND external_id NOT IN ("+placeholders(len(keep)-1)+")", keep...); err != nil {
+			return err
+		}
+		after, err := totalChanges(ctx, tx)
+		changed = after != before
 		return err
-	})
-	if err == nil { // only once committed, so a refresh sees the new lists
-		a.publish("updated", "shopping_list", 0)
-	}
-	return err
+	}, KindList)
+}
+
+// totalChanges counts the rows tx's connection has changed: the upserts below
+// leave a row that is already as Mealie has it alone, so it doesn't count.
+func totalChanges(ctx context.Context, tx *sql.Tx) (n int64, err error) {
+	err = tx.QueryRowContext(ctx, "SELECT total_changes()").Scan(&n)
+	return n, err
 }
 
 // placeholders is n comma-separated ?s for an IN list; with none, an empty set.
@@ -208,7 +220,7 @@ func upsertMealieList(ctx context.Context, tx *sql.Tx, integration int64, l meal
 	if err != nil {
 		return 0, err
 	}
-	_, err = tx.ExecContext(ctx, "UPDATE shopping_lists SET name = ? WHERE id = ?", name, id)
+	_, err = tx.ExecContext(ctx, "UPDATE shopping_lists SET name = ?1 WHERE id = ?2 AND name IS NOT ?1", name, id)
 	return id, err
 }
 
@@ -228,7 +240,8 @@ func replaceMealieItems(ctx context.Context, tx *sql.Tx, list int64, items []mea
 func upsertMealieItem(ctx context.Context, tx *sql.Tx, list int64, it mealieItem) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO shopping_items (list_id, external_id, note, checked, position, extra_json) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (list_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET
-			note = excluded.note, checked = excluded.checked, position = excluded.position, extra_json = excluded.extra_json`,
+			note = excluded.note, checked = excluded.checked, position = excluded.position, extra_json = excluded.extra_json
+		WHERE (note, checked, position, extra_json) IS NOT (excluded.note, excluded.checked, excluded.position, excluded.extra_json)`,
 		list, it.ID, it.name(), it.Checked, int64(it.Position), string(it.raw))
 	return err
 }
@@ -278,11 +291,10 @@ func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 
 // disconnectMealie removes Mealie and its Mirrored lists from GoCasa; Mealie keeps them.
 func (a *App) disconnectMealie(w http.ResponseWriter, r *http.Request) {
-	if _, err := a.DB.ExecContext(r.Context(), "DELETE FROM integrations WHERE type = ?", mealieType); err != nil {
+	if _, err := a.exec(r.Context(), KindList, "DELETE FROM integrations WHERE type = ?", mealieType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("deleted", "shopping_list", 0)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -290,11 +302,10 @@ func (a *App) disconnectMealie(w http.ResponseWriter, r *http.Request) {
 func (a *App) hideMealieList(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	hidden := r.PostFormValue("hidden") == "on"
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE shopping_lists SET hidden = ? WHERE id = ? AND integration_id IS NOT NULL", hidden, id); err != nil {
+	if _, err := a.exec(r.Context(), KindList, "UPDATE shopping_lists SET hidden = ? WHERE id = ? AND integration_id IS NOT NULL", hidden, id); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.publish("updated", "shopping_list", id)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -402,7 +413,6 @@ func (a *App) mealieWrite(w http.ResponseWriter, r *http.Request, m *mirror, wri
 	if err := a.integrations.PollSoon(r.Context(), m.c.id); err != nil {
 		a.Log.Error("scheduling a Mealie poll", "err", err)
 	}
-	a.publish("updated", "shopping_list", m.list)
 	switch {
 	case errors.Is(err, errMealieGone):
 		a.listsPage(w, r, http.StatusNotFound, errMealieRemoved)
@@ -425,13 +435,13 @@ func (a *App) pullMealieItems(ctx context.Context, m *mirror) ([]mealieItem, err
 	var l mealieList
 	err := m.c.call(ctx, http.MethodGet, mealieLists+"/"+url.PathEscape(m.ext), nil, &l)
 	if errors.Is(err, errMealieGone) {
-		_, err = a.DB.ExecContext(ctx, "DELETE FROM shopping_lists WHERE id = ?", m.list)
+		_, err = a.exec(ctx, KindList, "DELETE FROM shopping_lists WHERE id = ?", m.list)
 		return nil, err
 	}
 	if err != nil {
 		return nil, err
 	}
-	return l.Items, a.inTx(ctx, func(tx *sql.Tx) error { return replaceMealieItems(ctx, tx, m.list, l.Items) })
+	return l.Items, a.inTx(ctx, func(tx *sql.Tx) error { return replaceMealieItems(ctx, tx, m.list, l.Items) }, KindList)
 }
 
 // applyMealie stores what Mealie says a write changed; its merges are accepted as they come.
@@ -456,7 +466,7 @@ func (a *App) applyMealie(ctx context.Context, integration int64, col mealieColl
 			}
 		}
 		return nil
-	})
+	}, KindList)
 }
 
 func deleteMealieItem(ctx context.Context, tx *sql.Tx, integration int64, ext string) error {
@@ -529,7 +539,7 @@ func (a *App) mealieDelete(w http.ResponseWriter, r *http.Request, m *mirror, id
 		if err := m.c.call(ctx, http.MethodDelete, mealieItems+"/"+url.PathEscape(ext), nil, nil); err != nil && !errors.Is(err, errMealieGone) {
 			return err // already gone is success
 		}
-		return a.inTx(ctx, func(tx *sql.Tx) error { return deleteMealieItem(ctx, tx, m.c.id, ext) })
+		return a.inTx(ctx, func(tx *sql.Tx) error { return deleteMealieItem(ctx, tx, m.c.id, ext) }, KindList)
 	})
 }
 
@@ -559,6 +569,6 @@ func (a *App) mealieClear(w http.ResponseWriter, r *http.Request, m *mirror) {
 				}
 			}
 			return nil
-		})
+		}, KindList)
 	})
 }
