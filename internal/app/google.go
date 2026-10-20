@@ -375,13 +375,13 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (googleSync) Section(ctx context.Context, a *App, st map[int64]integrationStatus, members []web.Member) (templ.Component, error) {
+func (googleSync) Section(ctx context.Context, a *App, st map[int64]integrationHealth, members []web.Member) (templ.Component, error) {
 	g, err := a.googleSettings(ctx, st)
 	return web.GoogleSection(g, members), err
 }
 
 // googleSettings is the Google section of Settings.
-func (a *App) googleSettings(ctx context.Context, st map[int64]integrationStatus) (web.Google, error) {
+func (a *App) googleSettings(ctx context.Context, st map[int64]integrationHealth) (web.Google, error) {
 	g := web.Google{Configured: a.Config.GoogleClientID != "", RedirectURI: a.Config.GoogleRedirectURI}
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.id, c.name, c.color, c.enabled, c.read_only,
 			(SELECT json_group_array(member_id) FROM source_calendar_members WHERE calendar_id = c.id)

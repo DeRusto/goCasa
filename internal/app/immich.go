@@ -360,13 +360,13 @@ func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-func (immich) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+func (immich) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
 	m, err := a.immichSettings(ctx, st)
 	return web.ImmichSection(m), err
 }
 
 // immichSettings is the Immich section of Settings; nil when not connected.
-func (a *App) immichSettings(ctx context.Context, st map[int64]integrationStatus) (*web.Immich, error) {
+func (a *App) immichSettings(ctx context.Context, st map[int64]integrationHealth) (*web.Immich, error) {
 	var m web.Immich
 	var raw string
 	var id int64

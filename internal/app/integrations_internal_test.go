@@ -67,7 +67,7 @@ func TestOneFailureIsFailingAndThreeAreDown(t *testing.T) {
 	if synced, err := a.integrations.Run(ctx, id); err != nil || !synced {
 		t.Fatalf("good run: synced %v, err %v", synced, err)
 	}
-	if h := health(t, a, id); h.Failing || h.Down || h.LastError != "" || h.LastSuccess.Int64 != a.Now().Unix() {
+	if h := health(t, a, id); h.Failing || h.Down || h.LastError != "" || h.LastSuccess != "15 Mar 2026 09:00" {
 		t.Fatalf("after a good sync: %+v", h)
 	}
 }
@@ -284,11 +284,11 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 	}
 }
 
-func TestStatusesShowEveryIntegration(t *testing.T) {
+func TestHealthsShowEveryIntegration(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	id, syncErr, _ := fake(t, a)
-	st, err := a.integrations.Statuses(ctx)
+	st, err := a.integrations.Healths(ctx)
 	if err != nil || st[id].LastSuccess != "never" {
 		t.Fatalf("before a sync: %+v, %v", st[id], err)
 	}
@@ -298,12 +298,12 @@ func TestStatusesShowEveryIntegration(t *testing.T) {
 	}
 	*syncErr = errors.New("boom")
 	a.integrations.Run(ctx, id)
-	st, _ = a.integrations.Statuses(ctx)
+	st, _ = a.integrations.Healths(ctx)
 	if got := st[id]; got.LastSuccess != "15 Mar 2026 10:00" || got.Failures != 1 || got.LastError != "boom" || got.Reconnect {
 		t.Fatalf("after a failure: %+v", got)
 	}
 	a.integrations.NeedsReconnect(ctx, id, nil)
-	if st, _ = a.integrations.Statuses(ctx); !st[id].Reconnect {
+	if st, _ = a.integrations.Healths(ctx); !st[id].Reconnect {
 		t.Fatal("not Reconnect needed")
 	}
 }

@@ -169,13 +169,13 @@ func conditions(code int) string {
 	return ""
 }
 
-func (openMeteo) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+func (openMeteo) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
 	w, err := a.weatherSettings(ctx, st)
 	return web.WeatherSection(w), err
 }
 
 // weatherSettings is the Weather section of Settings.
-func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationStatus) (web.Weather, error) {
+func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationHealth) (web.Weather, error) {
 	hh, err := a.household(ctx)
 	if err != nil {
 		return web.Weather{}, err

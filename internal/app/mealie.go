@@ -310,13 +310,13 @@ func (a *App) hideMealieList(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-func (mealie) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+func (mealie) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
 	m, err := a.mealieSettings(ctx, st)
 	return web.MealieSection(m), err
 }
 
 // mealieSettings is the Mealie section of Settings; nil when not connected.
-func (a *App) mealieSettings(ctx context.Context, st map[int64]integrationStatus) (*web.Mealie, error) {
+func (a *App) mealieSettings(ctx context.Context, st map[int64]integrationHealth) (*web.Mealie, error) {
 	var m web.Mealie
 	var cfg string
 	err := a.DB.QueryRowContext(ctx, `SELECT id, config_json FROM integrations WHERE type = ?`, mealieType).Scan(&m.ID, &cfg)

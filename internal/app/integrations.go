@@ -30,7 +30,7 @@ type Integration interface {
 // settingsSection is an Integration with its own Settings section. st is
 // every integration's status; members are the Members Settings lists.
 type settingsSection interface {
-	Section(ctx context.Context, a *App, st map[int64]integrationStatus, members []web.Member) (templ.Component, error)
+	Section(ctx context.Context, a *App, st map[int64]integrationHealth, members []web.Member) (templ.Component, error)
 }
 
 // builtins is every integration type, in the order Settings shows their sections.
@@ -49,7 +49,7 @@ var integrationTypes = func() map[string]Integration {
 
 // settingsSections is each built-in integration type's Settings section, in order.
 func (a *App) settingsSections(ctx context.Context, members []web.Member) ([]templ.Component, error) {
-	st, err := a.integrations.Statuses(ctx)
+	st, err := a.integrations.Healths(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ type integrationHealth struct {
 	Reconnect   bool // Reconnect needed: no syncs until an Admin reconnects it
 	Failures    int
 	LastError   string
-	LastSuccess sql.NullInt64
+	LastSuccess string // see lastSync
 }
 
 // SQL for an integrations row t (a table name or alias) that is Failing, Down
@@ -108,10 +108,40 @@ func reconnectSQL(t string) string { return t + ".status = 'reconnect_needed'" }
 
 // Health is integration id's health, or sql.ErrNoRows.
 func (s *integrations) Health(ctx context.Context, id int64) (integrationHealth, error) {
-	var h integrationHealth
-	err := s.app.DB.QueryRowContext(ctx, `SELECT `+failingSQL("i")+`, `+downSQL("i")+`, `+reconnectSQL("i")+`, i.consecutive_failures, i.last_error, i.last_success_at
-		FROM integrations i WHERE i.id = ?`, id).Scan(&h.Failing, &h.Down, &h.Reconnect, &h.Failures, &h.LastError, &h.LastSuccess)
+	hs, err := s.healths(ctx, "WHERE i.id = ?", id)
+	h, ok := hs[id]
+	if err == nil && !ok {
+		err = sql.ErrNoRows
+	}
 	return h, err
+}
+
+// Healths is every integration's health, by id.
+func (s *integrations) Healths(ctx context.Context) (map[int64]integrationHealth, error) {
+	return s.healths(ctx, "")
+}
+
+// healths is the health of each integration where picks, by id.
+func (s *integrations) healths(ctx context.Context, where string, args ...any) (map[int64]integrationHealth, error) {
+	loc, clock := s.app.location(ctx), s.app.clock(ctx)
+	rows, err := s.app.DB.QueryContext(ctx, `SELECT i.id, `+failingSQL("i")+`, `+downSQL("i")+`, `+reconnectSQL("i")+`, i.consecutive_failures, i.last_error, i.last_success_at
+		FROM integrations i `+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	hs := map[int64]integrationHealth{}
+	for rows.Next() {
+		var id int64
+		var h integrationHealth
+		var ok sql.NullInt64
+		if err := rows.Scan(&id, &h.Failing, &h.Down, &h.Reconnect, &h.Failures, &h.LastError, &ok); err != nil {
+			return nil, err
+		}
+		h.LastSuccess = lastSync(ok, loc, clock)
+		hs[id] = h
+	}
+	return hs, rows.Err()
 }
 
 // WithLock runs fn while no sync of integration id runs: for a write through
@@ -399,36 +429,6 @@ func lastSync(at sql.NullInt64, loc *time.Location, clock string) string {
 	return time.Unix(at.Int64, 0).In(loc).Format("2 Jan 2006 " + clock)
 }
 
-// integrationStatus is how an integration's syncs are going, as Settings shows it.
-type integrationStatus struct {
-	Failures    int
-	LastError   string
-	LastSuccess string // see lastSync
-	Reconnect   bool
-}
-
-// Statuses is every integration's status, by id.
-func (s *integrations) Statuses(ctx context.Context) (map[int64]integrationStatus, error) {
-	loc, clock := s.app.location(ctx), s.app.clock(ctx)
-	rows, err := s.app.DB.QueryContext(ctx, "SELECT i.id, i.consecutive_failures, i.last_error, i.last_success_at, "+reconnectSQL("i")+" FROM integrations i")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	st := map[int64]integrationStatus{}
-	for rows.Next() {
-		var id int64
-		var x integrationStatus
-		var ok sql.NullInt64
-		if err := rows.Scan(&id, &x.Failures, &x.LastError, &ok, &x.Reconnect); err != nil {
-			return nil, err
-		}
-		x.LastSuccess = lastSync(ok, loc, clock)
-		st[id] = x
-	}
-	return st, rows.Err()
-}
-
 // syncNow syncs every integration that can sync, due or not.
 func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 	// Not cancelled by a closed tab: a sync cut short counts as a failure.
@@ -443,13 +443,13 @@ func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
-func (icalFeed) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+func (icalFeed) Section(ctx context.Context, a *App, st map[int64]integrationHealth, _ []web.Member) (templ.Component, error) {
 	fs, err := a.feeds(ctx, st)
 	return web.FeedsSection(fs), err
 }
 
 // feeds is the iCal feeds as Settings shows them.
-func (a *App) feeds(ctx context.Context, st map[int64]integrationStatus) ([]web.Feed, error) {
+func (a *App) feeds(ctx context.Context, st map[int64]integrationHealth) ([]web.Feed, error) {
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.color
 		FROM integrations i JOIN source_calendars c ON c.integration_id = i.id WHERE i.type = 'ical' ORDER BY i.name, i.id`)
 	if err != nil {
