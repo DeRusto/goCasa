@@ -162,7 +162,7 @@ func TestWithNeitherSourceTheClockAndAgendaShowOnDark(t *testing.T) {
 	}
 	h.RunDue()
 	_, page := wall.Get(t, "/screensaver")
-	if photoRE.MatchString(page) || !strings.Contains(page, "<time>09:00</time>") || !strings.Contains(page, "background:#000") {
+	if photoRE.MatchString(page) || !strings.Contains(page, ">09:00</time>") || !strings.Contains(page, "background:#000") {
 		t.Errorf("with the Fallback folder off and no Immich, the screensaver = %q", page)
 	}
 

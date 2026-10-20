@@ -24,6 +24,7 @@ type CalendarEvent struct {
 	ReadOnly bool     // from a calendar feed: no edit link
 	Synced   bool     // from Google: links to its Members
 	Past     bool     // over already; only Today greys these
+	End      int64    // a timed event's end, unix ms, for the browser to grey it then; 0 all-day
 }
 
 // StaleCalendar is a shown calendar that isn't syncing.
@@ -140,7 +141,13 @@ templ calendarDay(d CalendarDay, heading string) {
 		</h3>
 		<ul>
 			for _, e := range d.Events {
-				<li class={ templ.KV("past", e.Past) } style={ templ.KV("opacity:.5", e.Past) }>
+				<li
+					class={ templ.KV("past", e.Past) }
+					style={ templ.KV("opacity:.5", e.Past) }
+					if e.End != 0 {
+						data-end={ strconv.FormatInt(e.End, 10) }
+					}
+				>
 					@swatches(e.Colors)
 					if e.Synced {
 						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google">{ e.Time } { e.Title }</a>
