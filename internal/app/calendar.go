@@ -285,6 +285,34 @@ func anchorRule(rule string, day time.Time) string {
 	return rule
 }
 
+// reanchor is the rule of a Series whose Occurrence on day was moves to day
+// to: a rule that is a preset plus anchorRule's own month-end anchor is
+// anchored afresh from to, as a new preset Series would be; any other rule,
+// or the same month and day, keeps it.
+func reanchor(rule string, was, to time.Time) string {
+	if was.Month() == to.Month() && was.Day() == to.Day() {
+		return rule
+	}
+	base, _, _ := strings.Cut(rule, ";BYMONTH") // a preset's anchor is its only BY part, and last
+	for _, d := range []time.Time{time.Date(2026, 1, 29, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 30, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC), time.Date(2028, 2, 29, 0, 0, 0, 0, time.UTC)} {
+		if base != rule && anchorRule(base, d) == rule {
+			return anchorRule(base, to)
+		}
+	}
+	return rule
+}
+
+// startDay is c's first day, as a date in its own zone.
+func startDay(c eventChange) time.Time {
+	if c.allDay {
+		d, _ := time.Parse(dateLayout, c.date.(string))
+		return d
+	}
+	zone, _ := time.LoadLocation(c.tzid.(string)) // parseEventForm or the store checked it
+	return time.Unix(c.start.(int64), 0).In(zone)
+}
+
 // parseRepeat reads the dialog's repeat fields into a rule and its EXDATEs and
 // RDATEs (as stored), or a message for the person.
 func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdates []string, msg string) {
