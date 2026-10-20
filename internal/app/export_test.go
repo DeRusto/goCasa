@@ -36,3 +36,6 @@ var ErrBadPosition = errBadPosition
 func (a *App) ShoppingList(ctx context.Context, id int64) (ShoppingList, error) {
 	return a.shoppingList(ctx, id)
 }
+
+// HouseholdReads counts the queries on household_settings so far.
+func HouseholdReads(a *App) int64 { return a.householdReads.Load() }

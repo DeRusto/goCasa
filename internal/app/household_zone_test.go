@@ -3,10 +3,12 @@ package app_test
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DeRusto/goCasa/internal/app"
 	"github.com/DeRusto/goCasa/internal/apptest"
 )
 
@@ -118,5 +120,52 @@ func TestGoogleZonelessSeriesSplitsInTheHouseholdZone(t *testing.T) {
 	// Four Occurrences come before 11 April's 23:00 in Auckland (11:00 UTC); five come before it at 10:00 UTC.
 	if got := fmt.Sprint(split("quiz_20260411", "2026-04-11T09:00", "2026-04-11T10:00")); !strings.Contains(got, "COUNT=6") {
 		t.Fatalf("a Split on 11 April sent %s", got)
+	}
+}
+
+// One request reads household_settings once, however many parts of the page
+// follow the Household: a Wall display's Settings and screensaver.
+func TestARequestReadsTheHouseholdOnce(t *testing.T) {
+	h := household(t, auckland)
+	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
+	for _, page := range []string{"/screensaver", "/settings", "/today", "/calendar", "/chores"} {
+		before := app.HouseholdReads(h.App)
+		if code, _ := h.Get(t, page); code != http.StatusOK {
+			t.Fatalf("%s = %d", page, code)
+		}
+		if n := app.HouseholdReads(h.App) - before; n != 1 {
+			t.Errorf("%s read the household %d times, want 1", page, n)
+		}
+	}
+}
+
+// aucklandMonday is 01:00 on Monday 16 March in Auckland: still Sunday the
+// 15th, 12:00, in UTC.
+var aucklandMonday = time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
+
+// Today, the calendar, Chores and the screensaver keep the Household's day.
+func TestPagesKeepTheHouseholdsDay(t *testing.T) {
+	h := household(t, auckland)
+	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
+	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
+	h.Clock.Set(aucklandMonday)
+
+	if _, page := h.Get(t, "/today"); !strings.Contains(page, "Monday 16 March") || !strings.Contains(page, "01:00") {
+		t.Errorf("Today isn't Monday 01:00 in Auckland:\n%s", page)
+	}
+	if _, page := h.Get(t, "/calendar?view=day"); !strings.Contains(page, `data-date="2026-03-16"`) {
+		t.Errorf("the calendar didn't open on Monday 16 March:\n%s", page)
+	}
+	if b := choreBoard(t, h); !strings.Contains(b, `data-round="2026-03-16"`) {
+		t.Errorf("the chore board has no Round for Monday 16 March: %q", b)
+	}
+	if code := complete(h, t, "1", "2", "2026-03-16"); code != http.StatusOK {
+		t.Errorf("completing Monday's Round = %d, want 200", code)
+	}
+	// Night mode is 22:00 to 06:00 in Auckland: off at noon there, 23:00 in UTC.
+	nightMode(t, h, "black")
+	h.Clock.Set(time.Date(2026, 3, 15, 23, 0, 0, 0, time.UTC))
+	if _, page := h.Get(t, "/screensaver"); !strings.Contains(page, ">12:00</time>") || !strings.Contains(page, "Monday 16 March") || !strings.Contains(page, holdsWakeLock) {
+		t.Errorf("the screensaver isn't Monday noon in Auckland, out of Night mode:\n%s", page)
 	}
 }
