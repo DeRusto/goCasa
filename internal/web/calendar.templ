@@ -204,7 +204,7 @@ templ Calendar(p CalendarPage) {
 					<button>Filter</button>
 				</fieldset>
 			</form>
-			<div id="live">
+			<div id="live" { live("event", "member", "household", "integration")... }>
 				for _, s := range p.Stale {
 					<p role="status">
 						{ s.Name }: last updated { s.LastUpdated }.
@@ -267,49 +267,59 @@ templ Calendar(p CalendarPage) {
 				<button>Add calendar</button>
 			</form>
 		</main>
-		@liveUpdates()
+		@liveDrafts()
 	}
 }
 
-// liveUpdates refetches this page and swaps in its #live region whenever
-// a change of any kind is published, and on every (re)connect, catching up on missed changes.
-// A form being filled in #live (focused, or holding unsent text) defers the
-// swap until focus leaves it, so a remote change never wipes a draft.
-// shortcut: native EventSource, not htmx's SSE extension; switch once htmx is vendored.
-templ liveUpdates() {
+// live makes a page's #live region refetch the page and swap in its new
+// content when a change of one of kinds (the change stream's event names) is
+// published, on every (re)connect, catching up on missed changes, and on a
+// document-level refresh-live event (a page's own timer, e.g. Today's clock).
+// Only the region's children are swapped, so it keeps its stream; htmx's SSE
+// extension reconnects a dropped one.
+func live(kinds ...string) templ.Attributes {
+	trigger := "htmx:sseOpen, refresh-live from:document"
+	for _, k := range kinds {
+		trigger += ", sse:" + k
+	}
+	return templ.Attributes{
+		"hx-ext": "sse", "sse-connect": "/events/stream",
+		"hx-get": "", "hx-trigger": trigger, "hx-select": "#live > *", "hx-swap": "innerHTML",
+		"hx-sync":    "this:replace", // a slower older fetch must not land after a newer one
+		"hx-headers": `{"X-Background":"1"}`,
+	}
+}
+
+// htmx loads the vendored htmx and its SSE extension (see Static).
+templ htmx() {
+	<script src="/static/htmx-2.0.11.min.js"></script>
+	<script src="/static/htmx-ext-sse-2.2.4.js"></script>
+}
+
+// liveDrafts keeps a remote change from wiping a draft: while a form in #live
+// is being filled (focused, or holding unsent text) its swap is cancelled, and
+// redone once focus leaves it. A failed refetch is retried, so the page doesn't
+// stay stale until the next change.
+templ liveDrafts() {
 	<script>
 	(() => {
-		const es = new EventSource("/events/stream");
-		let inflight, retry, deferred;
-		const drafting = () => [...document.getElementById("live").querySelectorAll("input:not([type=hidden], [type=checkbox], [type=radio]), textarea")].some(el =>
+		const live = document.getElementById("live");
+		const refresh = () => document.dispatchEvent(new Event("refresh-live"));
+		const drafting = () => [...live.querySelectorAll("input:not([type=hidden], [type=checkbox], [type=radio]), textarea")].some(el =>
 			el === document.activeElement || el.value !== el.defaultValue);
+		let deferred, retry;
+		live.addEventListener("htmx:beforeSwap", e => {
+			deferred = drafting();
+			if (deferred) e.detail.shouldSwap = false;
+		});
 		document.addEventListener("focusout", () => setTimeout(() => { if (deferred && !drafting()) refresh(); }));
-		const refresh = async () => {
-			clearTimeout(retry);
-			inflight?.abort(); // a slower older fetch must not land after a newer one
-			const ctl = inflight = new AbortController();
-			try {
-				const r = await fetch(location.href, { signal: ctl.signal, headers: { "X-Background": "1" } });
-				if (!r.ok) throw r.status;
-				const next = new DOMParser().parseFromString(await r.text(), "text/html").getElementById("live");
-				deferred = drafting();
-				if (next && !deferred) document.getElementById("live").replaceWith(next);
-			} catch {
-				// A failed fetch would leave the page stale until the next change; an aborted one was superseded.
-				if (!ctl.signal.aborted) retry = setTimeout(refresh, 5000);
-			}
-		};
-		// Every kind, until each page lists only the kinds it shows.
-		for (const k of ["event", "todo", "list", "chore", "points", "member", "household", "integration"]) es.addEventListener(k, refresh);
-		document.addEventListener("refresh-live", refresh); // a page's own timer, e.g. Today's clock
-		es.onopen = refresh;
-		es.onerror = () => {
-			// The browser gives up on an error response (e.g. a proxy's 502 mid-restart): reload, which retries.
-			if (es.readyState === EventSource.CLOSED) setTimeout(() => location.reload(), 5000);
-		};
+		const again = () => { clearTimeout(retry); retry = setTimeout(refresh, 5000); };
+		live.addEventListener("htmx:responseError", again);
+		live.addEventListener("htmx:sendError", again);
 	})();
 	</script>
 }
+
 
 // SyncedEventPage shows a Google event and changes its Members. Changing them
 // here keeps them through later syncs and never reaches Google.

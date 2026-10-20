@@ -70,7 +70,7 @@ templ TodosBoard(p TodosPage) {
 				</label>
 				<button>Apply</button>
 			</form>
-			<div id="live">
+			<div id="live" { live("todo", "member", "household")... }>
 				for _, c := range p.Columns {
 					<section data-column={ strconv.FormatInt(c.ID, 10) }>
 						<h2>{ c.Name }</h2>
@@ -130,7 +130,7 @@ templ TodosBoard(p TodosPage) {
 		if p.Draggable {
 			@dragReorder()
 		}
-		@liveUpdates()
+		@liveDrafts()
 	}
 }
 

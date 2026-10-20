@@ -21,7 +21,7 @@ templ Lists(lists []ShoppingList, msg string) {
 			<h1>Lists</h1>
 			@defaultViewButton("/lists")
 			@formError(msg)
-			<div id="live">
+			<div id="live" { live("list", "integration")... }>
 				for _, l := range lists {
 					<section data-list={ id(l.ID) }>
 						<h2>{ l.Name }</h2>
@@ -82,7 +82,7 @@ templ Lists(lists []ShoppingList, msg string) {
 			</form>
 		</main>
 		@dragReorder()
-		@liveUpdates()
+		@liveDrafts()
 	}
 }
 

@@ -136,7 +136,7 @@ templ ChoresBoard(chores []Chore, people []Member, p Points) {
 			<h1>Chores</h1>
 			<p><a href="/">Home</a></p>
 			@defaultViewButton("/chores")
-			<div id="live">
+			<div id="live" { live("chore", "points", "member", "household")... }>
 				for _, c := range chores {
 					if !c.Archived {
 						<section data-chore={ id(c.ID) }>
@@ -254,7 +254,7 @@ templ ChoresBoard(chores []Chore, people []Member, p Points) {
 				}
 			}
 		</main>
-		@liveUpdates()
+		@liveDrafts()
 	}
 }
 

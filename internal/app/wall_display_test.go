@@ -152,7 +152,7 @@ func TestNightModeTurnsOnItsHoursAcrossDST(t *testing.T) {
 		if !strings.Contains(body, `data-reload-seconds="`+c.want+`"`) {
 			t.Errorf("at %s the screensaver doesn't reload in %s s: %q", c.at, c.want, body)
 		}
-		if !strings.Contains(body, `addEventListener("household", () => location.reload())`) {
+		if !strings.Contains(body, `addEventListener("sse:household", () => location.reload())`) {
 			t.Errorf("at %s the screensaver doesn't reload on a household change", c.at)
 		}
 	}

@@ -20,7 +20,7 @@ type TodayPage struct {
 // Today is the at-a-glance page of the day (spec §8).
 templ Today(p TodayPage) {
 	@page("Today", false) {
-		<div id="live">
+		<div id="live" { live("event", "todo", "chore", "member", "household", "integration")... }>
 			<header>
 				<p style="font-size:4rem;margin:0">@clock(p)</p>
 				<h1>{ p.Now.Format("Monday 2 January") }</h1>
@@ -70,7 +70,7 @@ templ Today(p TodayPage) {
 				</section>
 			</main>
 		</div>
-		@liveUpdates()
+		@liveDrafts()
 		@ticker()
 	}
 }
