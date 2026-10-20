@@ -22,7 +22,8 @@ type fakeMeteo struct {
 }
 
 const meteoBody = `{"current":{"time":"2026-03-15T09:00","temperature_2m":12.4,"weather_code":3},
-"daily":{"time":["2026-03-14","2026-03-15","2026-03-16"],"temperature_2m_max":[9.0,15.6,17.1],"temperature_2m_min":[1.0,7.5,8.2],"weather_code":[61,3,0]}}`
+"hourly":{"time":["2026-03-15T08:00","2026-03-15T09:00","2026-03-15T10:00"],"temperature_2m":[11,12.4,13.6],"weather_code":[3,3,61],"precipitation_probability":[0,10,60],"is_day":[1,1,1]},
+"daily":{"time":["2026-03-14","2026-03-15","2026-03-16"],"temperature_2m_max":[9.0,15.6,17.1],"temperature_2m_min":[1.0,7.5,8.2],"weather_code":[61,3,0],"sunrise":["2026-03-14T06:14","2026-03-15T06:12","2026-03-16T06:10"]}}`
 
 func newMeteo(t *testing.T) *fakeMeteo {
 	m := &fakeMeteo{}
@@ -167,5 +168,26 @@ func TestWeatherPlaceSearchPicksALocation(t *testing.T) {
 	}
 	if code, page := h.Device().Get(t, "/settings/weather/places?q=London"); code != http.StatusOK || !strings.Contains(page, lockPage) {
 		t.Fatalf("locked search = %d", code)
+	}
+}
+
+func TestWeatherPageShowsTheCachedForecast(t *testing.T) {
+	h, _ := weatherHousehold(t)
+	if _, page := h.Get(t, "/weather"); !strings.Contains(page, "No location set yet") || !strings.Contains(page, `href="/weather"`) {
+		t.Fatal("the Weather page without a location doesn't point at Settings, or the nav lacks it")
+	}
+	h.Post(t, "/settings/weather", url.Values{"lat": {"51.5"}, "lon": {"-0.12"}, "place": {"London, England, United Kingdom"}, "units": {"metric"}})
+	if _, page := h.Get(t, "/weather"); !strings.Contains(page, "Fetching the forecast") {
+		t.Fatal("no fetching notice before the first fetch")
+	}
+	h.RunDue()
+	_, page := h.Get(t, "/weather")
+	for _, want := range []string{"London, England, United Kingdom", "Overcast", "H 16° · L 8°", "10:00", "14°", "60%", "Today", "Mon"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("Weather page lacks %q", want)
+		}
+	}
+	if strings.Contains(page, "08:00") {
+		t.Error("Weather page shows an hour before now")
 	}
 }
