@@ -26,6 +26,7 @@ type Upstreams struct {
 	GoogleAPI   string
 	GoogleOAuth string
 	OpenMeteo   string
+	Geocoding   string // Open-Meteo's place search
 }
 
 func DefaultUpstreams() Upstreams {
@@ -34,6 +35,7 @@ func DefaultUpstreams() Upstreams {
 		GoogleAPI:   "https://www.googleapis.com",
 		GoogleOAuth: "https://oauth2.googleapis.com",
 		OpenMeteo:   "https://api.open-meteo.com",
+		Geocoding:   "https://geocoding-api.open-meteo.com",
 	}
 }
 
@@ -143,6 +145,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/members/{id}/avatar/delete", a.requireUnlock(a.deleteAvatar))
 	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
 	mux.HandleFunc("POST /settings/weather", a.requireUnlock(a.saveWeather))
+	mux.HandleFunc("GET /settings/weather/places", a.requireUnlock(a.searchPlaces))
 	mux.HandleFunc("POST /settings/feeds", a.requireUnlock(a.addFeed))
 	mux.HandleFunc("POST /settings/feeds/{id}/delete", a.requireUnlock(a.removeFeed))
 	mux.HandleFunc("POST /integrations/google/connect", a.requireUnlock(a.connectGoogle))

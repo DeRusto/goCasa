@@ -180,7 +180,7 @@ func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationHealt
 	if err != nil {
 		return web.Weather{}, err
 	}
-	w := web.Weather{Units: hh.Units}
+	w := web.Weather{Units: hh.Units, Place: hh.WeatherPlace}
 	lat, lon := hh.WeatherLat, hh.WeatherLon
 	var id int64
 	err = a.DB.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ?", openMeteoType).Scan(&id)
@@ -199,6 +199,7 @@ func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationHealt
 func (a *App) saveWeather(w http.ResponseWriter, r *http.Request) {
 	units := r.PostFormValue("units")
 	rawLat, rawLon := strings.TrimSpace(r.PostFormValue("lat")), strings.TrimSpace(r.PostFormValue("lon"))
+	place := strings.TrimSpace(r.PostFormValue("place"))
 	var lat, lon sql.NullFloat64
 	if rawLat != "" || rawLon != "" {
 		var err1, err2 error
@@ -209,13 +210,19 @@ func (a *App) saveWeather(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		lat.Valid, lon.Valid = true, true
+	} else {
+		place = ""
+	}
+	if len(place) > 200 {
+		a.settingsPage(w, r, http.StatusBadRequest, "That place name is too long.")
+		return
 	}
 	if units != "metric" && units != "imperial" {
 		a.settingsPage(w, r, http.StatusBadRequest, "Pick metric or imperial units.")
 		return
 	}
 	err := a.inTx(r.Context(), func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(r.Context(), "UPDATE household_settings SET weather_lat = ?, weather_lon = ?, units = ?", lat, lon, units); err != nil {
+		if _, err := tx.ExecContext(r.Context(), "UPDATE household_settings SET weather_lat = ?, weather_lon = ?, weather_place = ?, units = ?", lat, lon, place, units); err != nil {
 			return err
 		}
 		// Fetch on the next scheduler tick, not now: pages never wait on Open-Meteo.
@@ -227,4 +234,71 @@ func (a *App) saveWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// searchPlaces lists the places Open-Meteo's geocoding finds for q, for the
+// Weather section to pick from. Failures render as a message, not an error
+// status, so htmx still swaps them in.
+func (a *App) searchPlaces(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.FormValue("q"))
+	hh, err := a.household(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	res := web.PlaceResults{Units: hh.Units}
+	if q != "" {
+		res.Places, err = a.geocode(r.Context(), q)
+		switch {
+		case err != nil:
+			a.Log.Error("searching places", "err", err)
+			res.Message = "Couldn't reach Open-Meteo's place search. Try again in a moment."
+		case len(res.Places) == 0:
+			res.Message = "No places match “" + q + "”. Try just the town or city name."
+		}
+	}
+	a.render(w, r, http.StatusOK, web.PlaceList(res))
+}
+
+// geocode is up to 8 places matching name, best first.
+func (a *App) geocode(ctx context.Context, name string) ([]web.Place, error) {
+	q := url.Values{"name": {name}, "count": {"8"}, "language": {"en"}, "format": {"json"}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.Upstreams.Geocoding+"/v1/search?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "GoCasa")
+	res, err := meteoClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Open-Meteo geocoding answered %s", res.Status)
+	}
+	var body struct {
+		Results []struct {
+			Name                string
+			Latitude, Longitude float64
+			Admin1, Country     string
+		}
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&body); err != nil {
+		return nil, fmt.Errorf("Open-Meteo geocoding's answer isn't a place list: %w", err)
+	}
+	places := make([]web.Place, 0, len(body.Results))
+	for _, p := range body.Results {
+		label := p.Name
+		for _, part := range []string{p.Admin1, p.Country} {
+			if part != "" && part != p.Name {
+				label += ", " + part
+			}
+		}
+		places = append(places, web.Place{
+			Name: label,
+			Lat:  strconv.FormatFloat(p.Latitude, 'f', -1, 64),
+			Lon:  strconv.FormatFloat(p.Longitude, 'f', -1, 64),
+		})
+	}
+	return places, nil
 }

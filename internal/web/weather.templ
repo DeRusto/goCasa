@@ -29,6 +29,7 @@ type WeatherDay struct {
 // Weather is the Weather section of Settings.
 type Weather struct {
 	Lat, Lon    string // blank: no weather
+	Place       string // the picked place's name; "" for coordinates
 	Units       string // "metric" or "imperial"
 	LastSuccess string
 	Failures    int
@@ -46,7 +47,7 @@ func deg(n int) string { return strconv.Itoa(n) + "°" }
 
 templ weatherPill() {
 	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
-		<aside aria-label="Weather" class="ml-auto rounded-full bg-soft px-4 py-1.5 text-lg tabular-nums">
+		<aside aria-label="Weather" class="ml-auto rounded-full bg-soft px-3 py-1 tabular-nums min-[760px]:px-4 min-[760px]:py-1.5 min-[760px]:text-lg">
 			{ deg(p.Current) + p.Unit }
 			if p.HasToday {
 				· H { deg(p.High) } L { deg(p.Low) }
@@ -58,11 +59,28 @@ templ weatherPill() {
 templ WeatherSection(w Weather) {
 	<section class="card flex flex-col gap-3">
 		<h2>Weather</h2>
-		<p class="text-muted">Where the weather is for, from Open-Meteo. Leave both blank for no weather.</p>
+		<p class="text-muted">Weather from Open-Meteo. Search for your town or city, then pick it from the list.</p>
 		@syncStatus(w.LastSuccess, w.Failures, w.LastError)
-		<form method="post" action="/settings/weather">
-			<label>Latitude <input name="lat" type="text" inputmode="decimal" value={ w.Lat } placeholder="51.5"/></label>
-			<label>Longitude <input name="lon" type="text" inputmode="decimal" value={ w.Lon } placeholder="-0.12"/></label>
+		<p>
+			<span class="text-muted">Showing weather for</span>
+			switch {
+				case w.Lat == "":
+					<strong>nowhere (weather is off)</strong>
+				case w.Place != "":
+					<strong>{ w.Place }</strong>
+				default:
+					<strong>{ w.Lat }, { w.Lon }</strong>
+			}
+		</p>
+		<form method="get" action="/settings/weather/places" hx-get="/settings/weather/places" hx-target="#place-results" class="flex flex-wrap items-end gap-2">
+			<label class="grow">Find a place <input name="q" type="search" required placeholder="e.g. London" autocomplete="off"/></label>
+			<button class="btn-primary">Search</button>
+		</form>
+		<div id="place-results" aria-live="polite"></div>
+		<form method="post" action="/settings/weather" class="flex flex-wrap items-end gap-2">
+			<input type="hidden" name="lat" value={ w.Lat }/>
+			<input type="hidden" name="lon" value={ w.Lon }/>
+			<input type="hidden" name="place" value={ w.Place }/>
 			<label>
 				Units
 				<select name="units">
@@ -70,7 +88,47 @@ templ WeatherSection(w Weather) {
 					<option value="imperial" selected?={ w.Units == "imperial" }>Imperial (°F)</option>
 				</select>
 			</label>
-			<button class="btn-primary">Save weather</button>
+			<button class="btn-primary">Save units</button>
 		</form>
+		if w.Lat != "" {
+			<form method="post" action="/settings/weather">
+				<input type="hidden" name="units" value={ w.Units }/>
+				<button class="text-muted underline">Turn weather off</button>
+			</form>
+		}
 	</section>
+}
+
+// Place is one place search result.
+type Place struct {
+	Name     string // "London, England, United Kingdom"
+	Lat, Lon string
+}
+
+// PlaceResults is a place search's answer: Places, or a Message when none.
+type PlaceResults struct {
+	Places  []Place
+	Message string
+	Units   string // kept when a place is picked
+}
+
+templ PlaceList(res PlaceResults) {
+	if res.Message != "" {
+		<p class="text-muted">{ res.Message }</p>
+	}
+	if len(res.Places) > 0 {
+		<ul class="flex flex-col gap-1">
+			for _, p := range res.Places {
+				<li>
+					<form method="post" action="/settings/weather">
+						<input type="hidden" name="lat" value={ p.Lat }/>
+						<input type="hidden" name="lon" value={ p.Lon }/>
+						<input type="hidden" name="place" value={ p.Name }/>
+						<input type="hidden" name="units" value={ res.Units }/>
+						<button class="pick w-full text-left hover:bg-soft">{ p.Name }</button>
+					</form>
+				</li>
+			}
+		</ul>
+	}
 }

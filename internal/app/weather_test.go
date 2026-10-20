@@ -133,3 +133,39 @@ func TestWeatherSettingsValidated(t *testing.T) {
 		t.Fatalf("locked save = %d", code)
 	}
 }
+
+func TestWeatherPlaceSearchPicksALocation(t *testing.T) {
+	geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/search" || r.URL.Query().Get("name") != "London" {
+			w.Write([]byte(`{}`)) // Open-Meteo leaves out results when nothing matches
+			return
+		}
+		w.Write([]byte(`{"results":[{"name":"London","latitude":51.50853,"longitude":-0.12574,"admin1":"England","country":"United Kingdom"},
+{"name":"London","latitude":42.98339,"longitude":-81.23304,"admin1":"Ontario","country":"Canada"}]}`))
+	}))
+	t.Cleanup(geo.Close)
+	nowhere := "http://127.0.0.1:1"
+	h := apptest.New(t, apptest.WithUpstreams(app.Upstreams{GoogleAuth: nowhere, GoogleAPI: nowhere, GoogleOAuth: nowhere, OpenMeteo: nowhere, Geocoding: geo.URL}))
+	setup(t, h)
+
+	_, page := h.Get(t, "/settings/weather/places?q=London")
+	for _, want := range []string{"London, England, United Kingdom", `value="51.50853"`, "London, Ontario, Canada"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("results lack %q: %s", want, page)
+		}
+	}
+	if _, page := h.Get(t, "/settings/weather/places?q=Nowhereville"); !strings.Contains(page, "No places match") {
+		t.Fatalf("no-match page = %s", page)
+	}
+	h.Post(t, "/settings/weather", url.Values{"lat": {"51.50853"}, "lon": {"-0.12574"}, "place": {"London, England, United Kingdom"}, "units": {"metric"}})
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "<strong>London, England, United Kingdom</strong>") {
+		t.Fatal("settings don't name the picked place")
+	}
+	h.Post(t, "/settings/weather", url.Values{"units": {"metric"}})
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "weather is off") {
+		t.Fatal("turning weather off kept the place")
+	}
+	if code, page := h.Device().Get(t, "/settings/weather/places?q=London"); code != http.StatusOK || !strings.Contains(page, lockPage) {
+		t.Fatalf("locked search = %d", code)
+	}
+}

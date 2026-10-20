@@ -19,6 +19,7 @@ type Household struct {
 	Units          string         // "metric" or "imperial"
 	WeatherLat     sql.NullFloat64
 	WeatherLon     sql.NullFloat64 // NULL with WeatherLat: no weather
+	WeatherPlace   string          // the picked place's name; '' for coordinates
 	FallbackFolder bool            // the Fallback folder is on
 	Locks          web.Locks
 }
@@ -49,10 +50,10 @@ func (a *App) loadHousehold(ctx context.Context) (Household, error) {
 	a.householdReads.Add(1)
 	h := Household{Zone: a.Config.Location}
 	err := a.DB.QueryRowContext(ctx, `SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo,
-		night_mode, night_start, night_end, timezone, units, weather_lat, weather_lon, fallback_folder_enabled,
+		night_mode, night_start, night_end, timezone, units, weather_lat, weather_lon, weather_place, fallback_folder_enabled,
 		lock_calendar, lock_chores, lock_todos FROM household_settings`).
 		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto,
-			&h.NightMode, &h.NightStart, &h.NightEnd, &h.Timezone, &h.Units, &h.WeatherLat, &h.WeatherLon, &h.FallbackFolder,
+			&h.NightMode, &h.NightStart, &h.NightEnd, &h.Timezone, &h.Units, &h.WeatherLat, &h.WeatherLon, &h.WeatherPlace, &h.FallbackFolder,
 			&h.Locks.Calendar, &h.Locks.Chores, &h.Locks.Todos)
 	if loc, lerr := time.LoadLocation(h.Timezone); err == nil && h.Timezone != "" && lerr == nil {
 		h.Zone = loc
