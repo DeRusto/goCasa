@@ -296,6 +296,48 @@ templ htmx() {
 	<script src="/static/htmx-ext-sse-2.2.4.js"></script>
 }
 
+// sortable lets an item in #live be dragged by its handle, with the vendored
+// SortableJS (see Static), within its list or across lists sharing a data-drag
+// group; its fallback mode drives mouse and touch alike and auto-scrolls a
+// long list. On drop, cancelled or not, what shows is kept: to-do columns post
+// their whole order, any other item its new position to its data-move address.
+// A live swap waits for the drag to end; each swap gets its lists re-armed.
+// Up/down buttons are the keyboard way.
+templ sortable() {
+	<script src="/static/Sortable-1.15.6.min.js"></script>
+	<style>.handle { touch-action: none; cursor: grab; }</style>
+	<script>
+	(() => {
+		const live = document.getElementById("live");
+		let dragging = false, deferred = false;
+		const post = (url, body) => fetch(url, { method: "POST", redirect: "manual", body });
+		const save = e => {
+			if (e.from === e.to && e.oldIndex === e.newIndex) return;
+			if (e.item.dataset.move) return post(e.item.dataset.move, new URLSearchParams({ position: e.newIndex }));
+			for (const ul of new Set([e.from, e.to])) {
+				const body = new URLSearchParams({ column_id: ul.closest("section").dataset.column });
+				ul.querySelectorAll("li[data-todo]").forEach(li => body.append("ids", li.dataset.todo));
+				post("/todos/reorder", body);
+			}
+		};
+		const arm = () => live.querySelectorAll("ul[data-drag]").forEach(ul => Sortable.create(ul, {
+			group: ul.dataset.drag, handle: ".handle", forceFallback: true, animation: 150,
+			onStart: () => { dragging = true; },
+			onEnd: e => {
+				dragging = false;
+				save(e);
+				if (deferred) { deferred = false; document.dispatchEvent(new Event("refresh-live")); }
+			},
+		}));
+		live.addEventListener("htmx:beforeSwap", e => {
+			if (dragging) { deferred = true; e.detail.shouldSwap = false; }
+		});
+		live.addEventListener("htmx:afterSwap", arm);
+		arm();
+	})();
+	</script>
+}
+
 // liveDrafts keeps a remote change from wiping a draft: while a form in #live
 // is being filled (focused, or holding unsent text) its swap is cancelled, and
 // redone once focus leaves it. A failed refetch is retried, so the page doesn't

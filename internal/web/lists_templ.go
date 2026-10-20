@@ -22,7 +22,7 @@ type ShoppingList struct {
 	Items    []ShoppingItem
 }
 
-// Local list items reorder by drag (dragReorder) or, from the keyboard, up/down buttons.
+// Local list items reorder by drag (sortable) or, from the keyboard, up/down buttons.
 func Lists(lists []ShoppingList, msg string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -401,7 +401,7 @@ func Lists(lists []ShoppingList, msg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dragReorder().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = sortable().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

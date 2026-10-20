@@ -14,7 +14,7 @@ type ShoppingList struct {
 	Items    []ShoppingItem
 }
 
-// Local list items reorder by drag (dragReorder) or, from the keyboard, up/down buttons.
+// Local list items reorder by drag (sortable) or, from the keyboard, up/down buttons.
 templ Lists(lists []ShoppingList, msg string) {
 	@layout("Lists") {
 		<main>
@@ -81,7 +81,7 @@ templ Lists(lists []ShoppingList, msg string) {
 				<button>New list</button>
 			</form>
 		</main>
-		@dragReorder()
+		@sortable()
 		@liveDrafts()
 	}
 }
