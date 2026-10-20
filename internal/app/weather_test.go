@@ -137,6 +137,14 @@ func TestWeatherSettingsValidated(t *testing.T) {
 
 func TestWeatherPlaceSearchPicksALocation(t *testing.T) {
 	geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("name") {
+		case "Down":
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		case "Garbled":
+			w.Write([]byte(`<html>`))
+			return
+		}
 		if r.URL.Path != "/v1/search" || r.URL.Query().Get("name") != "London" {
 			w.Write([]byte(`{}`)) // Open-Meteo leaves out results when nothing matches
 			return
@@ -157,6 +165,11 @@ func TestWeatherPlaceSearchPicksALocation(t *testing.T) {
 	}
 	if _, page := h.Get(t, "/settings/weather/places?q=Nowhereville"); !strings.Contains(page, "No places match") {
 		t.Fatalf("no-match page = %s", page)
+	}
+	for _, q := range []string{"Down", "Garbled"} { // failures still answer 200, so htmx swaps the message in
+		if code, page := h.Get(t, "/settings/weather/places?q="+q); code != http.StatusOK || !strings.Contains(page, "reach Open-Meteo") {
+			t.Fatalf("%s search = %d %s", q, code, page)
+		}
 	}
 	h.Post(t, "/settings/weather", url.Values{"lat": {"51.50853"}, "lon": {"-0.12574"}, "place": {"London, England, United Kingdom"}, "units": {"metric"}})
 	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "<strong>London, England, United Kingdom</strong>") {

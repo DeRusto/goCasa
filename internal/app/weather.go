@@ -288,6 +288,8 @@ func (a *App) searchPlaces(w http.ResponseWriter, r *http.Request) {
 
 // geocode is up to 8 places matching name, best first.
 func (a *App) geocode(ctx context.Context, name string) ([]web.Place, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // someone is waiting, unlike the background fetch
+	defer cancel()
 	q := url.Values{"name": {name}, "count": {"8"}, "language": {"en"}, "format": {"json"}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.Upstreams.Geocoding+"/v1/search?"+q.Encode(), nil)
 	if err != nil {
