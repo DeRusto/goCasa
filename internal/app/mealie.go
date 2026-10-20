@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // mealie mirrors every shopping list of one Mealie household (spec §10):
@@ -298,6 +299,11 @@ func (a *App) hideMealieList(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
+func (mealie) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+	m, err := a.mealieSettings(ctx, st)
+	return web.MealieSection(m), err
+}
+
 // mealieSettings is the Mealie section of Settings; nil when not connected.
 func (a *App) mealieSettings(ctx context.Context, st map[int64]integrationStatus) (*web.Mealie, error) {
 	var m web.Mealie
@@ -360,22 +366,21 @@ func (a *App) mirrorOf(ctx context.Context, list int64) (*mirror, error) {
 
 const mealieUnreachable = "GoCasa can't reach Mealie, so its lists show their last contents and can't be changed until it answers again."
 
-// mealieWrite runs write against Mealie for a request on Mirrored list m and
-// answers it: a gone item re-pulls the list, any other failure makes the
-// lists read-only until the next good poll.
-func (a *App) mealieWrite(w http.ResponseWriter, r *http.Request, m *mirror, write func(ctx context.Context) error) {
+// mealieWrite runs write against Mealie on Mirrored list m: a gone item
+// re-pulls the list (ErrGoneUpstream), any other failure makes the lists
+// read-only until the next good poll (ErrReadOnly).
+func (a *App) mealieWrite(ctx context.Context, m *mirror, write func(ctx context.Context) error) error {
 	if m.down {
-		a.listsPage(w, r, http.StatusServiceUnavailable, mealieUnreachable)
-		return
+		return ErrReadOnly
 	}
 	var err, recErr error
 	lockErr := a.integrations.WithLock(m.c.id, func() error { // not mid-poll
 		// Again under the lock: a poll we waited behind may have found Mealie down.
-		h, herr := a.integrations.Health(r.Context(), m.c.id)
+		h, herr := a.integrations.Health(ctx, m.c.id)
 		if m.down = h.Down; herr != nil || m.down {
 			return herr
 		}
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		err = write(ctx)
 		if errors.Is(err, errMealieGone) {
@@ -386,33 +391,30 @@ func (a *App) mealieWrite(w http.ResponseWriter, r *http.Request, m *mirror, wri
 		if err != nil && !errors.Is(err, errMealieGone) {
 			// Recorded before the lock goes, so a write waiting on it sees Mealie down.
 			a.Log.Warn("Mealie write failed", "err", err)
-			recErr = a.integrations.RecordFailure(r.Context(), m.c.id, err)
+			recErr = a.integrations.RecordFailure(ctx, m.c.id, err)
 		}
 		return nil
 	})
 	switch {
 	case lockErr != nil:
-		a.serverError(w, r, lockErr)
-		return
+		return fmt.Errorf("Mealie write: %v", lockErr) // %v: a server error, never a missing row
 	case m.down:
-		a.listsPage(w, r, http.StatusServiceUnavailable, mealieUnreachable)
-		return
+		return ErrReadOnly
 	}
 	// Poll soon after every write, on the next scheduler tick.
-	if err := a.integrations.PollSoon(r.Context(), m.c.id); err != nil {
+	if err := a.integrations.PollSoon(ctx, m.c.id); err != nil {
 		a.Log.Error("scheduling a Mealie poll", "err", err)
 	}
 	a.publish("updated", "shopping_list", m.list)
 	switch {
 	case errors.Is(err, errMealieGone):
-		a.listsPage(w, r, http.StatusNotFound, errMealieRemoved)
+		return ErrGoneUpstream
 	case recErr != nil:
-		a.serverError(w, r, recErr)
+		return fmt.Errorf("recording a Mealie failure: %v", recErr)
 	case err != nil:
-		a.listsPage(w, r, http.StatusServiceUnavailable, mealieUnreachable)
-	default:
-		http.Redirect(w, r, "/lists", http.StatusSeeOther)
+		return ErrReadOnly
 	}
+	return nil
 }
 
 // pullMealieList re-pulls one Mirrored list and returns its items as Mealie has them.
@@ -471,8 +473,15 @@ func (a *App) itemExt(ctx context.Context, m *mirror, id int64) (string, error) 
 	return ext, err
 }
 
-func (a *App) mealieAdd(w http.ResponseWriter, r *http.Request, m *mirror, note string) {
-	a.mealieWrite(w, r, m, func(ctx context.Context) error {
+// mirroredList is a Shopping list mirrored from Mealie: every change goes to Mealie first.
+type mirroredList struct {
+	a *App
+	m *mirror
+}
+
+func (l mirroredList) Add(ctx context.Context, note string) error {
+	a, m := l.a, l.m
+	return a.mealieWrite(ctx, m, func(ctx context.Context) error {
 		var pos int64
 		if err := a.DB.QueryRowContext(ctx, "SELECT coalesce(max(position), -1) + 1 FROM shopping_items WHERE list_id = ?", m.list).Scan(&pos); err != nil {
 			return err
@@ -485,18 +494,15 @@ func (a *App) mealieAdd(w http.ResponseWriter, r *http.Request, m *mirror, note 
 	})
 }
 
-// mealieCheck re-GETs the item, overlays only checked and PUTs the whole item
+// Check re-GETs the item, overlays only checked and PUTs the whole item
 // back: Mealie's PUT is a full replace that wipes whatever isn't sent.
-func (a *App) mealieCheck(w http.ResponseWriter, r *http.Request, m *mirror, id int64, checked bool) {
-	ext, err := a.itemExt(r.Context(), m, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	} else if err != nil {
-		a.serverError(w, r, err)
-		return
+func (l mirroredList) Check(ctx context.Context, id int64, checked bool) error {
+	a, m := l.a, l.m
+	ext, err := a.itemExt(ctx, m, id)
+	if err != nil {
+		return err
 	}
-	a.mealieWrite(w, r, m, func(ctx context.Context) error {
+	return a.mealieWrite(ctx, m, func(ctx context.Context) error {
 		var raw json.RawMessage
 		if err := m.c.call(ctx, http.MethodGet, mealieItems+"/"+url.PathEscape(ext), nil, &raw); err != nil {
 			return err
@@ -516,16 +522,13 @@ func (a *App) mealieCheck(w http.ResponseWriter, r *http.Request, m *mirror, id 
 	})
 }
 
-func (a *App) mealieDelete(w http.ResponseWriter, r *http.Request, m *mirror, id int64) {
-	ext, err := a.itemExt(r.Context(), m, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	} else if err != nil {
-		a.serverError(w, r, err)
-		return
+func (l mirroredList) Delete(ctx context.Context, id int64) error {
+	a, m := l.a, l.m
+	ext, err := a.itemExt(ctx, m, id)
+	if err != nil {
+		return err
 	}
-	a.mealieWrite(w, r, m, func(ctx context.Context) error {
+	return a.mealieWrite(ctx, m, func(ctx context.Context) error {
 		if err := m.c.call(ctx, http.MethodDelete, mealieItems+"/"+url.PathEscape(ext), nil, nil); err != nil && !errors.Is(err, errMealieGone) {
 			return err // already gone is success
 		}
@@ -533,9 +536,10 @@ func (a *App) mealieDelete(w http.ResponseWriter, r *http.Request, m *mirror, id
 	})
 }
 
-// mealieClear re-pulls the list and deletes only what is still checked in Mealie.
-func (a *App) mealieClear(w http.ResponseWriter, r *http.Request, m *mirror) {
-	a.mealieWrite(w, r, m, func(ctx context.Context) error {
+// Clear re-pulls the list and deletes only what is still checked in Mealie.
+func (l mirroredList) Clear(ctx context.Context) error {
+	a, m := l.a, l.m
+	return a.mealieWrite(ctx, m, func(ctx context.Context) error {
 		items, err := a.pullMealieItems(ctx, m)
 		if err != nil {
 			return err
@@ -562,3 +566,6 @@ func (a *App) mealieClear(w http.ResponseWriter, r *http.Request, m *mirror) {
 		})
 	})
 }
+
+// Move is refused as not found: a Mirrored list keeps Mealie's order.
+func (mirroredList) Move(context.Context, int64, int) error { return sql.ErrNoRows }

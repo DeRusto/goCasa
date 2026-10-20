@@ -1,6 +1,9 @@
 package app
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // SetHeartbeat shortens the stream heartbeat for a test.
 func SetHeartbeat(d time.Duration) (restore func()) {
@@ -21,6 +24,17 @@ func SetPhotoCacheLimit(n int) (restore func()) {
 	old := photoCacheLimit
 	photoCacheLimit = int64(n)
 	return func() { photoCacheLimit = old }
+}
+
+// ShoppingList is the Shopping list interface, for its adapter tests.
+type ShoppingList = shoppingList
+
+// ErrBadPosition is a Move outside the list.
+var ErrBadPosition = errBadPosition
+
+// ShoppingList is Shopping list id.
+func (a *App) ShoppingList(ctx context.Context, id int64) (ShoppingList, error) {
+	return a.shoppingList(ctx, id)
 }
 
 // HouseholdReads counts the queries on household_settings so far.

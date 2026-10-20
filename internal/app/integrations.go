@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"github.com/a-h/templ"
 )
 
 // Integration is one kind of sync source (spec §10), named by its
@@ -26,7 +27,44 @@ type Integration interface {
 	Sync(ctx context.Context, a *App, in integrationRow) error
 }
 
-var integrationTypes = map[string]Integration{"ical": icalFeed{}, googleType: googleSync{}, openMeteoType: openMeteo{}, mealieType: mealie{}, immichType: immich{}}
+// settingsSection is an Integration with its own Settings section. st is
+// every integration's status; members are the Members Settings lists.
+type settingsSection interface {
+	Section(ctx context.Context, a *App, st map[int64]integrationStatus, members []web.Member) (templ.Component, error)
+}
+
+// builtins is every integration type, in the order Settings shows their sections.
+var builtins = []struct {
+	typ  string
+	impl Integration
+}{{"ical", icalFeed{}}, {googleType, googleSync{}}, {openMeteoType, openMeteo{}}, {mealieType, mealie{}}, {immichType, immich{}}}
+
+var integrationTypes = func() map[string]Integration {
+	m := map[string]Integration{}
+	for _, b := range builtins {
+		m[b.typ] = b.impl
+	}
+	return m
+}()
+
+// settingsSections is each built-in integration type's Settings section, in order.
+func (a *App) settingsSections(ctx context.Context, members []web.Member) ([]templ.Component, error) {
+	st, err := a.integrations.Statuses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var cs []templ.Component
+	for _, b := range builtins {
+		if s, ok := b.impl.(settingsSection); ok {
+			c, err := s.Section(ctx, a, st, members)
+			if err != nil {
+				return nil, err
+			}
+			cs = append(cs, c)
+		}
+	}
+	return cs, nil
+}
 
 // integrationRow is what Sync gets from its row.
 type integrationRow struct {
@@ -387,6 +425,11 @@ func (a *App) syncNow(w http.ResponseWriter, r *http.Request) {
 		back = "/calendar"
 	}
 	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+func (icalFeed) Section(ctx context.Context, a *App, st map[int64]integrationStatus, _ []web.Member) (templ.Component, error) {
+	fs, err := a.feeds(ctx, st)
+	return web.FeedsSection(fs), err
 }
 
 // feeds is the iCal feeds as Settings shows them.
