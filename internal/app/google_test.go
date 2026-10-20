@@ -33,6 +33,7 @@ type fakeGoogle struct {
 	fail      int                         // when set, events lists answer it
 	missing   string                      // a calendar whose events list answers 404
 	pageSize  int
+	noZone    bool                      // events lists send no calendar timeZone
 	lists     []url.Values              // each events list's query, with its calendar as "cal"
 	writes    []gWrite                  // each request to one event, and each insert
 	got       map[string]map[string]any // event id → what a GET of it answers
@@ -125,6 +126,9 @@ func newGoogle(t *testing.T) *fakeGoogle {
 		from, _ := strconv.Atoi(q.Get("pageToken"))
 		to := min(from+g.pageSize, len(items))
 		body := map[string]any{"items": items[from:to], "timeZone": "America/New_York"}
+		if g.noZone {
+			delete(body, "timeZone")
+		}
 		if to < len(items) {
 			body["nextPageToken"] = strconv.Itoa(to)
 		} else {
@@ -214,12 +218,12 @@ func cal(id, summary, color, role string) map[string]any {
 }
 
 // googleHousehold is household with Google set up against g.
-func googleHousehold(t *testing.T, g *fakeGoogle) *apptest.Harness {
+func googleHousehold(t *testing.T, g *fakeGoogle, opts ...apptest.Option) *apptest.Harness {
 	t.Helper()
-	h := apptest.New(t, func(o *app.Options) {
+	h := apptest.New(t, append([]apptest.Option{func(o *apptest.Setup) {
 		o.Upstreams = app.Upstreams{GoogleAuth: g.URL, GoogleAPI: g.URL, GoogleOAuth: g.URL}
 		o.Config.GoogleClientID, o.Config.GoogleClientSecret = "client-id", "client-secret"
-	})
+	}}, opts...)...)
 	h.App.Config.GoogleRedirectURI = h.Server.URL + "/auth/google/callback" // known only once serving
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "member", ""))

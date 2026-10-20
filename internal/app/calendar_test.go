@@ -12,9 +12,9 @@ import (
 )
 
 // household sets up Ada (Admin, 1), Bob (2), Carol (3) and one local calendar (1).
-func household(t *testing.T) *apptest.Harness {
+func household(t *testing.T, opts ...apptest.Option) *apptest.Harness {
 	t.Helper()
-	h := apptest.New(t)
+	h := apptest.New(t, opts...)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "member", ""))
 	h.Post(t, "/settings/members", member("Carol", "#ef4444", "member", ""))

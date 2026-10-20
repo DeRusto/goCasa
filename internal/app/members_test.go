@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeRusto/goCasa/internal/app"
 	"github.com/DeRusto/goCasa/internal/apptest"
 )
 
@@ -167,7 +166,7 @@ func TestBackgroundRefreshesDontKeepTheUnlockAlive(t *testing.T) {
 
 func TestUnlockCookieFlags(t *testing.T) {
 	for _, scheme := range []string{"http", "https"} {
-		h := apptest.New(t, func(o *app.Options) { o.Config.BaseURL.Scheme = scheme })
+		h := apptest.New(t, func(o *apptest.Setup) { o.Config.BaseURL.Scheme = scheme })
 		h.Client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 		req, _ := http.NewRequest(http.MethodPost, h.Server.URL+"/setup", strings.NewReader(member("Ada", "#3b82f6", "", "1234").Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
