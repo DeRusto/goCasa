@@ -21,45 +21,49 @@ type ImmichPick struct {
 }
 
 templ ImmichSection(m *Immich) {
-	<h2>Immich photos</h2>
-	if m == nil {
-		<p>No Immich photos show: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p>
-		<form method="post" action="/settings/immich">
-			<label>Address <input name="url" type="text" inputmode="url" required placeholder="https://photos.example.com"/></label>
-			<label>API key <input name="key" type="password" required autocomplete="off"/></label>
-			<button>Connect Immich</button>
-		</form>
-	} else {
-		<p>Connected to { m.URL }. The screensaver shows photos from any album or person picked here.</p>
-		@syncStatus(m.LastSuccess, m.Failures, m.LastError)
-		switch  {
-			case m.NothingPicked:
-				<p role="status">No Immich photos show: pick at least one album or person.</p>
-			case m.Photos == 0:
-				<p role="status">No Immich photos show: the picked albums and people have no photos.</p>
-			default:
-				<p role="status">{ strconv.Itoa(m.Photos) } photos in the rotation.</p>
+	<section class="card flex flex-col gap-3">
+		<h2>Immich photos</h2>
+		if m == nil {
+			<p class="text-muted">No Immich photos show: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p>
+			<form method="post" action="/settings/immich">
+				<label>Address <input name="url" type="text" inputmode="url" required placeholder="https://photos.example.com"/></label>
+				<label>API key <input name="key" type="password" required autocomplete="off"/></label>
+				<button class="btn-primary">Connect Immich</button>
+			</form>
+		} else {
+			<p class="text-muted break-words">Connected to { m.URL }. The screensaver shows photos from any album or person picked here.</p>
+			@syncStatus(m.LastSuccess, m.Failures, m.LastError)
+			switch  {
+				case m.NothingPicked:
+					<p role="status">No Immich photos show: pick at least one album or person.</p>
+				case m.Photos == 0:
+					<p role="status">No Immich photos show: the picked albums and people have no photos.</p>
+				default:
+					<p role="status">{ strconv.Itoa(m.Photos) } photos in the rotation.</p>
+			}
+			<form method="post" action="/settings/immich/picks" class="flex flex-col items-start gap-3 [&>fieldset]:w-full">
+				<fieldset>
+					<legend>Albums</legend>
+					for _, p := range m.Albums {
+						<label class="pick"><input type="checkbox" name="album" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+					}
+				</fieldset>
+				<fieldset>
+					<legend>People</legend>
+					for _, p := range m.People {
+						<label class="pick"><input type="checkbox" name="person" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+					}
+				</fieldset>
+				<button class="btn-primary">Save photos</button>
+			</form>
+			@integrationActions() {
+				<form method="post" action="/settings/immich/refresh">
+					<button>Refresh now</button>
+				</form>
+				<form method="post" action="/settings/immich/delete">
+					<button class="btn-danger">Disconnect Immich</button>
+				</form>
+			}
 		}
-		<form method="post" action="/settings/immich/picks">
-			<fieldset>
-				<legend>Albums</legend>
-				for _, p := range m.Albums {
-					<label><input type="checkbox" name="album" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
-				}
-			</fieldset>
-			<fieldset>
-				<legend>People</legend>
-				for _, p := range m.People {
-					<label><input type="checkbox" name="person" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
-				}
-			</fieldset>
-			<button>Save photos</button>
-		</form>
-		<form method="post" action="/settings/immich/refresh">
-			<button>Refresh now</button>
-		</form>
-		<form method="post" action="/settings/immich/delete">
-			<button>Disconnect Immich</button>
-		</form>
-	}
+	</section>
 }

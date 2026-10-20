@@ -46,7 +46,7 @@ func deg(n int) string { return strconv.Itoa(n) + "°" }
 
 templ weatherPill() {
 	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
-		<aside class="weather-pill" aria-label="Weather" style="display:inline-block;padding:.2em .8em;border-radius:1em;background:#e5e7eb;color:#111">
+		<aside aria-label="Weather" class="ml-auto rounded-full bg-soft px-4 py-1.5 text-lg tabular-nums">
 			{ deg(p.Current) + p.Unit }
 			if p.HasToday {
 				· H { deg(p.High) } L { deg(p.Low) }
@@ -56,19 +56,21 @@ templ weatherPill() {
 }
 
 templ WeatherSection(w Weather) {
-	<h2>Weather</h2>
-	<p>Where the weather is for, from Open-Meteo. Leave both blank for no weather.</p>
-	@syncStatus(w.LastSuccess, w.Failures, w.LastError)
-	<form method="post" action="/settings/weather">
-		<label>Latitude <input name="lat" type="text" inputmode="decimal" value={ w.Lat } placeholder="51.5"/></label>
-		<label>Longitude <input name="lon" type="text" inputmode="decimal" value={ w.Lon } placeholder="-0.12"/></label>
-		<label>
-			Units
-			<select name="units">
-				<option value="metric" selected?={ w.Units != "imperial" }>Metric (°C)</option>
-				<option value="imperial" selected?={ w.Units == "imperial" }>Imperial (°F)</option>
-			</select>
-		</label>
-		<button>Save weather</button>
-	</form>
+	<section class="card flex flex-col gap-3">
+		<h2>Weather</h2>
+		<p class="text-muted">Where the weather is for, from Open-Meteo. Leave both blank for no weather.</p>
+		@syncStatus(w.LastSuccess, w.Failures, w.LastError)
+		<form method="post" action="/settings/weather">
+			<label>Latitude <input name="lat" type="text" inputmode="decimal" value={ w.Lat } placeholder="51.5"/></label>
+			<label>Longitude <input name="lon" type="text" inputmode="decimal" value={ w.Lon } placeholder="-0.12"/></label>
+			<label>
+				Units
+				<select name="units">
+					<option value="metric" selected?={ w.Units != "imperial" }>Metric (°C)</option>
+					<option value="imperial" selected?={ w.Units == "imperial" }>Imperial (°F)</option>
+				</select>
+			</label>
+			<button class="btn-primary">Save weather</button>
+		</form>
+	</section>
 }

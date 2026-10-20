@@ -69,9 +69,9 @@ func Initials(name string) string {
 
 templ avatar(m Member) {
 	if m.HasAvatar {
-		<img class="avatar" src={ "/members/" + strconv.FormatInt(m.ID, 10) + "/avatar" } alt="" style="width:2.5em;height:2.5em;border-radius:50%;vertical-align:middle"/>
+		<img class="avatar inline-block size-10 flex-none rounded-full object-cover align-middle" src={ "/members/" + strconv.FormatInt(m.ID, 10) + "/avatar" } alt=""/>
 	} else {
-		<span class="avatar" style={ "display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
+		<span class="avatar inline-grid size-10 flex-none place-items-center rounded-full text-sm font-bold text-white" style={ "background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
 	}
 }
 
@@ -91,15 +91,15 @@ templ pinInput(label string) {
 // Setup is the first-run page that creates the first Admin.
 templ Setup(errMsg string) {
 	@layout("Welcome to GoCasa") {
-		<main>
-			<h1>Welcome to GoCasa</h1>
-			<p>Who looks after Settings? Add the first Admin and their PIN.</p>
-			@formError(errMsg)
-			<form method="post" action="/setup">
+		<main class="items-center">
+			<form method="post" action="/setup" class="form-card max-w-md">
+				<h1>Welcome to GoCasa</h1>
+				<p class="text-muted">Who looks after Settings? Add the first Admin and their PIN.</p>
+				@formError(errMsg)
 				<label>Name <input name="name" required maxlength="50"/></label>
-				<label>Colour <input type="color" name="color" value="#3b82f6"/></label>
+				<label>Colour <input type="color" name="color" value="#3b82f6" class="w-14 px-1"/></label>
 				@pinInput("PIN (4–8 digits)")
-				<button>Create Admin</button>
+				<button class="btn-primary">Create Admin</button>
 			</form>
 		</main>
 	}
@@ -108,25 +108,25 @@ templ Setup(errMsg string) {
 // PINPad is the Admin PIN pad: pick your avatar, enter your PIN.
 templ PINPad(admins []Member, errMsg, next string) {
 	@layout("Unlock Settings") {
-		<main>
-			<h1>Enter your PIN</h1>
-			@formError(errMsg)
-			<form method="post" action="/lock">
+		<main class="items-center">
+			<form method="post" action="/lock" class="form-card max-w-md">
+				<h1>Enter your PIN</h1>
+				@formError(errMsg)
 				if next != "" {
 					<input type="hidden" name="next" value={ next }/>
 				}
-				<fieldset>
+				<fieldset class="border-0 p-0">
 					<legend>Who are you?</legend>
 					for i, m := range admins {
-						<label>
-							<input type="radio" name="member_id" value={ strconv.FormatInt(m.ID, 10) } required checked?={ i == 0 }/>
+						<label class="member-chip" style={ memberChip(m) }>
+							<input type="radio" name="member_id" value={ strconv.FormatInt(m.ID, 10) } required checked?={ i == 0 } class="sr-only"/>
 							@avatar(m)
 							{ m.Name }
 						</label>
 					}
 				</fieldset>
 				@pinInput("PIN")
-				<button>Unlock</button>
+				<button class="btn-primary">Unlock</button>
 			</form>
 		</main>
 	}
@@ -138,7 +138,7 @@ func memberURL(m Member, action string) templ.SafeURL {
 
 templ memberFields(m Member) {
 	<label>Name <input name="name" value={ m.Name } required maxlength="50"/></label>
-	<label>Colour <input type="color" name="color" value={ m.Color }/></label>
+	<label>Colour <input type="color" name="color" value={ m.Color } class="w-14 px-1"/></label>
 	<label>
 		Role
 		<select name="role">
@@ -150,89 +150,125 @@ templ memberFields(m Member) {
 }
 
 // Settings is the unlocked Settings page; sections are the Integrations' own, in order.
+// The Household's own settings are on the left, the Integrations on the right; each
+// Member's many forms sit in their own flyout.
 templ Settings(members []Member, locks Locks, sections []templ.Component, fallback Fallback, household Household, errMsg string) {
-	@layout("Settings") {
+	@page("Settings", false) {
 		<main>
-			<h1>Settings</h1>
-			<form method="post" action="/lock/now"><button>Lock now</button></form>
+			@pageHead("Settings") {
+				<form method="post" action="/lock/now"><button>Lock now</button></form>
+			}
 			@formError(errMsg)
-			<h2>Locks</h2>
-			<p>Settings always needs an Admin's PIN. A Lock makes one more kind of action need it too. Viewing and shopping lists are never locked.</p>
-			<form method="post" action="/settings/locks">
-				<label><input type="checkbox" name="lock_calendar" checked?={ locks.Calendar }/> Changing the calendar</label>
-				<label><input type="checkbox" name="lock_chores" checked?={ locks.Chores }/> Completing chores</label>
-				<label><input type="checkbox" name="lock_todos" checked?={ locks.Todos }/> Completing to-dos</label>
-				<button>Save Locks</button>
-			</form>
-			<h2>Members</h2>
-			<p>People or pets. Only Admins have a PIN, and they need one.</p>
-			for _, m := range members {
-				if !m.Archived {
-					<section>
-						<h3>
-							@avatar(m)
-							{ m.Name }
-							if m.Role == "admin" {
-								(Admin)
+			<div class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 min-[1200px]:grid-cols-2">
+				<div class="flex flex-col gap-4">
+					<section class="card flex flex-col gap-3">
+						<h2>Members</h2>
+						<p class="text-muted">People or pets. Only Admins have a PIN, and they need one.</p>
+						<ul class="flex flex-col gap-2">
+							for _, m := range members {
+								if !m.Archived {
+									<li class="flex items-center gap-3 rounded-full p-1" style={ "background:" + pastel(m.Color) }>
+										@avatar(m)
+										<span class="min-w-0 flex-1 truncate font-medium">{ m.Name }</span>
+										if m.Role == "admin" {
+											<span class="text-sm text-muted">Admin</span>
+										}
+										if m.Pet {
+											<span class="text-sm text-muted">Pet</span>
+										}
+										<button popovertarget={ "member-" + strconv.FormatInt(m.ID, 10) } class="rounded-full">Edit</button>
+										<div id={ "member-" + strconv.FormatInt(m.ID, 10) } popover class="flyout">
+											<h3 class="flex items-center gap-3 text-lg">
+												@avatar(m)
+												{ m.Name }
+												if m.Role == "admin" {
+													(Admin)
+												}
+											</h3>
+											<form method="post" action={ memberURL(m, "") } class="flex flex-col items-start gap-3">
+												@memberFields(m)
+												if m.Role == "admin" {
+													@pinInput("New PIN (blank keeps it)")
+												} else {
+													@pinInput("PIN (only when making them an Admin)")
+												}
+												<button class="btn-primary">Save</button>
+											</form>
+											<form method="post" action={ memberURL(m, "/avatar") } enctype="multipart/form-data">
+												<label>Picture <input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required class="max-w-full py-2"/></label>
+												<button>Upload</button>
+											</form>
+											<div class="flex flex-wrap gap-2 border-t border-line pt-4">
+												if m.HasAvatar {
+													<form method="post" action={ memberURL(m, "/avatar/delete") }>
+														<button>Use initials</button>
+													</form>
+												}
+												<form method="post" action={ memberURL(m, "/archive") }>
+													<button>Archive { m.Name }</button>
+												</form>
+												<form method="post" action={ memberURL(m, "/delete") }>
+													<button class="btn-danger">Delete { m.Name }</button>
+												</form>
+											</div>
+										</div>
+									</li>
+								}
 							}
-						</h3>
-						<form method="post" action={ memberURL(m, "") }>
-							@memberFields(m)
-							if m.Role == "admin" {
-								@pinInput("New PIN (blank keeps it)")
-							} else {
-								@pinInput("PIN (only when making them an Admin)")
-							}
-							<button>Save</button>
-						</form>
-						<form method="post" action={ memberURL(m, "/avatar") } enctype="multipart/form-data">
-							<label>Picture <input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required/></label>
-							<button>Upload</button>
-						</form>
-						if m.HasAvatar {
-							<form method="post" action={ memberURL(m, "/avatar/delete") }>
-								<button>Use initials</button>
+						</ul>
+						<div class="flex flex-wrap gap-2">
+							<button popovertarget="member-new" class="btn-primary">Add a Member</button>
+							<button popovertarget="members-archived">Archived Members</button>
+						</div>
+						<div id="member-new" popover class="flyout">
+							<h2>Add a Member</h2>
+							<form method="post" action="/settings/members" class="flex flex-col items-start gap-3">
+								@memberFields(Member{Color: "#22c55e", Role: "member"})
+								@pinInput("PIN (Admins only)")
+								<button class="btn-primary">Add</button>
 							</form>
-						}
-						<form method="post" action={ memberURL(m, "/archive") }>
-							<button>Archive { m.Name }</button>
-						</form>
-						<form method="post" action={ memberURL(m, "/delete") }>
-							<button>Delete { m.Name }</button>
+						</div>
+						<div id="members-archived" popover class="flyout">
+							<h2>Archived</h2>
+							<p class="text-muted">Members who have left. They keep their history but are hidden everywhere else. Only a Member with no history can be deleted.</p>
+							for _, m := range members {
+								if m.Archived {
+									<section class="flex flex-wrap items-center gap-2">
+										<h3 class="flex flex-1 items-center gap-2">
+											@avatar(m)
+											{ m.Name }
+										</h3>
+										<form method="post" action={ memberURL(m, "/restore") }>
+											<button>Restore { m.Name }</button>
+										</form>
+										<form method="post" action={ memberURL(m, "/delete") }>
+											<button class="btn-danger">Delete { m.Name }</button>
+										</form>
+									</section>
+								}
+							}
+						</div>
+					</section>
+					<section class="card flex flex-col gap-3">
+						<h2>Locks</h2>
+						<p class="text-muted">Settings always needs an Admin's PIN. A Lock makes one more kind of action need it too. Viewing and shopping lists are never locked.</p>
+						<form method="post" action="/settings/locks">
+							<label class="pick"><input type="checkbox" name="lock_calendar" checked?={ locks.Calendar }/> Changing the calendar</label>
+							<label class="pick"><input type="checkbox" name="lock_chores" checked?={ locks.Chores }/> Completing chores</label>
+							<label class="pick"><input type="checkbox" name="lock_todos" checked?={ locks.Todos }/> Completing to-dos</label>
+							<button class="btn-primary">Save Locks</button>
 						</form>
 					</section>
-				}
-			}
-			<h2>Add a Member</h2>
-			<form method="post" action="/settings/members">
-				@memberFields(Member{Color: "#22c55e", Role: "member"})
-				@pinInput("PIN (Admins only)")
-				<button>Add</button>
-			</form>
-			<h2>Archived</h2>
-			<p>Members who have left. They keep their history but are hidden everywhere else. Only a Member with no history can be deleted.</p>
-			for _, m := range members {
-				if m.Archived {
-					<section>
-						<h3>
-							@avatar(m)
-							{ m.Name }
-						</h3>
-						<form method="post" action={ memberURL(m, "/restore") }>
-							<button>Restore { m.Name }</button>
-						</form>
-						<form method="post" action={ memberURL(m, "/delete") }>
-							<button>Delete { m.Name }</button>
-						</form>
-					</section>
-				}
-			}
-			for _, sec := range sections {
-				@sec
-			}
-			@fallbackSection(fallback)
-			@householdSection(household)
-			@thisDevice()
+					@householdSection(household)
+					@thisDevice()
+				</div>
+				<div class="flex flex-col gap-4">
+					for _, sec := range sections {
+						@sec
+					}
+					@fallbackSection(fallback)
+				</div>
+			</div>
 		</main>
 	}
 }
@@ -243,86 +279,108 @@ func calendarDot(color string) string {
 
 // syncStatus is an integration's last sync and, while failing, its error.
 templ syncStatus(lastSuccess string, failures int, lastError string) {
-	<p>Last synced: { lastSuccess }</p>
+	<p class="text-sm text-muted">Last synced: { lastSuccess }</p>
 	if failures > 0 {
-		<p role="alert">Sync failing ({ strconv.Itoa(failures) } in a row): { lastError }</p>
+		<p role="alert" class="break-words">Sync failing ({ strconv.Itoa(failures) } in a row): { lastError }</p>
 	}
+}
+
+// integrationActions is a row of an Integration's secondary buttons (refresh, disconnect).
+templ integrationActions() {
+	<div class="flex flex-wrap gap-2 border-t border-line pt-3">
+		{ children... }
+	</div>
 }
 
 // FeedsSection is the iCal feeds' Settings section.
 templ FeedsSection(feeds []Feed) {
-	<h2>Calendar feeds</h2>
-	<p>Read-only iCal or webcal calendars, such as a school's or a sports team's. Their events can't be changed in GoCasa.</p>
-	for _, f := range feeds {
-		<section>
-			<h3>
-				<span aria-hidden="true" style={ "display:inline-block;width:.7em;height:.7em;border-radius:50%;background:" + f.Color }></span>
-				{ f.Name }
-			</h3>
-			@syncStatus(f.LastSuccess, f.Failures, f.LastError)
-			<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
-				<button>Remove { f.Name }</button>
-			</form>
-		</section>
-	}
-	<form method="post" action="/settings/feeds">
-		<label>Name <input name="name" required maxlength="50"/></label>
-		<label>Address <input name="url" type="text" inputmode="url" required placeholder="webcal://…"/></label>
-		<label>Colour <input type="color" name="color" value="#f59e0b"/></label>
-		<button>Add feed</button>
-	</form>
+	<section class="card flex flex-col gap-3">
+		<h2>Calendar feeds</h2>
+		<p class="text-muted">Read-only iCal or webcal calendars, such as a school's or a sports team's. Their events can't be changed in GoCasa.</p>
+		for _, f := range feeds {
+			<section class="flex flex-col gap-1 rounded-[10px] bg-soft p-3">
+				<div class="flex flex-wrap items-center gap-2">
+					<h3 class="flex flex-1 items-center gap-2">
+						<span aria-hidden="true" style={ calendarDot(f.Color) }></span>
+						{ f.Name }
+					</h3>
+					<form method="post" action={ templ.SafeURL("/settings/feeds/" + strconv.FormatInt(f.ID, 10) + "/delete") }>
+						<button class="btn-danger">Remove { f.Name }</button>
+					</form>
+				</div>
+				@syncStatus(f.LastSuccess, f.Failures, f.LastError)
+			</section>
+		}
+		<form method="post" action="/settings/feeds">
+			<label>Name <input name="name" required maxlength="50"/></label>
+			<label>Address <input name="url" type="text" inputmode="url" required placeholder="webcal://…"/></label>
+			<label>Colour <input type="color" name="color" value="#f59e0b" class="w-14 px-1"/></label>
+			<button class="btn-primary">Add feed</button>
+		</form>
+	</section>
 }
 
 templ GoogleSection(g Google, members []Member) {
-	<h2>Google accounts</h2>
-	if !g.Configured {
-		<p>To connect Google calendars, create your own Google Cloud OAuth client and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (see the README). Its redirect URI is <code>{ g.RedirectURI }</code>.</p>
-	} else {
-		<p>Pick which calendars to show and whose events they are. Its redirect URI is <code>{ g.RedirectURI }</code>.</p>
-	}
-	for _, acct := range g.Accounts {
-		<section>
-			<h3>{ acct.Email }</h3>
-			if acct.Reconnect {
-				<p role="alert">Reconnect needed: Google withdrew GoCasa's access, so it has stopped syncing. Its events show as last synced.</p>
-			}
-			@syncStatus(acct.LastSuccess, acct.Failures, acct.LastError)
-			for _, c := range acct.Calendars {
-				<form method="post" action={ templ.SafeURL("/settings/google-calendars/" + strconv.FormatInt(c.ID, 10)) }>
-					<fieldset>
-						<legend>
-							<span aria-hidden="true" style={ calendarDot(c.Color) }></span>
-							{ c.Name }
-							if c.ReadOnly {
-								(read-only)
+	<section class="card flex flex-col gap-3">
+		<h2>Google accounts</h2>
+		if !g.Configured {
+			<p class="text-muted">To connect Google calendars, create your own Google Cloud OAuth client and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (see the README). Its redirect URI is <code class="break-all">{ g.RedirectURI }</code>.</p>
+		} else {
+			<p class="text-muted">Pick which calendars to show and whose events they are. Its redirect URI is <code class="break-all">{ g.RedirectURI }</code>.</p>
+		}
+		for _, acct := range g.Accounts {
+			<section class="flex flex-col gap-3 rounded-[10px] bg-soft p-3">
+				<h3 class="break-all">{ acct.Email }</h3>
+				if acct.Reconnect {
+					<p role="alert">Reconnect needed: Google withdrew GoCasa's access, so it has stopped syncing. Its events show as last synced.</p>
+				}
+				@syncStatus(acct.LastSuccess, acct.Failures, acct.LastError)
+				for _, c := range acct.Calendars {
+					<form method="post" action={ templ.SafeURL("/settings/google-calendars/" + strconv.FormatInt(c.ID, 10)) } class="flex">
+						<fieldset class="flex-1 bg-card">
+							<legend class="flex items-center gap-2">
+								<span aria-hidden="true" style={ calendarDot(c.Color) }></span>
+								{ c.Name }
+								if c.ReadOnly {
+									(read-only)
+								}
+							</legend>
+							<label class="pick"><input type="checkbox" name="enabled" checked?={ c.Enabled }/> Show</label>
+							for _, m := range members {
+								if !m.Archived {
+									<label class="member-chip" style={ memberChip(m) }>
+										<input type="checkbox" name="member" value={ strconv.FormatInt(m.ID, 10) } checked?={ c.Members[m.ID] } class="sr-only"/>
+										@avatar(m)
+										{ m.Name }
+									</label>
+								}
 							}
-						</legend>
-						<label><input type="checkbox" name="enabled" checked?={ c.Enabled }/> Show</label>
-						for _, m := range members {
-							if !m.Archived {
-								<label><input type="checkbox" name="member" value={ strconv.FormatInt(m.ID, 10) } checked?={ c.Members[m.ID] }/> { m.Name }</label>
-							}
-						}
-						<button>Save { c.Name }</button>
-					</fieldset>
-				</form>
-			}
-			if g.Configured {
-				<form method="post" action="/integrations/google/connect">
-					<input type="hidden" name="account" value={ strconv.FormatInt(acct.ID, 10) }/>
-					<button>Reconnect { acct.Email }</button>
-				</form>
-			}
-			<form method="post" action={ templ.SafeURL("/settings/google/" + strconv.FormatInt(acct.ID, 10) + "/delete") }>
-				<label>
-					<input type="checkbox" name="confirm" required/>
-					Disconnecting deletes its calendars and events here, with their default Members and every Member change made to its events.
-				</label>
-				<button>Disconnect { acct.Email }</button>
-			</form>
-		</section>
-	}
-	if g.Configured {
-		<form method="post" action="/integrations/google/connect"><button>Connect a Google account</button></form>
-	}
+							<button class="ml-auto">Save { c.Name }</button>
+						</fieldset>
+					</form>
+				}
+				@integrationActions() {
+					if g.Configured {
+						<form method="post" action="/integrations/google/connect">
+							<input type="hidden" name="account" value={ strconv.FormatInt(acct.ID, 10) }/>
+							<button>Reconnect { acct.Email }</button>
+						</form>
+					}
+					<details class="min-w-0 flex-1">
+						<summary class="flex min-h-11 cursor-pointer items-center text-now">Disconnect…</summary>
+						<form method="post" action={ templ.SafeURL("/settings/google/" + strconv.FormatInt(acct.ID, 10) + "/delete") }>
+							<label>
+								<input type="checkbox" name="confirm" required/>
+								Disconnecting deletes its calendars and events here, with their default Members and every Member change made to its events.
+							</label>
+							<button class="btn-danger">Disconnect { acct.Email }</button>
+						</form>
+					</details>
+				}
+			</section>
+		}
+		if g.Configured {
+			<form method="post" action="/integrations/google/connect"><button class="btn-primary">Connect a Google account</button></form>
+		}
+	</section>
 }

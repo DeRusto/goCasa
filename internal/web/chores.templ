@@ -47,27 +47,27 @@ func schedule(c Chore) string {
 // choreRounds is a Chore's claimable Rounds as avatar taps; next is the page to return to.
 templ choreRounds(c Chore, next string) {
 	for _, rd := range c.Rounds {
-		<div class="round" data-round={ rd.Start }>
+		<div class={ "round flex flex-wrap items-center gap-2 rounded-[10px] bg-soft px-2.5 py-2", templ.KV("outline-2 outline-late", rd.Late) } data-round={ rd.Start }>
 			if rd.Late {
-				<strong>Late</strong> ({ rd.Start })
+				<span><strong>Late</strong> <span class="text-muted">({ rd.Start })</span></span>
 			}
 			for _, t := range rd.Taps {
 				if t.CompletionID == 0 {
-					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/complete") } style="display:inline">
+					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/complete") } class="contents">
 						<input type="hidden" name="member_id" value={ id(t.Member.ID) }/>
 						<input type="hidden" name="round" value={ rd.Start }/>
 						<input type="hidden" name="next" value={ next }/>
-						<button aria-label={ "Complete " + c.Name + " for " + t.Member.Name }>
+						<button aria-label={ "Complete " + c.Name + " for " + t.Member.Name } class="flex items-center gap-2 rounded-full py-1 pr-4 pl-1">
 							@avatar(t.Member)
 							{ t.Member.Name }
 						</button>
 					</form>
 				} else {
-					<span class="done">
+					<span class="done flex items-center gap-2 line-through opacity-45">
 						@avatar(t.Member)
 						{ t.Member.Name } done
 					</span>
-					<form method="post" action={ templ.SafeURL("/chores/completions/" + id(t.CompletionID) + "/delete") } style="display:inline">
+					<form method="post" action={ templ.SafeURL("/chores/completions/" + id(t.CompletionID) + "/delete") } class="contents">
 						<input type="hidden" name="next" value={ next }/>
 						<button>Undo</button>
 					</form>
@@ -88,9 +88,12 @@ templ choreFields(c Chore, people []Member) {
 			@option("monthly", "Monthly", c.Schedule)
 		</select>
 	</label>
-	for _, d := range Weekdays {
-		<label><input type="checkbox" name="days" value={ d } checked?={ strings.Contains(c.Days, d) }/> { d }</label>
-	}
+	<fieldset>
+		<legend>Chosen weekdays</legend>
+		for _, d := range Weekdays {
+			<label class="pick"><input type="checkbox" name="days" value={ d } checked?={ strings.Contains(c.Days, d) }/> { d }</label>
+		}
+	</fieldset>
 	<label>
 		Who
 		<select name="kind">
@@ -98,11 +101,15 @@ templ choreFields(c Chore, people []Member) {
 			<option value="anyone" selected?={ c.Anyone }>Anyone assigned, once per Round</option>
 		</select>
 	</label>
-	<label>Points <input type="number" name="points" min="0" max="10000" required value={ strconv.Itoa(c.Points) }/></label>
+	<label>Points <input type="number" name="points" min="0" max="10000" required value={ strconv.Itoa(c.Points) } class="w-24"/></label>
 	<fieldset>
 		<legend>Assigned to</legend>
 		for _, m := range people {
-			<label><input type="checkbox" name="assignees" value={ id(m.ID) } checked?={ c.Assignees[m.ID] }/> { m.Name }</label>
+			<label class="member-chip" style={ memberChip(m) }>
+				<input type="checkbox" name="assignees" value={ id(m.ID) } checked?={ c.Assignees[m.ID] } class="sr-only"/>
+				@avatar(m)
+				{ m.Name }
+			</label>
 		}
 	</fieldset>
 }
@@ -129,130 +136,148 @@ type Redemption struct {
 	Member Member
 }
 
-// ChoresBoard is the chore board: tap your avatar to complete a Round.
+// ChoresBoard is the chore board: tap your avatar to complete a Round. The
+// chores fill the left, points and Rewards the right; the Admin's set-up forms
+// and the archive sit in the header's flyout.
 templ ChoresBoard(chores []Chore, people []Member, p Points) {
-	@layout("Chores") {
+	@page("Chores", false) {
 		<main>
-			<h1>Chores</h1>
-			<p><a href="/">Home</a></p>
-			@defaultViewButton("/chores")
-			<div id="live" { live(KindChore, KindPoints, KindMember, KindHousehold)... }>
-				for _, c := range chores {
-					if !c.Archived {
-						<section data-chore={ id(c.ID) }>
-							<h2><a href={ templ.SafeURL("/chores/" + id(c.ID)) }>{ c.Name }</a></h2>
-							<p>
-								{ schedule(c) } · { strconv.Itoa(c.Points) } points
-								if c.Anyone {
-									· anyone
+			@pageHead("Chores") {
+				@menuButton("chores-menu", "Chore settings")
+			}
+			<div id="live" { live(KindChore, KindPoints, KindMember, KindHousehold)... } class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+				<div class="grid grid-cols-[repeat(auto-fill,minmax(min(20rem,100%),1fr))] items-start gap-4">
+					for _, c := range chores {
+						if !c.Archived {
+							<section data-chore={ id(c.ID) } class="card flex flex-col gap-2">
+								<div class="flex flex-wrap items-baseline justify-between gap-x-2">
+									<h3 class="text-lg"><a href={ templ.SafeURL("/chores/" + id(c.ID)) } class="text-ink">{ c.Name }</a></h3>
+									<span class="text-sm text-muted">
+										{ schedule(c) } · { strconv.Itoa(c.Points) } points
+										if c.Anyone {
+											· anyone
+										}
+									</span>
+								</div>
+								if len(c.Rounds) == 0 {
+									<p class="text-muted">Not today.</p>
 								}
-							</p>
-							if len(c.Rounds) == 0 {
-								<p>Not today.</p>
+								@choreRounds(c, "/chores")
+							</section>
+						}
+					}
+				</div>
+				<div class="flex flex-col gap-4">
+					<section id="balances" class="card flex flex-col gap-3">
+						<h2>Points</h2>
+						<ul class="flex flex-col gap-2">
+							for _, m := range people {
+								<li class="flex items-center gap-3 rounded-full p-1 pr-4" style={ "background:" + pastel(m.Color) }>
+									@avatar(m)
+									<span class="flex-1">{ m.Name }:</span> <span><b class="text-lg tabular-nums" data-balance={ id(m.ID) }>{ strconv.Itoa(p.Balances[m.ID]) }</b> points</span>
+								</li>
 							}
-							@choreRounds(c, "/chores")
+						</ul>
+					</section>
+					if len(p.Pending) > 0 {
+						<section id="redemptions" class="card flex flex-col gap-3 border-late">
+							<h2>Waiting for an Admin</h2>
+							for _, rd := range p.Pending {
+								<div class="flex flex-wrap items-center gap-2">
+									@avatar(rd.Member)
+									<span class="min-w-0 flex-1">{ rd.Member.Name } asks for { rd.Reward.Name } ({ strconv.Itoa(rd.Reward.Cost) } points)</span>
+									<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/approve") }>
+										<button class="btn-primary">Approve</button>
+									</form>
+									<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/decline") }>
+										<button>Decline</button>
+									</form>
+								</div>
+							}
 						</section>
 					}
-				}
-				<section id="balances">
-					<h2>Points</h2>
-					<ul>
-						for _, m := range people {
-							<li>
-								@avatar(m)
-								{ m.Name }: <span data-balance={ id(m.ID) }>{ strconv.Itoa(p.Balances[m.ID]) }</span> points
-							</li>
-						}
-					</ul>
-				</section>
-				if len(p.Pending) > 0 {
-					<section id="redemptions">
-						<h2>Waiting for an Admin</h2>
-						for _, rd := range p.Pending {
-							<div>
-								@avatar(rd.Member)
-								{ rd.Member.Name } asks for { rd.Reward.Name } ({ strconv.Itoa(rd.Reward.Cost) } points)
-								<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/approve") } style="display:inline">
-									<button>Approve</button>
-								</form>
-								<form method="post" action={ templ.SafeURL("/redemptions/" + id(rd.ID) + "/decline") } style="display:inline">
-									<button>Decline</button>
-								</form>
-							</div>
+					<section id="rewards" class="card flex flex-col gap-3">
+						<h2>Rewards</h2>
+						for _, rw := range p.Rewards {
+							if !rw.Archived {
+								<div data-reward={ id(rw.ID) } class="flex flex-col gap-2 rounded-[10px] bg-soft p-2.5">
+									<h3>{ rw.Name } · { strconv.Itoa(rw.Cost) } points</h3>
+									<div class="flex flex-wrap items-center gap-2">
+										for _, m := range people {
+											if p.Balances[m.ID] >= rw.Cost {
+												<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem") } class="contents">
+													<input type="hidden" name="member_id" value={ id(m.ID) }/>
+													<button aria-label={ m.Name + " asks for " + rw.Name } class="flex items-center gap-2 rounded-full border-transparent py-1 pr-4 pl-1 [&_.avatar]:size-8" style={ "background:" + pastel(m.Color) }>
+														@avatar(m)
+														{ m.Name }
+													</button>
+												</form>
+											}
+										}
+										<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/archive") } class="ml-auto">
+											<button class="border-0 bg-transparent text-sm text-muted">Archive { rw.Name }</button>
+										</form>
+									</div>
+								</div>
+							}
 						}
 					</section>
-				}
-				<section id="rewards">
-					<h2>Rewards</h2>
-					for _, rw := range p.Rewards {
-						if !rw.Archived {
-							<div data-reward={ id(rw.ID) }>
-								<h3>{ rw.Name } · { strconv.Itoa(rw.Cost) } points</h3>
-								for _, m := range people {
-									if p.Balances[m.ID] >= rw.Cost {
-										<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem") } style="display:inline">
-											<input type="hidden" name="member_id" value={ id(m.ID) }/>
-											<button aria-label={ m.Name + " asks for " + rw.Name }>
-												@avatar(m)
-												{ m.Name }
-											</button>
-										</form>
-									}
-								}
-								<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/archive") } style="display:inline">
-									<button>Archive { rw.Name }</button>
-								</form>
-							</div>
-						}
-					}
-				</section>
+				</div>
 			</div>
-			<details>
-				<summary>Set up a Chore (Admin)</summary>
-				<form method="post" action="/chores">
-					@choreFields(Chore{Schedule: "daily", Assignees: map[int64]bool{}}, people)
-					<button>Add Chore</button>
-				</form>
-			</details>
-			<details>
-				<summary>Add a Reward (Admin)</summary>
-				<form method="post" action="/rewards">
-					<label>Name <input name="name" required maxlength="100"/></label>
-					<label>Costs <input type="number" name="points" min="1" max="100000" required/> points</label>
-					<button>Add Reward</button>
-				</form>
-			</details>
-			<details>
-				<summary>Adjust points (Admin)</summary>
-				<form method="post" action="/adjustments">
-					<label>
-						Who
-						<select name="member_id">
-							for _, m := range people {
-								<option value={ id(m.ID) }>{ m.Name }</option>
+			// The board's tests read #live up to the first details element, so these stay below it.
+			<div id="chores-menu" popover class="flyout flyout-menu">
+				@defaultViewButton("/chores")
+				<details>
+					<summary class="flex min-h-11 cursor-pointer items-center font-semibold">Set up a Chore (Admin)</summary>
+					<form method="post" action="/chores" class="flex flex-col items-start gap-3 [&>fieldset]:w-full">
+						@choreFields(Chore{Schedule: "daily", Assignees: map[int64]bool{}}, people)
+						<button class="btn-primary">Add Chore</button>
+					</form>
+				</details>
+				<details>
+					<summary class="flex min-h-11 cursor-pointer items-center font-semibold">Add a Reward (Admin)</summary>
+					<form method="post" action="/rewards">
+						<label>Name <input name="name" required maxlength="100"/></label>
+						<label>Costs <input type="number" name="points" min="1" max="100000" required class="w-28"/> points</label>
+						<button class="btn-primary">Add Reward</button>
+					</form>
+				</details>
+				<details>
+					<summary class="flex min-h-11 cursor-pointer items-center font-semibold">Adjust points (Admin)</summary>
+					<form method="post" action="/adjustments">
+						<label>
+							Who
+							<select name="member_id">
+								for _, m := range people {
+									<option value={ id(m.ID) }>{ m.Name }</option>
+								}
+							</select>
+						</label>
+						<label>Points (+ or −) <input type="number" name="points" min="-100000" max="100000" required class="w-28"/></label>
+						<label>Reason <input name="reason" required maxlength="200"/></label>
+						<button class="btn-primary">Adjust</button>
+					</form>
+				</details>
+				<details>
+					<summary class="flex min-h-11 cursor-pointer items-center font-semibold">Archived</summary>
+					<div class="flex flex-col gap-2">
+						for _, c := range chores {
+							if c.Archived {
+								<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/restore") } class="flex items-center justify-between gap-2">
+									{ c.Name } <button>Restore { c.Name }</button>
+								</form>
 							}
-						</select>
-					</label>
-					<label>Points (+ or −) <input type="number" name="points" min="-100000" max="100000" required/></label>
-					<label>Reason <input name="reason" required maxlength="200"/></label>
-					<button>Adjust</button>
-				</form>
-			</details>
-			<h2>Archived</h2>
-			for _, c := range chores {
-				if c.Archived {
-					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/restore") }>
-						{ c.Name } <button>Restore { c.Name }</button>
-					</form>
-				}
-			}
-			for _, rw := range p.Rewards {
-				if rw.Archived {
-					<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/restore") }>
-						{ rw.Name } <button>Restore { rw.Name }</button>
-					</form>
-				}
-			}
+						}
+						for _, rw := range p.Rewards {
+							if rw.Archived {
+								<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/restore") } class="flex items-center justify-between gap-2">
+									{ rw.Name } <button>Restore { rw.Name }</button>
+								</form>
+							}
+						}
+					</div>
+				</details>
+			</div>
 		</main>
 		@liveDrafts()
 	}
@@ -262,17 +287,17 @@ templ ChoresBoard(chores []Chore, people []Member, p Points) {
 templ ChorePage(c Chore, people []Member) {
 	@layout("Chore") {
 		<main>
-			<h1>{ c.Name }</h1>
-			<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID)) }>
+			<p><a href="/chores">‹ Chores</a></p>
+			<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID)) } class="form-card">
+				<h1>{ c.Name }</h1>
 				@choreFields(c, people)
-				<button>Save</button>
+				<button class="btn-primary">Save</button>
 			</form>
 			if !c.Archived {
 				<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/archive") }>
 					<button>Archive { c.Name }</button>
 				</form>
 			}
-			<p><a href="/chores">Back</a></p>
 		</main>
 	}
 }

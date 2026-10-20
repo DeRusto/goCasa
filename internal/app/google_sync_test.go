@@ -98,10 +98,10 @@ func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
 		t.Fatalf("full import asked %v", q)
 	}
 	page := agendaPage(t, h)
-	if d := day(t, page, "2026-03-16"); !strings.Contains(d, "10:00–11:00 Dentist") || !strings.Contains(d, "#22c55e") {
+	if d := day(t, page, "2026-03-16"); !strings.Contains(text(d), "10:00–11:00 Dentist") || !strings.Contains(d, "#22c55e") {
 		t.Fatalf("the dentist (Bob's by default) = %q", d)
 	}
-	if d := day(t, page, "2026-03-18"); !strings.Contains(d, "All day Camp") {
+	if d := day(t, page, "2026-03-18"); !strings.Contains(text(d), "All day Camp") {
 		t.Fatalf("camp's last day = %q", d)
 	}
 	var tzs string
@@ -141,7 +141,7 @@ func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
 		t.Fatalf("after the incremental sync %q", got)
 	}
 	page = agendaPage(t, h)
-	if d := day(t, page, "2026-03-16"); !strings.Contains(d, "14:00–15:00 Dentist (moved)") || strings.Contains(d, "#22c55e") {
+	if d := day(t, page, "2026-03-16"); !strings.Contains(text(d), "14:00–15:00 Dentist (moved)") || strings.Contains(d, "#22c55e") {
 		t.Fatalf("the moved dentist lost its Member change: %q", d)
 	}
 	if d := day(t, page, "2026-03-20"); !strings.Contains(d, "#22c55e") {
@@ -195,7 +195,7 @@ func TestGoogleFullReimports(t *testing.T) {
 	if got := stored(t, h, alice); got != "dentist,swim" {
 		t.Fatalf("after the re-import %q", got)
 	}
-	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(d, "10:00–11:00 Dentist") {
+	if d := day(t, agendaPage(t, h), "2026-03-16"); !strings.Contains(text(d), "10:00–11:00 Dentist") {
 		t.Fatalf("the unreadable copy replaced the dentist: %q", d)
 	}
 

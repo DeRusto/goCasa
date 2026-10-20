@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -55,36 +56,93 @@ templ layout(title string) {
 	}
 }
 
-// page is a full page; Today has its large weather header instead of the pill.
+// navPage is a nav rail link; Icon is the inner markup of a 24×24 Lucide icon (ISC licence).
+type navPage struct{ Label, Path, Icon string }
+
+var navPages = []navPage{
+	{"Today", "/today", `<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>`},
+	{"Calendar", "/calendar", `<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>`},
+	{"To-dos", "/todos", `<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>`},
+	{"Lists", "/lists", `<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>`},
+	{"Chores", "/chores", `<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>`},
+	{"Settings", "/settings", `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`},
+}
+
+templ head(title string) {
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+	<meta name="color-scheme" content={ colorScheme(ctx) }/>
+	<title>{ title }</title>
+	<link rel="icon" href={ faviconURL }/>
+	<link rel="stylesheet" href={ cssURL }/>
+}
+
+// page is a full page: a nav rail on the left (a tab bar along the bottom on
+// phones), then the content; Today has its large weather header instead of the pill.
 templ page(title string, pill bool) {
 	<!DOCTYPE html>
-	<html lang="en">
+	<html lang="en" data-theme={ device(ctx).Theme }>
 		<head>
-			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<meta name="color-scheme" content={ colorScheme(ctx) }/>
-			<title>{ title }</title>
+			@head(title)
 			@htmx()
 		</head>
 		<body>
-			<nav>
-				<a href="/today">Today</a>
-				<a href="/calendar">Calendar</a>
-				<a href="/todos">To-dos</a>
-				<a href="/lists">Lists</a>
-				<a href="/chores">Chores</a>
-				<a href="/settings">Settings</a>
-			</nav>
-			if pill {
-				@weatherPill()
-			}
-			{ children... }
+			<div class="min-[760px]:flex">
+				<nav class="fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-line bg-card min-[760px]:sticky min-[760px]:top-0 min-[760px]:h-screen min-[760px]:w-[76px] min-[760px]:flex-none min-[760px]:flex-col min-[760px]:justify-start min-[760px]:gap-1 min-[760px]:border-t-0 min-[760px]:border-r min-[760px]:py-3">
+					for _, n := range navPages {
+						<a
+							href={ templ.SafeURL(n.Path) }
+							if strings.HasPrefix(n.Label, title) {
+								aria-current="page"
+							}
+							class={ "mx-1 flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-xs font-medium text-muted no-underline hover:bg-soft hover:no-underline aria-[current=page]:bg-accent-soft aria-[current=page]:text-ink min-[760px]:flex-none min-[760px]:py-2", templ.KV("min-[760px]:mt-auto", n.Label == "Settings") }
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-6" aria-hidden="true">
+								@templ.Raw(n.Icon)
+							</svg>
+							{ n.Label }
+						</a>
+					}
+				</nav>
+				<div class="relative min-w-0 flex-1 pb-16 min-[760px]:pb-0">
+					if pill {
+						<div class="absolute top-5 right-5">
+							@weatherPill()
+						</div>
+					}
+					{ children... }
+				</div>
+			</div>
 			if device(ctx).WallDisplay {
 				@wallDisplay(cmp.Or(device(ctx).IdleSeconds, 300))
 			}
 		</body>
 	</html>
 }
+
+// pageHead is a page's title row: its h1, then the weather pill and the page's
+// buttons (children) at the right. Pages using it render with page(title, false).
+templ pageHead(title string) {
+	<div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2">
+		<h1>{ title }</h1>
+		<div class="ml-auto flex flex-wrap items-center gap-2">
+			@weatherPill()
+			{ children... }
+		</div>
+	</div>
+}
+
+// menuButton opens the popover with id target: a page's settings flyout, behind a gear.
+templ menuButton(target, label string) {
+	<button popovertarget={ target } aria-label={ label } class="icon-btn">
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true">
+			@templ.Raw(navPages[len(navPages)-1].Icon)
+		</svg>
+	</button>
+}
+
+// memberChip sets a .member-chip's pastel to m's colour.
+func memberChip(m Member) templ.SafeCSS { return templ.SafeCSS("--chip:" + pastel(m.Color) + ";") }
 
 // defaultViewButton makes view this device's Default view (no Lock).
 templ defaultViewButton(view string) {
@@ -95,118 +153,123 @@ templ defaultViewButton(view string) {
 }
 
 templ householdSection(h Household) {
-	<h2>Household</h2>
-	<form method="post" action="/settings/household">
-		<label>
-			Default view (for devices that haven't set their own)
-			<select name="default_view">
-				@option("today", "Today", h.DefaultView)
-				@option("calendar", "Calendar", h.DefaultView)
-				@option("todos", "To-dos", h.DefaultView)
-				@option("chores", "Chores", h.DefaultView)
-				@option("lists", "Lists", h.DefaultView)
-			</select>
-		</label>
-		<label><input type="checkbox" name="clock_24h" checked?={ h.Clock24 }/> 24-hour clock</label>
-		<label>
-			Week starts on
-			<select name="week_start">
-				for d := range 7 {
-					@option(strconv.Itoa(d), time.Weekday(d).String(), strconv.Itoa(h.WeekStart))
-				}
-			</select>
-		</label>
-		<label>
-			Wall display screensaver after
-			<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" max="86400" required/>
-			seconds idle
-		</label>
-		<label>
-			Seconds per photo
-			<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
-		</label>
-		<label>
-			Night mode (Wall displays)
-			<select name="night_mode">
-				@option("off", "Off", h.NightMode)
-				@option("black", "Black (screen may turn off)", h.NightMode)
-				@option("dim_clock", "Dim clock", h.NightMode)
-			</select>
-		</label>
-		<label>
-			from hour
-			<input type="number" name="night_start" value={ strconv.Itoa(h.NightStart) } min="0" max="23" required/>
-		</label>
-		<label>
-			to hour
-			<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
-		</label>
-		<label>
-			Timezone (IANA name, e.g. Europe/London; blank uses the server's)
-			<input name="timezone" value={ h.Timezone } maxlength="64"/>
-		</label>
-		<button>Save household</button>
-	</form>
+	<section class="card flex flex-col gap-3">
+		<h2>Household</h2>
+		<form method="post" action="/settings/household" class="flex flex-col items-start gap-3">
+			<label>
+				Default view (for devices that haven't set their own)
+				<select name="default_view">
+					@option("today", "Today", h.DefaultView)
+					@option("calendar", "Calendar", h.DefaultView)
+					@option("todos", "To-dos", h.DefaultView)
+					@option("chores", "Chores", h.DefaultView)
+					@option("lists", "Lists", h.DefaultView)
+				</select>
+			</label>
+			<label><input type="checkbox" name="clock_24h" checked?={ h.Clock24 }/> 24-hour clock</label>
+			<label>
+				Week starts on
+				<select name="week_start">
+					for d := range 7 {
+						@option(strconv.Itoa(d), time.Weekday(d).String(), strconv.Itoa(h.WeekStart))
+					}
+				</select>
+			</label>
+			<label>
+				Wall display screensaver after
+				<input type="number" name="screensaver_idle_seconds" value={ strconv.Itoa(h.IdleSeconds) } min="10" max="86400" required/>
+				seconds idle
+			</label>
+			<label>
+				Seconds per photo
+				<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
+			</label>
+			<div class="flex flex-wrap items-center gap-3">
+				<label>
+					Night mode (Wall displays)
+					<select name="night_mode">
+						@option("off", "Off", h.NightMode)
+						@option("black", "Black (screen may turn off)", h.NightMode)
+						@option("dim_clock", "Dim clock", h.NightMode)
+					</select>
+				</label>
+				<label>
+					from hour
+					<input type="number" name="night_start" value={ strconv.Itoa(h.NightStart) } min="0" max="23" required/>
+				</label>
+				<label>
+					to hour
+					<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
+				</label>
+			</div>
+			<label>
+				Timezone (IANA name, e.g. Europe/London; blank uses the server's)
+				<input name="timezone" value={ h.Timezone } maxlength="64"/>
+			</label>
+			<button class="btn-primary">Save household</button>
+		</form>
+	</section>
 }
 
 templ thisDevice() {
-	<h2>This device</h2>
-	<p>Kept in this browser only.</p>
-	<p>
-		Default view:
-		if v := device(ctx).DefaultView; v != "" {
-			<a href={ templ.SafeURL(v) }>{ v }</a>
-		} else {
-			Household default
+	<section class="card flex flex-col gap-3">
+		<h2>This device</h2>
+		<p class="text-muted">Kept in this browser only.</p>
+		<p>
+			Default view:
+			if v := device(ctx).DefaultView; v != "" {
+				<a href={ templ.SafeURL(v) }>{ v }</a>
+			} else {
+				Household default
+			}
+		</p>
+		if device(ctx).DefaultView != "" {
+			<form method="post" action="/device/default-view">
+				<input type="hidden" name="default_view" value=""/>
+				<button>Clear default view</button>
+			</form>
 		}
-	</p>
-	if device(ctx).DefaultView != "" {
-		<form method="post" action="/device/default-view">
-			<input type="hidden" name="default_view" value=""/>
-			<button>Clear</button>
+		<form method="post" action="/device/theme">
+			<label>
+				Theme
+				<select name="theme">
+					@option("light", "Light", device(ctx).Theme)
+					@option("dark", "Dark", device(ctx).Theme)
+					@option("auto", "Auto", device(ctx).Theme)
+				</select>
+			</label>
+			<button>Save theme</button>
 		</form>
-	}
-	<form method="post" action="/device/theme">
-		<label>
-			Theme
-			<select name="theme">
-				@option("light", "Light", device(ctx).Theme)
-				@option("dark", "Dark", device(ctx).Theme)
-				@option("auto", "Auto", device(ctx).Theme)
-			</select>
-		</label>
-		<button>Save theme</button>
-	</form>
-	<form method="post" action="/device/wall-display">
-		<label><input type="checkbox" name="wall_display" checked?={ device(ctx).WallDisplay }/> Wall display (goes to the screensaver when idle; Admin PIN needed)</label>
-		<button>Save</button>
-	</form>
-	<p>
-		Screen wake lock:
-		<span id="wake-lock">
-			if device(ctx).WallDisplay {
-				checking…
-			} else {
-				off (not a Wall display)
-			}
-		</span>
-	</p>
-	<form method="post" action="/device/motion-wake">
-		<label><input type="checkbox" name="motion_wake" checked?={ device(ctx).MotionWake }/> Camera motion-wake (a Wall display's screensaver or Dim clock wakes when someone walks up; frames never leave this device; Admin PIN needed)</label>
-		<button>Save</button>
-	</form>
-	<p>
-		Camera:
-		<span id="motion-wake">
-			if device(ctx).MotionWake {
-				checking…
-			} else {
-				off
-			}
-		</span>
-	</p>
-	if device(ctx).MotionWake {
-		<script>
+		<form method="post" action="/device/wall-display">
+			<label><input type="checkbox" name="wall_display" checked?={ device(ctx).WallDisplay }/> Wall display (goes to the screensaver when idle; Admin PIN needed)</label>
+			<button>Save</button>
+		</form>
+		<p>
+			Screen wake lock:
+			<span id="wake-lock">
+				if device(ctx).WallDisplay {
+					checking…
+				} else {
+					off (not a Wall display)
+				}
+			</span>
+		</p>
+		<form method="post" action="/device/motion-wake">
+			<label><input type="checkbox" name="motion_wake" checked?={ device(ctx).MotionWake }/> Camera motion-wake (a Wall display's screensaver or Dim clock wakes when someone walks up; frames never leave this device; Admin PIN needed)</label>
+			<button>Save</button>
+		</form>
+		<p>
+			Camera:
+			<span id="motion-wake">
+				if device(ctx).MotionWake {
+					checking…
+				} else {
+					off
+				}
+			</span>
+		</p>
+		if device(ctx).MotionWake {
+			<script>
 		// Shows the camera permission without opening the camera, which runs only on the
 		// screensaver and Dim clock (spec §8); the Admin asks for it here, by a button,
 		// so the screensaver never waits on a prompt.
@@ -237,5 +300,6 @@ templ thisDevice() {
 			ask();
 		})();
 		</script>
-	}
+		}
+	</section>
 }

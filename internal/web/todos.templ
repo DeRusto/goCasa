@@ -34,50 +34,79 @@ type TodosPage struct {
 	Draggable                   bool
 }
 
+// TodosBoard's columns sit side by side (one column on a phone); its filter and its
+// board settings each sit in a flyout off the header.
 templ TodosBoard(p TodosPage) {
-	@layout("To-dos") {
+	@page("To-dos", false) {
 		<main>
-			<h1>To-dos</h1>
-			<p><a href="/">Home</a></p>
-			@defaultViewButton("/todos")
-			<form method="get" action="/todos">
-				<label>
-					Show
-					<select name="status">
-						@option("open", "Open", p.Status)
-						@option("done", "Completed", p.Status)
-						@option("all", "All", p.Status)
-					</select>
-				</label>
-				<label>
-					Due
-					<select name="due">
-						@option("", "Any time", p.Due)
-						@option("overdue", "Overdue", p.Due)
-						@option("today", "Today or earlier", p.Due)
-						@option("week", "Within 7 days", p.Due)
-						@option("none", "No due date", p.Due)
-					</select>
-				</label>
-				<label>From <input type="date" name="from" value={ p.From }/></label>
-				<label>To <input type="date" name="to" value={ p.To }/></label>
-				<label>
-					Sort
-					<select name="sort">
-						@option("", "My order", p.Sort)
-						@option("due", "Due date", p.Sort)
-					</select>
-				</label>
-				<button>Apply</button>
-			</form>
-			<div id="live" { live(KindTodo, KindMember, KindHousehold)... }>
+			@pageHead("To-dos") {
+				<button popovertarget="todos-filter" class="rounded-full">Filter</button>
+				@menuButton("todos-menu", "To-do settings")
+			}
+			<div id="todos-filter" popover class="flyout flyout-menu">
+				<h2>Filter</h2>
+				<form method="get" action="/todos" class="flex flex-col items-start gap-3">
+					<label>
+						Show
+						<select name="status">
+							@option("open", "Open", p.Status)
+							@option("done", "Completed", p.Status)
+							@option("all", "All", p.Status)
+						</select>
+					</label>
+					<label>
+						Due
+						<select name="due">
+							@option("", "Any time", p.Due)
+							@option("overdue", "Overdue", p.Due)
+							@option("today", "Today or earlier", p.Due)
+							@option("week", "Within 7 days", p.Due)
+							@option("none", "No due date", p.Due)
+						</select>
+					</label>
+					<div class="flex flex-wrap gap-3">
+						<label>From <input type="date" name="from" value={ p.From }/></label>
+						<label>To <input type="date" name="to" value={ p.To }/></label>
+					</div>
+					<label>
+						Sort
+						<select name="sort">
+							@option("", "My order", p.Sort)
+							@option("due", "Due date", p.Sort)
+						</select>
+					</label>
+					<button class="btn-primary">Apply</button>
+				</form>
+			</div>
+			<div id="todos-menu" popover class="flyout flyout-menu">
+				@defaultViewButton("/todos")
+				<form method="post" action="/todo-columns">
+					<label>Column name <input name="name" required maxlength="50"/></label>
+					<button class="btn-primary">Add column</button>
+				</form>
+			</div>
+			<div id="live" { live(KindTodo, KindMember, KindHousehold)... } class="grid grid-cols-[repeat(auto-fill,minmax(min(20rem,100%),1fr))] items-start gap-4">
 				for _, c := range p.Columns {
-					<section data-column={ strconv.FormatInt(c.ID, 10) }>
-						<h2>{ c.Name }</h2>
-						<ul class="todos" data-drag="todos">
+					<section data-column={ strconv.FormatInt(c.ID, 10) } class="card flex flex-col gap-3">
+						<div class="flex items-center justify-between gap-2">
+							<h2>{ c.Name }</h2>
+							<button popovertarget={ "column-" + strconv.FormatInt(c.ID, 10) } aria-label={ "Column " + c.Name } class="icon-btn border-0 text-xl text-muted">⋯</button>
+						</div>
+						<div id={ "column-" + strconv.FormatInt(c.ID, 10) } popover class="flyout">
+							<h2>Column</h2>
+							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10)) }>
+								<label>Name <input name="name" required maxlength="50" value={ c.Name }/></label>
+								<button class="btn-primary">Rename</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10) + "/delete") } onsubmit="return confirm('Delete this column and all its to-dos?')">
+								<button class="btn-danger">Delete column</button>
+							</form>
+						</div>
+						// The title link comes first and the due date is a bare span: the tests read them so.
+						<ul class="todos flex flex-col gap-1.5" data-drag="todos">
 							for i, t := range c.Todos {
-								<li data-todo={ strconv.FormatInt(t.ID, 10) }>
-									<a href={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>{ t.Title }</a>
+								<li data-todo={ strconv.FormatInt(t.ID, 10) } class={ "flex flex-wrap items-center gap-x-2 rounded-lg bg-soft py-1 pr-1 pl-3 [&>span]:text-sm", templ.KV("[&>span]:text-late", t.Overdue), templ.KV("[&>span]:text-muted", !t.Overdue), templ.KV("opacity-60", t.Done) }>
+									<a href={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) } class={ "min-w-0 flex-1 py-2 text-ink", templ.KV("line-through", t.Done) }>{ t.Title }</a>
 									if t.Due != "" {
 										<span>
 											due { t.Due }
@@ -87,12 +116,12 @@ templ TodosBoard(p TodosPage) {
 										</span>
 									}
 									if t.Done {
-										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/reopen") }><button>Re-open</button></form>
+										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/reopen") }><button class="rounded-full">Re-open</button></form>
 									} else {
-										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/complete") }><button>Done</button></form>
+										<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/complete") }><button class="rounded-full">Done</button></form>
 									}
 									if p.Draggable {
-										<span class="handle" aria-hidden="true">⠿</span>
+										<span class="handle order-first -ml-1 grid h-11 w-6 place-items-center text-muted" aria-hidden="true">⠿</span>
 										if i > 0 {
 											@todoMove(c, i, i-1, "↑", "Move up ")
 										}
@@ -103,29 +132,15 @@ templ TodosBoard(p TodosPage) {
 								</li>
 							}
 						</ul>
-						<form method="post" action="/todos">
+						<form method="post" action="/todos" class="flex flex-wrap items-center gap-2">
 							<input type="hidden" name="column_id" value={ strconv.FormatInt(c.ID, 10) }/>
-							<label>New to-do <input name="title" required maxlength="200"/></label>
-							<label>Due <input type="date" name="due_date"/></label>
-							<button>Add</button>
+							<label class="min-w-0 flex-1"><span class="sr-only">New to-do</span> <input name="title" required maxlength="200" placeholder="New to-do" class="w-full"/></label>
+							<label><span class="sr-only">Due</span> <input type="date" name="due_date"/></label>
+							<button class="btn-primary">Add</button>
 						</form>
-						<details>
-							<summary>Column</summary>
-							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10)) }>
-								<label>Name <input name="name" required maxlength="50" value={ c.Name }/></label>
-								<button>Rename</button>
-							</form>
-							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10) + "/delete") } onsubmit="return confirm('Delete this column and all its to-dos?')">
-								<button>Delete column</button>
-							</form>
-						</details>
 					</section>
 				}
 			</div>
-			<form method="post" action="/todo-columns">
-				<label>Column name <input name="name" required maxlength="50"/></label>
-				<button>Add column</button>
-			</form>
 		</main>
 		if p.Draggable {
 			@sortable()
@@ -147,7 +162,7 @@ templ option(value, label, selected string) {
 
 // todoMove is a keyboard-operable button moving column c's to-do i to j.
 templ todoMove(c TodoColumn, i, j int, arrow, label string) {
-	<form method="post" action="/todos/reorder" style="display:inline">
+	<form method="post" action="/todos/reorder" class="kbd-move">
 		<input type="hidden" name="column_id" value={ strconv.FormatInt(c.ID, 10) }/>
 		for _, id := range swapped(c.Todos, i, j) {
 			<input type="hidden" name="ids" value={ id }/>
@@ -170,29 +185,34 @@ func swapped(todos []Todo, i, j int) []string {
 templ TodoEditPage(t Todo, columns []TodoColumn) {
 	@layout("To-do") {
 		<main>
-			<h1>To-do</h1>
-			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) }>
+			<p><a href="/todos">‹ To-dos</a></p>
+			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10)) } class="form-card">
+				<h1>To-do</h1>
 				<label>Title <input name="title" required maxlength="200" value={ t.Title }/></label>
-				<label>
-					Column
-					<select name="column_id">
-						for _, c := range columns {
-							<option value={ strconv.FormatInt(c.ID, 10) } selected?={ c.ID == t.ColumnID }>{ c.Name }</option>
-						}
-					</select>
-				</label>
-				<label>Due <input type="date" name="due_date" value={ t.Due }/></label>
+				<div class="flex flex-wrap gap-4">
+					<label>
+						Column
+						<select name="column_id">
+							for _, c := range columns {
+								<option value={ strconv.FormatInt(c.ID, 10) } selected?={ c.ID == t.ColumnID }>{ c.Name }</option>
+							}
+						</select>
+					</label>
+					<label>Due <input type="date" name="due_date" value={ t.Due }/></label>
+				</div>
 				<fieldset>
 					<legend>Repeats</legend>
-					<select name="repeat">
+					<select name="repeat" aria-label="Repeats">
 						for _, o := range [][2]string{{"", "Doesn't repeat"}, {"daily", "Daily"}, {"weekly", "Weekly"}, {"monthly", "Monthly"}, {"yearly", "Yearly"}} {
 							<option value={ o[0] } selected?={ o[0] == t.Repeat }>{ o[1] }</option>
 						}
 					</select>
-					<label>Every <input type="number" name="interval" min="1" max="999" value={ t.Interval } placeholder="1"/></label>
-					for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
-						<label><input type="checkbox" name="byday" value={ d } checked?={ t.ByDay[d] }/> { d }</label>
-					}
+					<label>Every <input type="number" name="interval" min="1" max="999" value={ t.Interval } placeholder="1" class="w-20"/></label>
+					<div class="flex w-full flex-wrap gap-2">
+						for _, d := range []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"} {
+							<label class="pick"><input type="checkbox" name="byday" value={ d } checked?={ t.ByDay[d] }/> { d }</label>
+						}
+					</div>
 					<label>
 						Next due counts from
 						<select name="repeat_from">
@@ -201,13 +221,12 @@ templ TodoEditPage(t Todo, columns []TodoColumn) {
 						</select>
 					</label>
 				</fieldset>
-				<label>Notes <textarea name="notes" maxlength="5000">{ t.Notes }</textarea></label>
-				<button>Save</button>
+				<label class="w-full flex-col items-stretch">Notes <textarea name="notes" maxlength="5000">{ t.Notes }</textarea></label>
+				<button class="btn-primary">Save</button>
 			</form>
 			<form method="post" action={ templ.SafeURL("/todos/" + strconv.FormatInt(t.ID, 10) + "/delete") } onsubmit="return confirm('Delete this to-do?')">
-				<button>Delete</button>
+				<button class="btn-danger">Delete</button>
 			</form>
-			<p><a href="/todos">Back</a></p>
 		</main>
 	}
 }

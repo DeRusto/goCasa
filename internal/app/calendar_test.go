@@ -3,6 +3,7 @@ package app_test
 import (
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -49,6 +50,9 @@ func day(t *testing.T, page, date string) string {
 	s, _, _ := strings.Cut(rest, "</section>")
 	return s
 }
+
+// text is s's text alone, so a time and title in separate tags read as one string.
+func text(s string) string { return regexp.MustCompile(`<[^>]*>`).ReplaceAllString(s, "") }
 
 func TestCreateEditDeleteTimedEvent(t *testing.T) {
 	h := household(t)
@@ -109,13 +113,13 @@ func TestEventsAtMidnightStayOnTheirDay(t *testing.T) {
 	addEvent(t, h, timed("Overnight", "2026-03-16T23:00", "2026-03-17T02:00", "UTC"))
 	_, page := h.Get(t, "/calendar?view=week&date=2026-03-16")
 	mon, tue, sun := day(t, page, "2026-03-16"), day(t, page, "2026-03-17"), day(t, page, "2026-03-15")
-	if !strings.Contains(mon, "00:00–01:00 Early") || !strings.Contains(mon, "23:59–00:00 Late") || strings.Contains(sun, "Early") {
+	if !strings.Contains(text(mon), "00:00–01:00 Early") || !strings.Contains(text(mon), "23:59–00:00 Late") || strings.Contains(sun, "Early") {
 		t.Errorf("Monday = %q", mon)
 	}
 	if strings.Contains(tue, "Early") || strings.Contains(tue, "Late") {
 		t.Errorf("Tuesday has Monday's midnight events: %q", tue)
 	}
-	if !strings.Contains(mon, "23:00–… Overnight") || !strings.Contains(tue, "…–02:00 Overnight") {
+	if !strings.Contains(text(mon), "23:00–… Overnight") || !strings.Contains(text(tue), "…–02:00 Overnight") {
 		t.Errorf("overnight event: Monday %q, Tuesday %q", mon, tue)
 	}
 	if code, _ := h.Post(t, "/calendar/event", timed("Zero", "2026-03-16T09:00", "2026-03-16T09:00", "UTC")); code != http.StatusBadRequest {
@@ -128,7 +132,7 @@ func TestTimesUseTheEventsZone(t *testing.T) {
 	// New York is on EDT (UTC-4) from 8 March 2026; 23:30 there is 03:30 UTC the next day.
 	addEvent(t, h, timed("Call", "2026-03-15T23:30", "2026-03-16T00:30", "America/New_York"))
 	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
-	if d := day(t, page, "2026-03-16"); !strings.Contains(d, "03:30–04:30 Call") {
+	if d := day(t, page, "2026-03-16"); !strings.Contains(text(d), "03:30–04:30 Call") {
 		t.Fatalf("Monday = %q", d)
 	}
 	if strings.Contains(day(t, page, "2026-03-15"), "Call") {
@@ -274,7 +278,7 @@ func TestPresetSeriesRepeat(t *testing.T) {
 	addEvent(t, h, repeating(allDay("Bins", "2026-03-15", "2026-03-15"), "daily", "interval", "3"))
 	_, page := h.Get(t, "/calendar?view=month&date=2026-03-15")
 	for d, want := range map[string]bool{"2026-03-16": true, "2026-03-18": true, "2026-03-23": false, "2026-03-30": true, "2026-03-13": false} {
-		if got := strings.Contains(day(t, page, d), "07:00–08:00 Swim"); got != want {
+		if got := strings.Contains(text(day(t, page, d)), "07:00–08:00 Swim"); got != want {
 			t.Errorf("%s shows Swim = %v, want %v", d, got, want)
 		}
 	}
@@ -306,7 +310,7 @@ func TestCustomRule(t *testing.T) {
 	_, page2 := h.Get(t, "/calendar?view=agenda&date=2026-03-31")
 	all := page + page2
 	for _, d := range []string{"2026-03-10", "2026-03-19"} {
-		if !strings.Contains(day(t, page, d), "19:00–21:00 Book club") {
+		if !strings.Contains(text(day(t, page, d)), "19:00–21:00 Book club") {
 			t.Errorf("%s lacks Book club", d)
 		}
 	}
@@ -339,14 +343,14 @@ func TestThisEventEditAndDelete(t *testing.T) {
 		t.Fatalf("This event delete = %d", code)
 	}
 	_, page := h.Get(t, "/calendar?view=week&date=2026-03-15")
-	if d := day(t, page, "2026-03-16"); !strings.Contains(d, "11:00–13:00 Long walk") || strings.Contains(d, "Walk<") || strings.Contains(d, "09:00") {
+	if d := text(day(t, page, "2026-03-16")); !strings.Contains(d, "11:00–13:00 Long walk") || strings.Contains(d, "Walk") || strings.Contains(d, "09:00") {
 		t.Errorf("edited Occurrence: %q", d)
 	}
 	if d := day(t, page, "2026-03-17"); strings.Contains(d, "Walk") {
 		t.Errorf("deleted Occurrence still shows: %q", d)
 	}
 	for _, d := range []string{"2026-03-15", "2026-03-18", "2026-03-21"} {
-		if !strings.Contains(day(t, page, d), "09:00–10:00 Walk") {
+		if !strings.Contains(text(day(t, page, d)), "09:00–10:00 Walk") {
 			t.Errorf("%s lost its Occurrence", d)
 		}
 	}

@@ -20,55 +20,80 @@ type TodayPage struct {
 // Today is the at-a-glance page of the day (spec §8).
 templ Today(p TodayPage) {
 	@page("Today", false) {
-		<div id="live" { live(KindEvent, KindTodo, KindChore, KindMember, KindHousehold, KindIntegration)... }>
-			<header>
-				<p style="font-size:4rem;margin:0">@clock(p)</p>
-				<h1>{ p.Now.Format("Monday 2 January") }</h1>
+		<div id="live" { live(KindEvent, KindTodo, KindChore, KindMember, KindHousehold, KindIntegration)... } class="grid grid-cols-[minmax(0,1fr)] gap-4 p-5 min-[760px]:min-h-[calc(100vh-4rem)] min-[760px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] min-[760px]:grid-rows-[auto_1fr]">
+			<header class="flex flex-wrap items-center gap-x-7 gap-y-4 min-[760px]:col-span-full">
+				<div>
+					<p class="text-7xl font-light tabular-nums">@clock(p)</p>
+					<h1 class="text-xl font-normal text-muted">{ p.Now.Format("Monday 2 January") }</h1>
+				</div>
 				if w := p.Weather; w != nil {
-					<p style="font-size:2rem;margin:0">
-						{ deg(w.Current) + w.Unit } { w.Conditions }
-						if w.HasToday {
-							· H { deg(w.High) } L { deg(w.Low) }
-						}
-					</p>
-					<ol style="display:flex;gap:1.5em;list-style:none;padding:0">
-						for _, d := range w.Ahead {
-							<li>{ d.Day } { d.Conditions } { deg(d.High) } / { deg(d.Low) }</li>
-						}
-					</ol>
+					<div class="flex flex-wrap items-center gap-6 min-[760px]:ml-auto">
+						<div>
+							<p class="text-5xl tabular-nums">{ deg(w.Current) + w.Unit }</p>
+							<p class="text-muted">
+								{ w.Conditions }
+								if w.HasToday {
+									· H { deg(w.High) } L { deg(w.Low) }
+								}
+							</p>
+						</div>
+						<ol class="flex flex-wrap gap-5">
+							for _, d := range w.Ahead {
+								<li class="flex flex-col items-center text-sm">
+									{ d.Day }
+									<span class="text-muted">{ d.Conditions }</span>
+									<b class="text-lg tabular-nums">{ deg(d.High) } / { deg(d.Low) }</b>
+								</li>
+							}
+						</ol>
+					</div>
 				}
 			</header>
-			<main>
-				@defaultViewButton("/today")
+			<main class="card gap-5">
 				@calendarDay(p.Days[0], "Today")
 				@calendarDay(p.Days[1], "Tomorrow")
-				<section id="today-chores">
-					<h2><a href="/chores">Chores</a></h2>
+			</main>
+			<div class="flex flex-col content-start gap-4">
+				<section id="today-chores" class="card flex flex-col gap-3">
+					<h2><a href="/chores" class="text-muted">Today's chores</a></h2>
 					if len(p.Chores) == 0 {
-						<p>No chores today.</p>
+						<p class="text-muted">No chores today.</p>
 					}
 					for _, c := range p.Chores {
-						<h3>{ c.Name }</h3>
-						@choreRounds(c, "/today")
+						<div class="flex flex-col gap-1.5">
+							<div class="flex items-baseline justify-between gap-2">
+								<h3>{ c.Name }</h3>
+								<span class="text-sm text-muted">
+									if c.Anyone {
+										Anyone ·
+									}
+									{ strconv.Itoa(c.Points) } pts
+								</span>
+							</div>
+							@choreRounds(c, "/today")
+						</div>
 					}
 				</section>
-				<section id="today-todos">
-					<h2><a href="/todos">To-dos</a></h2>
+				<section id="today-todos" class="card flex flex-col gap-3">
+					<h2><a href="/todos" class="text-muted">To-dos due today</a></h2>
 					if len(p.Todos) == 0 {
-						<p>Nothing due.</p>
+						<p class="text-muted">Nothing due.</p>
 					}
-					<ul>
+					<ul class="flex flex-col">
 						for _, t := range p.Todos {
-							<li>
-								<a href={ templ.SafeURL("/todos/" + id(t.ID)) }>{ t.Title }</a>
+							<li class="flex gap-2.5 border-b border-line py-2 last:border-0">
+								<a href={ templ.SafeURL("/todos/" + id(t.ID)) } class="flex-1 text-ink">{ t.Title }</a>
 								if t.Overdue {
-									<strong>Overdue</strong> (due { t.Due })
+									<span class="text-sm"><strong class="text-late">Overdue</strong> <span class="text-muted">(due { t.Due })</span></span>
 								}
 							</li>
 						}
 					</ul>
 				</section>
-			</main>
+				<div class="text-sm">
+					@defaultViewButton("/today")
+				</div>
+			</div>
 		</div>
 		@liveDrafts()
 		@ticker()

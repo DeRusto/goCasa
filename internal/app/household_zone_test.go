@@ -29,7 +29,7 @@ func TestAllDayFormDefaultsToTheHouseholdZone(t *testing.T) {
 func TestFeedFloatingTimeIsInTheHouseholdZone(t *testing.T) {
 	h := household(t, auckland)
 	addFeed(t, h, "School", newFeed(t, vcal(vevent("UID:lunch@school", "SUMMARY:Lunch", "DTSTART:20260320T100000", "DTEND:20260320T110000"))).URL)
-	if d := day(t, agendaPage(t, h), "2026-03-20"); !strings.Contains(d, "10:00–11:00 Lunch") {
+	if d := day(t, agendaPage(t, h), "2026-03-20"); !strings.Contains(text(d), "10:00–11:00 Lunch") {
 		t.Fatalf("a floating 10:00 in Auckland = %q", d)
 	}
 }

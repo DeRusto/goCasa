@@ -51,7 +51,8 @@ func TestTodayShowsWeatherAgendaAndDueToDosForEveryone(t *testing.T) {
 	}
 
 	// Large header: clock, date, current conditions, today's high/low and the days ahead.
-	header, _, _ := strings.Cut(page, "</header>")
+	_, header, _ := strings.Cut(page, `id="live"`) // past the top bar
+	header, _, _ = strings.Cut(header, "</header>")
 	for _, want := range []string{"09:00", "Sunday 15 March", "12°C", "Overcast", "H 16° L 8°", "Mon", "Clear", "17°"} {
 		if !strings.Contains(header, want) {
 			t.Errorf("header lacks %q: %q", want, header)
@@ -60,7 +61,7 @@ func TestTodayShowsWeatherAgendaAndDueToDosForEveryone(t *testing.T) {
 	if strings.Contains(header, "Sat") {
 		t.Error("forecast shows yesterday")
 	}
-	if strings.Contains(page, `class="weather-pill"`) {
+	if strings.Contains(page, `aria-label="Weather"`) {
 		t.Error("Today shows the slim pill")
 	}
 

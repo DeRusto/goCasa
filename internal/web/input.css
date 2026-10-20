@@ -1,0 +1,69 @@
+/* Source for static/app.css: go generate ./internal/web after changing classes. */
+@import "tailwindcss" source(none);
+@source "./*.templ";
+
+/* House palette: the home-screen prototype (variant A), lightened toward the pastel
+   wall-calendar reference. Each light-dark() pair follows the page's color-scheme,
+   which html[data-theme] sets from this device's Theme. Member and calendar colours
+   become pastels where drawn (see pastel in calendar.templ). */
+@theme {
+  --font-sans: system-ui, sans-serif;
+  --color-bg: light-dark(#f7f6f3, #141413);
+  --color-card: light-dark(#ffffff, #1e1e1c);
+  --color-soft: light-dark(#f4f3f0, #282826);
+  --color-line: light-dark(#ebe9e4, #2e2d2a);
+  --color-ink: light-dark(#1d1d1f, #ecebe7);
+  --color-muted: light-dark(#6b6b70, #9a9893);
+  --color-accent: light-dark(#2f7f86, #7fd0d6);
+  --color-accent-soft: light-dark(#d5eef0, #23474a);
+  --color-on-accent: light-dark(#ffffff, #141413);
+  --color-now: #e5533d;
+  --color-late: #e8a33d;
+}
+
+@layer base {
+  :root { color-scheme: light dark; }
+  [data-theme="light"] { color-scheme: light; }
+  [data-theme="dark"] { color-scheme: dark; }
+
+  /* Bare elements get the house look, so pages read well before they get their own classes. */
+  body { @apply min-h-screen bg-bg font-sans text-ink antialiased; }
+  main { @apply flex flex-col gap-4 p-5; }
+  h1 { @apply text-3xl font-normal; }
+  h2 { @apply text-[15px] font-semibold tracking-[.06em] text-muted uppercase; }
+  h3 { @apply font-semibold; }
+  a { @apply text-accent underline-offset-2 hover:underline; }
+  ul:not([class]), ol:not([class]) { @apply flex flex-col gap-1; }
+  form:not([class]) { @apply flex flex-wrap items-end gap-3; }
+  label { @apply inline-flex flex-wrap items-center gap-2; }
+  fieldset { @apply flex flex-wrap items-center gap-2 rounded-[14px] border border-line p-3; }
+  legend { @apply px-1 text-sm font-semibold text-muted; }
+  textarea { @apply min-h-24 py-2; }
+  input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea {
+    @apply min-h-11 rounded-lg border border-line bg-card px-3 text-ink;
+  }
+  input[type="checkbox"], input[type="radio"] { @apply size-5 accent-accent; }
+  button { @apply min-h-11 cursor-pointer rounded-lg border border-line bg-card px-4 font-medium hover:bg-soft; }
+  [role="alert"] { @apply rounded-lg border border-late px-3 py-2; }
+}
+
+@layer components {
+  .card { @apply rounded-[14px] border border-line bg-card p-4; }
+  /* A form on its own page: a card of fields, as wide as a phone or a third of the wall. */
+  .form-card { @apply rounded-[14px] border border-line bg-card p-4 flex w-full max-w-3xl flex-col items-start gap-4 [&>fieldset]:w-full; }
+  .btn-primary { @apply border-transparent bg-accent text-on-accent hover:bg-accent hover:opacity-90; }
+  .btn-danger { @apply text-now; }
+  .icon-btn { @apply grid size-11 flex-none place-items-center rounded-full p-0; }
+  /* A tick box as a pill: weekdays, albums, Locks. */
+  .pick { @apply flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line px-3 has-[:checked]:border-transparent has-[:checked]:bg-accent-soft; }
+  /* A Member as a pastel avatar chip; --chip is pastel(their colour), set by memberChip. */
+  .member-chip { @apply flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line py-1 pr-4 pl-1 [&_.avatar]:size-8 has-[:checked]:border-transparent has-[:checked]:bg-(--chip) has-[:focus-visible]:outline-2; }
+  /* A native popover's panel. Never give it a display utility: [popover] hides by display:none. */
+  .flyout { @apply m-auto max-h-[calc(100dvh-6rem)] w-[28rem] max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto rounded-[14px] border border-line bg-card p-4 text-ink shadow-xl backdrop:bg-black/30 [&:popover-open]:flex; }
+  /* A page's menu flyout, under its button at the top right. */
+  .flyout-menu { @apply inset-auto top-20 right-6 m-0 backdrop:bg-transparent; }
+  /* The keyboard's up/down buttons (in their forms) on a draggable list: hidden until focused. */
+  .kbd-move { @apply sr-only focus-within:not-sr-only; }
+  /* Today greys an event once it's over; ticker adds .past in the browser too. */
+  .past { @apply opacity-50; }
+}
