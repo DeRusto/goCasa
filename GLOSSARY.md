@@ -117,6 +117,20 @@ _Avoid_: Bonus, penalty, correction
 A shopping list that lives in Mealie and that GoCasa shows and changes. When Mealie is unavailable, it cannot be changed.
 _Avoid_: Synced list, linked list, Mealie list
 
+### Integrations
+
+**Integration**:
+An outside service GoCasa syncs with on a schedule: a Google account, an iCal feed, Mealie, Immich or the weather. Call each by its own name (a Google account, not "the Google integration"); "Integration" is the shared idea.
+_Avoid_: Connection, upstream, provider
+
+**Failing**:
+An Integration whose last sync failed. The screensaver then shows only Immich photos it already has cached.
+_Avoid_: Error state, broken
+
+**Down**:
+An Integration that has failed three syncs in a row. Its Mirrored lists can't be changed and the calendar names it as stale.
+_Avoid_: Offline, unavailable, dead
+
 ### Dashboard
 
 **Today**:
