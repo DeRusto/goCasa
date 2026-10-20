@@ -7,7 +7,7 @@ import "strconv"
 // place after photoSeconds, so the page and its camera stay up. The whole
 // screen is one link to "/", so the first touch only wakes it, back to the
 // Default view at today.
-templ Screensaver(p TodayPage, photo string, photoSeconds, reloadSeconds int) {
+templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -20,32 +20,31 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, reloadSeconds int) {
 			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
 				<div id="live">
-					<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
+					<p style="font-size:6rem;margin:0">@clock(p)</p>
 					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 					<ul style="font-size:1.5rem;list-style:none;padding:0">
 						for _, e := range p.Days[0].Events {
-							<li style={ templ.KV("opacity:.5", e.Past) }>{ e.Time } { e.Title }</li>
+							<li
+								style={ templ.KV("opacity:.5", e.Past) }
+								if e.End != 0 {
+									data-end={ strconv.FormatInt(e.End, 10) }
+								}
+							>{ e.Time } { e.Title }</li>
 						}
 					</ul>
 				</div>
 			</a>
 			@liveUpdates()
+			@ticker()
+			@nightWatch(nightSeconds)
 			if device(ctx).WallDisplay {
 				@wallDisplay(0)
 			}
 			if device(ctx).MotionWake {
 				@motionWake()
 			}
-			<script data-photo-seconds={ strconv.Itoa(photoSeconds) } data-reload-seconds={ strconv.Itoa(reloadSeconds) }>
+			<script data-photo-seconds={ strconv.Itoa(photoSeconds) }>
 			(() => {
-				// Each minute refetch the clock and agenda in place (changes arrive live too);
-				// reload on the household's next hour so Night mode, which starts on an hour, takes over.
-				setTimeout(() => location.reload(), Number(document.currentScript.dataset.reloadSeconds) * 1000);
-				const tick = () => {
-					document.dispatchEvent(new Event("refresh-live"));
-					setTimeout(tick, 60000 - Date.now() % 60000);
-				};
-				setTimeout(tick, 60000 - Date.now() % 60000);
 				const img = document.getElementById("photo");
 				const next = async () => {
 					let wait = 60;
@@ -70,7 +69,7 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, reloadSeconds int) {
 // wake lock and shows a dimmed time and date. As on the screensaver, a touch
 // goes to "/" (idle then comes back here), and data-night tells a wake script
 // which mode it is in.
-templ Night(mode string, p TodayPage) {
+templ Night(mode string, p TodayPage, reloadSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -82,7 +81,7 @@ templ Night(mode string, p TodayPage) {
 		<body style="margin:0;background:#000;color:#333">
 			<a id="wake" href="/" aria-label="Wake" data-night={ mode } style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none">
 				if mode == "dim_clock" {
-					<p style="font-size:6rem;margin:0"><time>{ p.Clock }</time></p>
+					<p style="font-size:6rem;margin:0">@clock(p)</p>
 					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 				}
 			</a>
@@ -92,12 +91,27 @@ templ Night(mode string, p TodayPage) {
 			if mode == "dim_clock" && device(ctx).MotionWake {
 				@motionWake()
 			}
-			<script>
-			// Reload on the next minute: the clock stays current and Night mode ends on time.
-			setTimeout(() => location.reload(), 60000 - Date.now() % 60000);
-			</script>
+			@ticker()
+			@nightWatch(reloadSeconds)
 		</body>
 	</html>
+}
+
+// nightWatch reloads the screensaver or Night page after seconds (0: never),
+// when Night mode starts or ends, which swaps one page for the other, and on
+// any change to the household's settings, which may move those hours.
+templ nightWatch(seconds int) {
+	<script data-reload-seconds={ strconv.Itoa(seconds) }>
+	(() => {
+		const s = Number(document.currentScript.dataset.reloadSeconds);
+		if (s > 0) setTimeout(() => location.reload(), s * 1000);
+		const es = new EventSource("/events/stream");
+		es.addEventListener("household", () => location.reload());
+		let opened;
+		es.onopen = () => { if (opened) location.reload(); opened = true; }; // a change may have been missed while away
+		es.onerror = () => { if (es.readyState === EventSource.CLOSED) setTimeout(() => location.reload(), 5000); };
+	})();
+	</script>
 }
 
 // motionWake watches the camera on the screensaver and Dim clock: it compares

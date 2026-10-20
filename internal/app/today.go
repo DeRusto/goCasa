@@ -17,7 +17,7 @@ func (a *App) getToday(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clock := hh.Clock()
-	p := web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}
+	p := web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, MidnightIn: secondsTo(now, dayAt(today, 1))}
 	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 2), nil)
 	if err != nil {
 		a.serverError(w, r, err)

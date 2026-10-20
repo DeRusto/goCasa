@@ -191,7 +191,7 @@ func calendarDay(evs []calendarEvent, d0, today time.Time, now int64, clock stri
 				to = time.Unix(e.end, 0).In(loc).Format(clock)
 			}
 			ev.Time = from + "–" + to
-			ev.Past = e.end <= now
+			ev.Past, ev.End = e.end <= now, e.end*1000
 		}
 		day.Events = append(day.Events, ev)
 	}

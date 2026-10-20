@@ -222,8 +222,12 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clock := hh.Clock()
+	midnight, turn := dayAt(today, 1), nightChange(hh, now)
 	if mode := nightModeAt(hh, now.Hour()); mode != "off" {
-		a.render(w, r, http.StatusOK, web.Night(mode, web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}))
+		if midnight.Before(turn) { // a new day: the Dim clock's date
+			turn = midnight
+		}
+		a.render(w, r, http.StatusOK, web.Night(mode, web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24}, secondsTo(now, turn)))
 		return
 	}
 	evs, err := a.eventsIn(r.Context(), today, dayAt(today, 1), nil)
@@ -237,16 +241,34 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
-		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24,
+		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, MidnightIn: secondsTo(now, midnight),
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
-	}, src, left, nextHour(now)))
+	}, src, left, secondsTo(now, turn)))
 }
 
-// nextHour is the seconds until the next hour starts in now's zone (the
-// household's), when Night mode may begin; the browser's own zone may differ.
-func nextHour(now time.Time) int {
-	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, now.Location())
-	return int(next.Sub(now).Seconds() + .999)
+// secondsTo is the whole seconds from now until t, rounded up; 0 for a zero t.
+// Relative, so the browser's own clock and zone don't matter.
+func secondsTo(now, t time.Time) int {
+	if t.IsZero() {
+		return 0
+	}
+	return int(t.Sub(now).Seconds() + .999)
+}
+
+// nightChange is when Night mode next starts or ends after now, at its hours
+// in now's zone (the household's), so across DST too; zero if it never does.
+func nightChange(h Household, now time.Time) time.Time {
+	if h.NightMode == "off" || h.NightStart == h.NightEnd {
+		return time.Time{}
+	}
+	for d := range 2 {
+		for _, hour := range []int{min(h.NightStart, h.NightEnd), max(h.NightStart, h.NightEnd)} {
+			if t := time.Date(now.Year(), now.Month(), now.Day()+d, hour, 0, 0, 0, now.Location()); t.After(now) {
+				return t
+			}
+		}
+	}
+	return time.Time{} // unreachable: tomorrow's hours are after now
 }
 
 // photoNow is the screensaver photo's address ("" for none) and the seconds it has left.
