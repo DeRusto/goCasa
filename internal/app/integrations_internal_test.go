@@ -191,7 +191,7 @@ func TestConnectChecksTheAddress(t *testing.T) {
 	a := household(t)
 	ctx := context.Background()
 	probed := false
-	c := connection{typ: "fake", name: "Fake", secret: "s", missingSecret: "Paste a key.", interval: 60,
+	c := connection{typ: "fake", name: "Fake", secret: "s", missingSecret: "Paste a key.", interval: 60, unique: true,
 		check: func(context.Context) string { probed = true; return "" }}
 	for raw, want := range map[string]string{
 		"ftp://x":            "Fake's address starts with https:// or http://.",
@@ -219,5 +219,91 @@ func TestConnectChecksTheAddress(t *testing.T) {
 	c.check = func(context.Context) string { return "" }
 	if msg, err := a.integrations.Connect(ctx, c); msg != "" || err != nil || *calls != 1 {
 		t.Fatalf("connect: %q, %v, %d syncs", msg, err, *calls)
+	}
+}
+
+func TestConnectAddsAnotherWithItsOwnRows(t *testing.T) {
+	a := household(t)
+	ctx := context.Background()
+	_, _, calls := fake(t, a)
+	c := connection{typ: "fake", name: "Fake", url: "https://u:p@x.test/feed", urlSealed: true, secret: "https://u:p@x.test/feed", interval: 60,
+		then: func(tx *sql.Tx, id int64) error {
+			_, err := tx.Exec("INSERT INTO source_calendars (integration_id, name, color) VALUES (?, 'Fake', '#000000')", id)
+			return err
+		}}
+	if msg, err := a.integrations.Connect(ctx, c); msg != "" || err != nil || *calls != 1 {
+		t.Fatalf("second fake: %q, %v, %d syncs", msg, err, *calls)
+	}
+	var n int
+	a.DB.QueryRow("SELECT count(*) FROM source_calendars c JOIN integrations i ON i.id = c.integration_id WHERE i.type = 'fake'").Scan(&n)
+	if n != 1 {
+		t.Fatalf("%d calendars", n)
+	}
+	c.url = "ftp://x"
+	c.badURL = "Not a feed."
+	if msg, _ := a.integrations.Connect(ctx, c); msg != "Not a feed." {
+		t.Fatalf("bad feed address: %q", msg)
+	}
+}
+
+func TestReconnectingALoginResetsItsHealth(t *testing.T) {
+	a := household(t)
+	ctx := context.Background()
+	id, syncErr, calls := fake(t, a)
+	*syncErr = errors.New("boom")
+	for range 3 {
+		a.integrations.Run(ctx, id)
+	}
+	a.integrations.NeedsReconnect(ctx, id, nil)
+	login := connection{typ: "fake", name: "ada@example.com", secret: "token",
+		reconnect: func(*sql.Tx) (int64, string, error) { return id, "", nil }}
+	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
+		t.Fatalf("reconnect: %q, %v", msg, err)
+	}
+	if h := health(t, a, id); h.Failing || h.Reconnect || h.LastError != "" {
+		t.Fatalf("after reconnecting: %+v", h)
+	}
+	before := *calls
+	a.syncDue(ctx, a.Now())
+	if *calls != before+1 {
+		t.Fatal("a reconnect isn't due straight away")
+	}
+	login.reconnect = func(*sql.Tx) (int64, string, error) { return 0, "Wrong login.", nil }
+	if msg, _ := a.integrations.Connect(ctx, login); msg != "Wrong login." {
+		t.Fatalf("refused login: %q", msg)
+	}
+	login.reconnect = func(*sql.Tx) (int64, string, error) { return 0, "", nil }
+	login.sub = "bob"
+	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
+		t.Fatalf("new login: %q, %v", msg, err)
+	}
+	var n int
+	a.DB.QueryRow("SELECT count(*) FROM integrations WHERE type = 'fake' AND account_sub = 'bob' AND next_sync_at = ?", a.Now().Unix()).Scan(&n)
+	if n != 1 {
+		t.Fatal("a new login isn't due straight away")
+	}
+}
+
+func TestStatusesShowEveryIntegration(t *testing.T) {
+	a := household(t)
+	ctx := context.Background()
+	id, syncErr, _ := fake(t, a)
+	st, err := a.integrations.Statuses(ctx)
+	if err != nil || st[id].LastSuccess != "never" {
+		t.Fatalf("before a sync: %+v, %v", st[id], err)
+	}
+	a.integrations.Run(ctx, id) // a good sync at 09:00 UTC
+	if _, err := a.DB.Exec("UPDATE household_settings SET timezone = 'Europe/Paris'"); err != nil {
+		t.Fatal(err)
+	}
+	*syncErr = errors.New("boom")
+	a.integrations.Run(ctx, id)
+	st, _ = a.integrations.Statuses(ctx)
+	if got := st[id]; got.LastSuccess != "15 Mar 2026 10:00" || got.Failures != 1 || got.LastError != "boom" || got.Reconnect {
+		t.Fatalf("after a failure: %+v", got)
+	}
+	a.integrations.NeedsReconnect(ctx, id, nil)
+	if st, _ = a.integrations.Statuses(ctx); !st[id].Reconnect {
+		t.Fatal("not Reconnect needed")
 	}
 }

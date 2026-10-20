@@ -297,7 +297,7 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	key := strings.TrimSpace(r.PostFormValue("key"))
 	msg, err := a.integrations.Connect(r.Context(), connection{typ: immichType, name: "Immich", url: raw, secret: key,
-		missingSecret: "Paste an API key from Immich (Account Settings > API Keys).", cfg: immichConfig{URL: raw}, interval: immichRelist,
+		missingSecret: "Paste an API key from Immich (Account Settings > API Keys).", cfg: immichConfig{URL: raw}, interval: immichRelist, unique: true,
 		check: func(ctx context.Context) string {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
@@ -360,12 +360,11 @@ func (a *App) refreshImmich(w http.ResponseWriter, r *http.Request) {
 }
 
 // immichSettings is the Immich section of Settings; nil when not connected.
-func (a *App) immichSettings(ctx context.Context) (*web.Immich, error) {
+func (a *App) immichSettings(ctx context.Context, st map[int64]integrationStatus) (*web.Immich, error) {
 	var m web.Immich
 	var raw string
-	var ok sql.NullInt64
-	err := a.DB.QueryRowContext(ctx, `SELECT config_json, last_success_at, consecutive_failures, last_error FROM integrations WHERE type = ?`, immichType).
-		Scan(&raw, &ok, &m.Failures, &m.LastError)
+	var id int64
+	err := a.DB.QueryRowContext(ctx, `SELECT id, config_json FROM integrations WHERE type = ?`, immichType).Scan(&id, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -374,7 +373,8 @@ func (a *App) immichSettings(ctx context.Context) (*web.Immich, error) {
 	}
 	var cfg immichConfig
 	json.Unmarshal([]byte(raw), &cfg)
-	m.URL, m.LastSuccess = cfg.URL, a.lastSync(ctx, ok, a.clock(ctx))
+	x := st[id]
+	m.URL, m.Failures, m.LastError, m.LastSuccess = cfg.URL, x.Failures, x.LastError, x.LastSuccess
 	picked := map[string]bool{}
 	for _, id := range append(cfg.PickedAlbums, cfg.PickedPeople...) {
 		picked[id] = true

@@ -405,7 +405,7 @@ func (e googleEvent) change(zone string, home *time.Location) (c eventChange, ok
 // missed 3 times or needs a reconnect, and whether a view ending at end reaches
 // past the Google window while a Google calendar is shown.
 func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.StaleCalendar, beyond bool, err error) {
-	clock := a.clock(ctx)
+	loc, clock := a.location(ctx), a.clock(ctx)
 	rows, err := a.DB.QueryContext(ctx, `SELECT c.name, i.last_success_at, `+reconnectSQL("i")+`
 		FROM source_calendars c JOIN integrations i ON i.id = c.integration_id
 		WHERE c.enabled AND i.type != 'local' AND (`+reconnectSQL("i")+` OR `+downSQL("i")+`) ORDER BY c.name, c.id`)
@@ -419,7 +419,7 @@ func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.Stale
 		if err := rows.Scan(&s.Name, &ok, &s.Reconnect); err != nil {
 			return nil, false, err
 		}
-		s.LastUpdated = a.lastSync(ctx, ok, clock)
+		s.LastUpdated = lastSync(ok, loc, clock)
 		stale = append(stale, s)
 	}
 	if err := rows.Err(); err != nil {

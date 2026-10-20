@@ -17,7 +17,12 @@ func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
 	// Opening the lists pulls Mirrored lists on the next scheduler tick; the page never waits on Mealie.
 	// A live refresh isn't an open: a poll's own change would otherwise make the next poll due.
 	if !background(r) {
-		if _, err := a.DB.ExecContext(r.Context(), "UPDATE integrations SET next_sync_at = min(next_sync_at, ?) WHERE type = ?", a.Now().Unix(), mealieType); err != nil {
+		var id int64
+		err := a.DB.QueryRowContext(r.Context(), "SELECT id FROM integrations WHERE type = ?", mealieType).Scan(&id)
+		if err == nil {
+			err = a.integrations.PollSoon(r.Context(), id)
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			a.serverError(w, r, err)
 			return
 		}

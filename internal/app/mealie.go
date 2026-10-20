@@ -258,7 +258,7 @@ func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimRight(strings.TrimSpace(r.PostFormValue("url")), "/")
 	token := strings.TrimSpace(r.PostFormValue("token"))
 	msg, err := a.integrations.Connect(r.Context(), connection{typ: mealieType, name: "Mealie", url: raw, secret: token,
-		missingSecret: "Paste an API token from Mealie (Profile > API Tokens).", cfg: mealieConfig{URL: raw}, interval: mealiePoll,
+		missingSecret: "Paste an API token from Mealie (Profile > API Tokens).", cfg: mealieConfig{URL: raw}, interval: mealiePoll, unique: true,
 		check: func(ctx context.Context) string {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
@@ -299,12 +299,10 @@ func (a *App) hideMealieList(w http.ResponseWriter, r *http.Request) {
 }
 
 // mealieSettings is the Mealie section of Settings; nil when not connected.
-func (a *App) mealieSettings(ctx context.Context) (*web.Mealie, error) {
+func (a *App) mealieSettings(ctx context.Context, st map[int64]integrationStatus) (*web.Mealie, error) {
 	var m web.Mealie
 	var cfg string
-	var ok sql.NullInt64
-	err := a.DB.QueryRowContext(ctx, `SELECT id, config_json, last_success_at, consecutive_failures, last_error FROM integrations WHERE type = ?`, mealieType).
-		Scan(&m.ID, &cfg, &ok, &m.Failures, &m.LastError)
+	err := a.DB.QueryRowContext(ctx, `SELECT id, config_json FROM integrations WHERE type = ?`, mealieType).Scan(&m.ID, &cfg)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -313,7 +311,8 @@ func (a *App) mealieSettings(ctx context.Context) (*web.Mealie, error) {
 	}
 	var c mealieConfig
 	json.Unmarshal([]byte(cfg), &c)
-	m.URL, m.LastSuccess = c.URL, a.lastSync(ctx, ok, a.clock(ctx))
+	x := st[m.ID]
+	m.URL, m.Failures, m.LastError, m.LastSuccess = c.URL, x.Failures, x.LastError, x.LastSuccess
 	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, hidden FROM shopping_lists WHERE integration_id = ? ORDER BY position, id", m.ID)
 	if err != nil {
 		return nil, err
