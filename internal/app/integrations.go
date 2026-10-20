@@ -132,7 +132,8 @@ func (s *integrations) RecordFailure(ctx context.Context, id int64, err error) e
 	return rerr
 }
 
-// PollSoon makes integration id due on the next scheduler tick.
+// PollSoon makes integration id due on the next scheduler tick. It publishes
+// nothing: no page shows next_sync_at, and the sync publishes what it changes.
 func (s *integrations) PollSoon(ctx context.Context, id int64) error {
 	_, err := s.app.DB.ExecContext(ctx, "UPDATE integrations SET next_sync_at = min(next_sync_at, ?) WHERE id = ?", s.app.Now().Unix(), id)
 	return err
@@ -141,7 +142,7 @@ func (s *integrations) PollSoon(ctx context.Context, id int64) error {
 // NeedsReconnect marks integration id Reconnect needed, unless its
 // credentials are no longer sealed (reconnected meanwhile).
 func (s *integrations) NeedsReconnect(ctx context.Context, id int64, sealed []byte) error {
-	_, err := s.app.DB.ExecContext(ctx, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc IS ?", id, sealed)
+	_, err := s.app.exec(ctx, KindIntegration, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc IS ? AND status <> 'reconnect_needed'", id, sealed)
 	return err
 }
 
@@ -216,7 +217,8 @@ func (s *integrations) Connect(ctx context.Context, c connection) (msg string, e
 		cfgJSON, _ = json.Marshal(c.cfg)
 	}
 	var id int64
-	err = s.app.inTx(ctx, func(tx *sql.Tx) error {
+	changed := false // a refusal publishes nothing
+	err = s.app.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
 		if c.reconnect != nil {
 			var err error
 			if id, msg, err = c.reconnect(tx); err != nil || msg != "" {
@@ -245,11 +247,12 @@ func (s *integrations) Connect(ctx context.Context, c connection) (msg string, e
 				return err
 			}
 		}
+		changed = true
 		if c.then != nil {
 			return c.then(tx, id)
 		}
 		return nil
-	})
+	}, KindIntegration) // a reconnect resets its health, so its next good sync publishes nothing
 	if err != nil || msg != "" || c.reconnect != nil {
 		return msg, err
 	}

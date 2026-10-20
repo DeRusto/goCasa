@@ -307,3 +307,36 @@ func TestStatusesShowEveryIntegration(t *testing.T) {
 		t.Fatal("not Reconnect needed")
 	}
 }
+
+// published is the kinds the bus carried since ch subscribed, once nothing more comes.
+func published(ch chan Kind) []Kind {
+	var ks []Kind
+	for {
+		select {
+		case k := <-ch:
+			ks = append(ks, k)
+		case <-time.After(50 * time.Millisecond):
+			return ks
+		}
+	}
+}
+
+func TestReconnectNeededAndAReconnectReachOpenPages(t *testing.T) {
+	a := household(t)
+	ctx := context.Background()
+	id, _, _ := fake(t, a)
+	ch := a.Bus.subscribe()
+	defer a.Bus.unsubscribe(ch)
+	a.integrations.NeedsReconnect(ctx, id, nil)
+	if ks := published(ch); len(ks) != 1 || ks[0] != KindIntegration {
+		t.Fatalf("becoming Reconnect needed published %v", ks)
+	}
+	login := connection{typ: "fake", name: "ada@example.com", secret: "token",
+		reconnect: func(*sql.Tx) (int64, string, error) { return id, "", nil }}
+	if msg, err := a.integrations.Connect(ctx, login); msg != "" || err != nil {
+		t.Fatalf("reconnect: %q, %v", msg, err)
+	}
+	if ks := published(ch); len(ks) != 1 || ks[0] != KindIntegration {
+		t.Fatalf("a reconnect published %v", ks)
+	}
+}
