@@ -172,19 +172,23 @@ func conditions(code int) string {
 }
 
 // weatherSettings is the Weather section of Settings.
-func (a *App) weatherSettings(ctx context.Context) (web.Weather, error) {
+func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationStatus) (web.Weather, error) {
 	hh, err := a.household(ctx)
 	if err != nil {
 		return web.Weather{}, err
 	}
 	w := web.Weather{Units: hh.Units}
 	lat, lon := hh.WeatherLat, hh.WeatherLon
-	var ok sql.NullInt64
-	err = a.DB.QueryRowContext(ctx, "SELECT last_success_at, consecutive_failures, last_error FROM integrations WHERE type = ?", openMeteoType).Scan(&ok, &w.Failures, &w.LastError)
+	var id int64
+	err = a.DB.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ?", openMeteoType).Scan(&id)
 	if lat.Valid && lon.Valid {
 		w.Lat, w.Lon = strconv.FormatFloat(lat.Float64, 'f', -1, 64), strconv.FormatFloat(lon.Float64, 'f', -1, 64)
 	}
-	w.LastSuccess = a.lastSync(ctx, ok, a.clock(ctx))
+	x, ok := st[id]
+	if !ok {
+		x.LastSuccess = "never"
+	}
+	w.Failures, w.LastError, w.LastSuccess = x.Failures, x.LastError, x.LastSuccess
 	return w, err
 }
 

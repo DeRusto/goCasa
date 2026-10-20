@@ -153,63 +153,52 @@ func (a *App) googleCallback(w http.ResponseWriter, r *http.Request) {
 // "" to add one) with its calendars cals. msg refuses the login, for the person.
 func (a *App) storeGoogleAccount(ctx context.Context, account string, g googleGrant, cals []googleCalendar) (msg string, err error) {
 	tok, _ := json.Marshal(googleToken{RefreshToken: g.refresh})
-	enc, err := a.seal(tok)
-	if err != nil {
-		return "", err
-	}
-	err = a.inTx(ctx, func(tx *sql.Tx) error {
-		var id int64
-		if account != "" {
+	// A reconnect ends Reconnect needed and any backoff: sync straight away.
+	return a.integrations.Connect(ctx, connection{typ: googleType, name: g.email, secret: string(tok), interval: googleSyncInterval, sub: g.sub,
+		reconnect: func(tx *sql.Tx) (id int64, msg string, err error) {
+			if account == "" {
+				// Connecting a login that's already here reconnects it.
+				err = tx.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ? AND account_sub = ?", googleType, g.sub).Scan(&id)
+				if errors.Is(err, sql.ErrNoRows) {
+					return 0, "", nil
+				}
+				return id, "", err
+			}
 			var sub string
-			err := tx.QueryRowContext(ctx, "SELECT id, account_sub FROM integrations WHERE id = ? AND type = ?", account, googleType).Scan(&id, &sub)
+			err = tx.QueryRowContext(ctx, "SELECT id, account_sub FROM integrations WHERE id = ? AND type = ?", account, googleType).Scan(&id, &sub)
 			switch {
 			case errors.Is(err, sql.ErrNoRows):
-				msg = "That Google account was disconnected meanwhile. Connect it again as a new account."
-				return nil
+				return 0, "That Google account was disconnected meanwhile. Connect it again as a new account.", nil
 			case err != nil:
-				return err
+				return 0, "", err
 			case sub != g.sub:
-				msg = "That's a different Google account. Add it as a new connection instead."
-				return nil
+				return 0, "That's a different Google account. Add it as a new connection instead.", nil
 			}
-		} else {
-			// Connecting a login that's already here reconnects it.
-			err := tx.QueryRowContext(ctx, "SELECT id FROM integrations WHERE type = ? AND account_sub = ?", googleType, g.sub).Scan(&id)
-			if errors.Is(err, sql.ErrNoRows) {
-				err = tx.QueryRowContext(ctx, "INSERT INTO integrations (type, name, account_sub, sync_interval_seconds) VALUES (?, ?, ?, ?) RETURNING id", googleType, g.email, g.sub, googleSyncInterval).Scan(&id)
-			}
-			if err != nil {
-				return err
-			}
-		}
-		// A reconnect ends Reconnect needed and any backoff: sync straight away.
-		if _, err := tx.ExecContext(ctx, "UPDATE integrations SET name = ?, credentials_enc = ?, status = 'ok', consecutive_failures = 0, last_error = '', next_sync_at = ? WHERE id = ?",
-			g.email, enc, a.Now().Unix(), id); err != nil {
-			return err
-		}
-		for _, c := range cals {
-			name := []rune(strings.TrimSpace(c.SummaryOverride))
-			if len(name) == 0 {
-				name = []rune(strings.TrimSpace(c.Summary))
-			}
-			if len(name) == 0 {
-				name = []rune(c.ID)
-			}
-			color := strings.ToLower(c.BackgroundColor)
-			if !colorRE.MatchString(color) {
-				color = defaultGoogleColor
-			}
-			readOnly := c.AccessRole != "owner" && c.AccessRole != "writer"
-			// New calendars start hidden until an Admin picks them; known ones keep their Admin's choices but take Google's name, colour and access.
-			if _, err := tx.ExecContext(ctx, `INSERT INTO source_calendars (integration_id, external_id, name, color, enabled, read_only) VALUES (?, ?, ?, ?, 0, ?)
+			return id, "", nil
+		},
+		then: func(tx *sql.Tx, id int64) error {
+			for _, c := range cals {
+				name := []rune(strings.TrimSpace(c.SummaryOverride))
+				if len(name) == 0 {
+					name = []rune(strings.TrimSpace(c.Summary))
+				}
+				if len(name) == 0 {
+					name = []rune(c.ID)
+				}
+				color := strings.ToLower(c.BackgroundColor)
+				if !colorRE.MatchString(color) {
+					color = defaultGoogleColor
+				}
+				readOnly := c.AccessRole != "owner" && c.AccessRole != "writer"
+				// New calendars start hidden until an Admin picks them; known ones keep their Admin's choices but take Google's name, colour and access.
+				if _, err := tx.ExecContext(ctx, `INSERT INTO source_calendars (integration_id, external_id, name, color, enabled, read_only) VALUES (?, ?, ?, ?, 0, ?)
 				ON CONFLICT (integration_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, color = excluded.color, read_only = excluded.read_only`,
-				id, c.ID, string(name[:min(len(name), 50)]), color, readOnly); err != nil {
-				return err
+					id, c.ID, string(name[:min(len(name), 50)]), color, readOnly); err != nil {
+					return err
+				}
 			}
-		}
-		return nil
-	})
-	return msg, err
+			return nil
+		}})
 }
 
 // googleExchange trades a consent's code for tokens. The ID token comes
@@ -394,10 +383,9 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 }
 
 // googleSettings is the Google section of Settings.
-func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
+func (a *App) googleSettings(ctx context.Context, st map[int64]integrationStatus) (web.Google, error) {
 	g := web.Google{Configured: a.Config.GoogleClientID != "", RedirectURI: a.Config.GoogleRedirectURI}
-	clock := a.clock(ctx)
-	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, i.status = 'reconnect_needed', i.last_success_at, i.consecutive_failures, i.last_error, c.id, c.name, c.color, c.enabled, c.read_only,
+	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.id, c.name, c.color, c.enabled, c.read_only,
 			(SELECT json_group_array(member_id) FROM source_calendar_members WHERE calendar_id = c.id)
 		FROM integrations i LEFT JOIN source_calendars c ON c.integration_id = i.id
 		WHERE i.type = ? ORDER BY i.name, i.id, c.name, c.id`, googleType)
@@ -407,13 +395,14 @@ func (a *App) googleSettings(ctx context.Context) (web.Google, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var acct web.GoogleAccount
-		var calID, lastSuccess sql.NullInt64
+		var calID sql.NullInt64
 		var name, color, members sql.NullString
 		var enabled, readOnly sql.NullBool
-		if err := rows.Scan(&acct.ID, &acct.Email, &acct.Reconnect, &lastSuccess, &acct.Failures, &acct.LastError, &calID, &name, &color, &enabled, &readOnly, &members); err != nil {
+		if err := rows.Scan(&acct.ID, &acct.Email, &calID, &name, &color, &enabled, &readOnly, &members); err != nil {
 			return g, err
 		}
-		acct.LastSuccess = a.lastSync(ctx, lastSuccess, clock)
+		x := st[acct.ID]
+		acct.Reconnect, acct.Failures, acct.LastError, acct.LastSuccess = x.Reconnect, x.Failures, x.LastError, x.LastSuccess
 		if acct.Reconnect {
 			acct.Failures = 0 // Reconnect needed says why it isn't syncing
 		}
