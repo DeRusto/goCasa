@@ -146,11 +146,6 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	var l web.Locks
-	if err := a.DB.QueryRowContext(r.Context(), "SELECT lock_calendar, lock_chores, lock_todos FROM household_settings").Scan(&l.Calendar, &l.Chores, &l.Todos); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
 	fb, err := a.fallbackSettings(r.Context())
 	if err != nil {
 		a.serverError(w, r, err)
@@ -161,7 +156,7 @@ func (a *App) settingsPage(w http.ResponseWriter, r *http.Request, status int, e
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.Settings(ms, l, secs, fb, hh, errMsg))
+	a.render(w, r, status, web.Settings(ms, hh.Locks, secs, fb, hh.Household, errMsg))
 }
 
 // saveLocks sets the Locks from the Settings checkboxes; it sits behind requireUnlock.
@@ -178,14 +173,15 @@ func (a *App) saveLocks(w http.ResponseWriter, r *http.Request) {
 // requireLock wraps an action behind the Lock in column: while that Lock is on,
 // a locked device goes to the PIN pad. One unlock covers every Lock (spec §9).
 func (a *App) requireLock(column string, h http.HandlerFunc) http.HandlerFunc {
+	Household{}.Lock(column) // an unknown Lock panics at startup, not per request
 	return func(w http.ResponseWriter, r *http.Request) {
 		if unlockedAdmin(r.Context()) == 0 {
-			var on bool
-			if err := a.DB.QueryRowContext(r.Context(), "SELECT "+column+" FROM household_settings").Scan(&on); err != nil {
+			hh, err := a.household(r.Context())
+			if err != nil {
 				a.serverError(w, r, err)
 				return
 			}
-			if on {
+			if hh.Lock(column) {
 				toLock(w, r)
 				return
 			}

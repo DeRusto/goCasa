@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/config"
@@ -56,6 +57,8 @@ type App struct {
 
 	folderMu      sync.Mutex
 	folderScanned time.Time // the Fallback folder's last scan
+
+	householdReads atomic.Int64 // queries on household_settings, for a test
 }
 
 // New opens DATA_DIR/app.db, runs migrations and builds the handler.
@@ -204,7 +207,7 @@ func (a *App) routes() http.Handler {
 	if err := csrf.AddTrustedOrigin(a.Config.BaseURL.Scheme + "://" + a.Config.BaseURL.Host); err != nil {
 		panic(err) // BASE_URL is validated by config.Load
 	}
-	return csrf.Handler(a.withUnlock(mux))
+	return csrf.Handler(a.withUnlock(a.withHousehold(mux)))
 }
 
 func (a *App) healthz(w http.ResponseWriter, r *http.Request) {
