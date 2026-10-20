@@ -207,6 +207,29 @@ func TestAChainedCopyCannotBeDeletedOrEdited(t *testing.T) {
 	}
 }
 
+// An edit that keeps a clamped copy's due date and repeat keeps its month-end
+// anchor; one that moves the due date anchors there instead.
+func TestEditingAClampedCopyKeepsItsAnchor(t *testing.T) {
+	m, ctx := board(t), context.Background()
+	monthly := todoRepeat{Freq: "monthly", Interval: 1} // as the form sends it
+	id, _ := m.Create(ctx, web.Todo{ColumnID: 1, Title: "Rent", Due: "2026-03-31"}, monthly)
+	next := complete(t, m, id) // due 2026-04-30
+	if err := m.Edit(ctx, next, web.Todo{ColumnID: 1, Title: "Pay rent", Due: "2026-04-30"}, monthly); err != nil {
+		t.Fatal(err)
+	}
+	next = complete(t, m, next)
+	if got := open(t, m); !slices.Equal(got, []string{"Pay rent 2026-05-31"}) {
+		t.Errorf("after a title-only edit, open = %q", got)
+	}
+	if err := m.Edit(ctx, next, web.Todo{ColumnID: 1, Title: "Pay rent", Due: "2026-05-15"}, monthly); err != nil {
+		t.Fatal(err)
+	}
+	complete(t, m, next)
+	if got := open(t, m); !slices.Equal(got, []string{"Pay rent 2026-06-15"}) {
+		t.Errorf("after moving the due date, open = %q", got)
+	}
+}
+
 func TestOperationsOnAMissingToDo(t *testing.T) {
 	m, ctx := board(t), context.Background()
 	_, complete := m.Complete(ctx, 99)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,14 @@ func (m todos) Edit(ctx context.Context, id int64, t web.Todo, p todoRepeat) err
 	return m.inTx(ctx, func(tx *sql.Tx) error {
 		if err := columnExists(ctx, tx, t.ColumnID); err != nil {
 			return err
+		}
+		// The form has no anchor: an edit keeping the due date and repeat keeps the stored one.
+		var rule, due string
+		if err := tx.QueryRowContext(ctx, "SELECT coalesce(repeat_rule, ''), coalesce(due_date, '') FROM todos WHERE id = ?", id).Scan(&rule, &due); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if old := decodeRepeat(rule); due == t.Due && old.Freq == p.Freq && old.Interval == p.Interval && slices.Equal(old.ByDay, p.ByDay) {
+			p.anchor = old.anchor
 		}
 		res, err := tx.ExecContext(ctx, `UPDATE todos SET title = ?, notes = ?, due_date = ?,
 			position = CASE WHEN column_id = ? THEN position ELSE `+appendPosition+` END,
