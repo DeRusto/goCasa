@@ -46,7 +46,7 @@ func deg(n int) string { return strconv.Itoa(n) + "°" }
 
 templ weatherPill() {
 	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
-		<aside class="weather-pill" aria-label="Weather" style="display:inline-block;padding:.2em .8em;border-radius:1em;background:#e5e7eb;color:#111">
+		<aside aria-label="Weather" class="ml-auto rounded-full bg-soft px-4 py-1.5 text-lg tabular-nums">
 			{ deg(p.Current) + p.Unit }
 			if p.HasToday {
 				· H { deg(p.High) } L { deg(p.Low) }

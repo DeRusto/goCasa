@@ -47,27 +47,27 @@ func schedule(c Chore) string {
 // choreRounds is a Chore's claimable Rounds as avatar taps; next is the page to return to.
 templ choreRounds(c Chore, next string) {
 	for _, rd := range c.Rounds {
-		<div class="round" data-round={ rd.Start }>
+		<div class={ "round flex flex-wrap items-center gap-2 rounded-[10px] bg-soft px-2.5 py-2", templ.KV("outline-2 outline-late", rd.Late) } data-round={ rd.Start }>
 			if rd.Late {
-				<strong>Late</strong> ({ rd.Start })
+				<span><strong>Late</strong> <span class="text-muted">({ rd.Start })</span></span>
 			}
 			for _, t := range rd.Taps {
 				if t.CompletionID == 0 {
-					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/complete") } style="display:inline">
+					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/complete") } class="contents">
 						<input type="hidden" name="member_id" value={ id(t.Member.ID) }/>
 						<input type="hidden" name="round" value={ rd.Start }/>
 						<input type="hidden" name="next" value={ next }/>
-						<button aria-label={ "Complete " + c.Name + " for " + t.Member.Name }>
+						<button aria-label={ "Complete " + c.Name + " for " + t.Member.Name } class="flex items-center gap-2 rounded-full py-1 pr-4 pl-1">
 							@avatar(t.Member)
 							{ t.Member.Name }
 						</button>
 					</form>
 				} else {
-					<span class="done">
+					<span class="done flex items-center gap-2 line-through opacity-45">
 						@avatar(t.Member)
 						{ t.Member.Name } done
 					</span>
-					<form method="post" action={ templ.SafeURL("/chores/completions/" + id(t.CompletionID) + "/delete") } style="display:inline">
+					<form method="post" action={ templ.SafeURL("/chores/completions/" + id(t.CompletionID) + "/delete") } class="contents">
 						<input type="hidden" name="next" value={ next }/>
 						<button>Undo</button>
 					</form>

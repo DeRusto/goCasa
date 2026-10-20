@@ -69,9 +69,9 @@ func Initials(name string) string {
 
 templ avatar(m Member) {
 	if m.HasAvatar {
-		<img class="avatar" src={ "/members/" + strconv.FormatInt(m.ID, 10) + "/avatar" } alt="" style="width:2.5em;height:2.5em;border-radius:50%;vertical-align:middle"/>
+		<img class="avatar inline-block size-10 flex-none rounded-full object-cover align-middle" src={ "/members/" + strconv.FormatInt(m.ID, 10) + "/avatar" } alt=""/>
 	} else {
-		<span class="avatar" style={ "display:inline-flex;align-items:center;justify-content:center;width:2.5em;height:2.5em;border-radius:50%;color:#fff;font-weight:bold;background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
+		<span class="avatar inline-grid size-10 flex-none place-items-center rounded-full text-sm font-bold text-white" style={ "background:" + m.Color } aria-hidden="true">{ Initials(m.Name) }</span>
 	}
 }
 

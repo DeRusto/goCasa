@@ -93,7 +93,10 @@ Reaching GoCasa from outside your home network is out of scope. That is your hom
 ```sh
 go test ./...
 go tool templ generate   # after editing any .templ file; *_templ.go is committed
+go generate ./internal/web   # templ, then Tailwind: after changing classes; static/app.css is committed
 go run ./cmd/gocasa      # needs the env vars above, e.g. DATA_DIR=./data
 ```
+
+Styling is Tailwind v4 (`internal/web/input.css`), built by its standalone CLI so there's no Node. Put the [v4.3.3 binary](https://github.com/tailwindlabs/tailwindcss/releases/tag/v4.3.3) for your platform on your PATH as `tailwindcss`. Only changing classes needs it: builds and Docker use the committed `app.css`.
 
 Tests build the real app through `internal/apptest`: a temp SQLite file, a fake clock, fake upstream URLs and `RunDue` to run scheduled work on demand.

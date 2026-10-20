@@ -2,6 +2,8 @@ package web
 
 import (
 	"cmp"
+	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +27,15 @@ type CalendarEvent struct {
 	Synced   bool     // from Google: links to its Members
 	Past     bool     // over already; only Today greys these
 	End      int64    // a timed event's end, unix ms, for the browser to grey it then; 0 all-day
+	Members  []int64  // in Colors' order; none for a calendar's own colour
+
+	// Where the time grid draws it: minutes past this day's midnight, clipped to the day,
+	// and its Lane of Lanes among the events it overlaps.
+	AllDay          bool
+	From, To        int
+	Lane, Lanes     int
+	ContinuesBefore bool // all-day, from an earlier day
+	ContinuesAfter  bool // all-day, into a later day
 }
 
 // StaleCalendar is a shown calendar that isn't syncing.
@@ -57,6 +68,8 @@ type CalendarPage struct {
 	Members           []Member
 	Calendars         []CalendarInfo
 	Prev, Next, Today string
+	Clock24           bool
+	NowMin            int // minutes past the household's midnight, for the time grid's now line
 	ViewLinks         map[string]string
 	DefaultView       string // this view and Member filter, at today
 	ICS               string // the absolute ICS export URL, for all calendars
@@ -130,145 +143,422 @@ templ swatches(colors []string) {
 	}
 }
 
+// pastel is colour c blended into the card, so a Member's strong colour reads as
+// a pastel in either theme.
+func pastel(c string) string { return "color-mix(in oklab, " + c + " 30%, var(--color-card))" }
+
+// eventFill is an event's background: its colour's pastel, or diagonal stripes of
+// each colour's for several. Colours are #rrggbb (the database checks), so the CSS is safe.
+func eventFill(colors []string) templ.SafeCSS {
+	switch len(colors) {
+	case 0:
+		return "background:var(--color-soft);"
+	case 1:
+		return templ.SafeCSS("background:" + pastel(colors[0]) + ";")
+	}
+	var b strings.Builder
+	for i, c := range colors {
+		fmt.Fprintf(&b, ", %s %dpx %dpx", pastel(c), i*16, (i+1)*16)
+	}
+	return templ.SafeCSS("background:repeating-linear-gradient(135deg" + b.String() + ");")
+}
+
 templ calendarDay(d CalendarDay, heading string) {
-	<section data-date={ d.Date.Format("2006-01-02") } style={ templ.KV("opacity:.5", d.Faded) }>
-		<h3>
+	<section data-date={ d.Date.Format("2006-01-02") } class={ templ.KV("opacity-50", d.Faded) }>
+		<h3 class="flex items-center justify-between gap-2">
 			if d.Today {
-				<strong>{ heading }</strong>
+				<strong class="text-accent">{ heading }</strong>
 			} else {
 				{ heading }
 			}
+			<a href={ newEventURL(d.Date) } aria-label={ "New event on " + d.Date.Format("2 January") } class="grid size-11 place-items-center rounded-full text-2xl font-normal text-muted no-underline hover:bg-soft hover:no-underline">+</a>
 		</h3>
-		<ul>
+		<ul class="flex flex-col gap-1.5">
 			for _, e := range d.Events {
 				<li
-					class={ templ.KV("past", e.Past) }
-					style={ templ.KV("opacity:.5", e.Past) }
+					class={ "flex rounded-lg px-3 py-2", templ.KV("past", e.Past) }
+					style={ eventFill(e.Colors) }
 					if e.End != 0 {
 						data-end={ strconv.FormatInt(e.End, 10) }
 					}
 				>
-					@swatches(e.Colors)
 					if e.Synced {
-						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google">{ e.Time } { e.Title }</a>
+						<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google" class={ eventText }>@eventLabel(e)</a>
 					} else if e.ReadOnly {
-						<span title="From a calendar feed: read-only">{ e.Time } { e.Title }</span>
+						<span title="From a calendar feed: read-only" class={ eventText }>@eventLabel(e)</span>
 					} else {
-						<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) }>{ e.Time } { e.Title }</a>
+						<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) } class={ eventText }>@eventLabel(e)</a>
 					}
 				</li>
 			}
 		</ul>
-		<a href={ newEventURL(d.Date) } aria-label={ "New event on " + d.Date.Format("2 January") }>+</a>
 	</section>
+}
+
+const eventText = "flex flex-1 flex-wrap gap-x-2.5 text-ink no-underline"
+
+templ eventLabel(e CalendarEvent) {
+	<span class="w-28 flex-none text-muted tabular-nums">{ e.Time }</span> <span>{ e.Title }</span>
 }
 
 // Calendar is the main calendar page in one of its four views.
 templ Calendar(p CalendarPage) {
-	@layout("Calendar") {
-		<main>
-			<h1>{ calendarTitle(p) }</h1>
-			<nav>
-				<a href={ templ.SafeURL(p.Prev) }>Previous</a>
-				<a href={ templ.SafeURL(p.Today) }>Today</a>
-				<a href={ templ.SafeURL(p.Next) }>Next</a>
-				|
-				for _, v := range []string{"month", "week", "day", "agenda"} {
-					<a
-						href={ templ.SafeURL(p.ViewLinks[v]) }
-						if v == p.View {
-							aria-current="page"
-						}
-					>{ v }</a>
-				}
-				|
-				<a href={ newEventURL(p.Date) }>New event</a>
-			</nav>
-			@defaultViewButton(p.DefaultView)
-			<form method="post" action="/calendar/sync">
-				<input type="hidden" name="back" value={ p.ViewLinks[p.View] }/>
-				<button>Sync now</button>
-			</form>
-			<form method="get" action="/calendar">
-				<input type="hidden" name="view" value={ p.View }/>
-				<input type="hidden" name="date" value={ p.Date.Format("2006-01-02") }/>
-				<fieldset>
-					<legend>Show Members (Household events always show)</legend>
-					for _, m := range p.Members {
-						<label>
-							<input type="checkbox" name="users" value={ id(m.ID) } checked?={ p.Users[m.ID] }/>
-							@avatar(m)
-							{ m.Name }
-						</label>
-					}
-					<button>Filter</button>
-				</fieldset>
-			</form>
-			<div id="live" { live(KindEvent, KindMember, KindHousehold, KindIntegration)... }>
-				for _, s := range p.Stale {
-					<p role="status">
-						{ s.Name }: last updated { s.LastUpdated }.
-						if s.Reconnect {
-							Reconnect needed: an Admin reconnects its Google account in Settings.
-						} else {
-							Syncing keeps failing; Settings has the details.
-						}
-					</p>
-				}
-				if p.BeyondGoogle {
-					<p role="status">Google events more than 12 months ahead aren't shown.</p>
-				}
-				if p.View == "month" {
-					<table>
-						<thead>
-							<tr>
-								for _, d := range p.Days[:7] {
-									<th>{ d.Date.Format("Mon") }</th>
-								}
-							</tr>
-						</thead>
-						<tbody>
-							for w := 0; w < len(p.Days); w += 7 {
-								<tr>
-									for _, d := range p.Days[w : w+7] {
-										<td style="vertical-align:top">
-											@calendarDay(d, d.Date.Format("2"))
-										</td>
-									}
-								</tr>
-							}
-						</tbody>
-					</table>
-				} else {
-					for _, d := range p.Days {
-						@calendarDay(d, d.Date.Format("Monday 2 January"))
-					}
-					if len(p.Days) == 0 {
-						<p>Nothing on the calendar for these days.</p>
-					}
-				}
-				<h2>Calendars</h2>
-				<ul>
-					for _, c := range p.Calendars {
-						<li>
-							@swatches([]string{c.Color})
-							{ c.Name }
-							<a href={ templ.SafeURL(p.ICS + "?calendars=" + strconv.FormatInt(c.ID, 10)) }>ICS</a>
-						</li>
-					}
-				</ul>
-				if len(p.Calendars) > 0 {
-					<p>Subscribe to every calendar: <a href={ templ.SafeURL(p.ICS) }>{ p.ICS }</a></p>
-				}
+	@page("Calendar", false) {
+		<main class="h-[calc(100dvh-4rem)] min-[760px]:h-dvh">
+			<div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2">
+				<h1 class="text-3xl font-normal">{ calendarTitle(p) }</h1>
+				@weatherPill()
 			</div>
-			<form method="post" action="/calendar/calendars">
-				<label>Name <input name="name" required maxlength="50"/></label>
-				<label>Colour <input type="color" name="color" value="#a855f7"/></label>
-				<button>Add calendar</button>
-			</form>
+			<div class="flex flex-none flex-wrap items-center gap-2">
+				<nav class="flex gap-1">
+					<a href={ templ.SafeURL(p.Prev) } class={ chip } aria-label="Previous">‹</a>
+					<a href={ templ.SafeURL(p.Today) } class={ chip }>Today</a>
+					<a href={ templ.SafeURL(p.Next) } class={ chip } aria-label="Next">›</a>
+				</nav>
+				<nav class="flex rounded-full border border-line bg-card p-1">
+					for _, v := range []string{"month", "week", "day", "agenda"} {
+						<a
+							href={ templ.SafeURL(p.ViewLinks[v]) }
+							if v == p.View {
+								aria-current="page"
+							}
+							class="flex min-h-10 items-center rounded-full px-4 text-ink capitalize no-underline hover:no-underline aria-[current=page]:bg-accent-soft"
+						>{ v }</a>
+					}
+				</nav>
+				<form method="get" action="/calendar" class="flex flex-wrap items-center gap-2" onchange="this.requestSubmit()">
+					<input type="hidden" name="view" value={ p.View }/>
+					<input type="hidden" name="date" value={ p.Date.Format("2006-01-02") }/>
+					<fieldset class="contents">
+						<legend class="sr-only">Show Members (Household events always show)</legend>
+						for _, m := range p.Members {
+							<label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line py-1 pr-4 pl-1 [&_.avatar]:size-8 has-[:checked]:border-transparent has-[:checked]:bg-(--chip) has-[:focus-visible]:outline-2" style={ templ.SafeCSS("--chip:" + pastel(m.Color) + ";") }>
+								<input type="checkbox" name="users" value={ id(m.ID) } checked?={ p.Users[m.ID] } class="sr-only"/>
+								@avatar(m)
+								{ m.Name }
+							</label>
+						}
+						<button class="sr-only">Filter</button>
+					</fieldset>
+				</form>
+				<button popovertarget="calendar-menu" aria-label="Calendar settings" class="ml-auto grid size-11 place-items-center rounded-full p-0">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true">
+						@templ.Raw(navPages[len(navPages)-1].Icon)
+					</svg>
+				</button>
+			</div>
+			// The header above stays put; this scrolls, and keeps its place across live refetches of #live.
+			<div class="relative -mx-5 -mb-5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5" data-scroll>
+				<div id="live" { live(KindEvent, KindMember, KindHousehold, KindIntegration)... } class={ "flex flex-col gap-4", templ.KV("h-full", p.View == "month") }>
+					for _, s := range p.Stale {
+						<p role="status">
+							{ s.Name }: last updated { s.LastUpdated }.
+							if s.Reconnect {
+								Reconnect needed: an Admin reconnects its Google account in Settings.
+							} else {
+								Syncing keeps failing; Settings has the details.
+							}
+						</p>
+					}
+					if p.BeyondGoogle {
+						<p role="status">Google events more than 12 months ahead aren't shown.</p>
+					}
+					switch p.View {
+						case "month":
+							<table class="card grid h-full min-h-[36rem] grid-cols-7 auto-rows-[minmax(0,1fr)] grid-rows-[auto] p-0 [&_tbody]:contents [&_thead]:contents [&_tr]:contents">
+								<thead>
+									<tr>
+										for _, d := range p.Days[:7] {
+											<th>{ d.Date.Format("Mon") }</th>
+										}
+									</tr>
+								</thead>
+								<tbody>
+									for w := 0; w < len(p.Days); w += 7 {
+										<tr>
+											for _, d := range p.Days[w : w+7] {
+												<td class="min-h-0 overflow-hidden border-t border-l border-line p-1.5 [&:nth-child(7n+1)]:border-l-0">
+													@monthDay(d, dayURL(p, d.Date))
+												</td>
+											}
+										</tr>
+									}
+								</tbody>
+							</table>
+						case "agenda":
+							<div class="card flex flex-col gap-5">
+								for _, d := range p.Days {
+									@calendarDay(d, d.Date.Format("Monday 2 January"))
+								}
+								if len(p.Days) == 0 {
+									<p class="text-muted">Nothing on the calendar for these days.</p>
+								}
+							</div>
+						default:
+							@timeGrid(p)
+					}
+				</div>
+			</div>
+			<div id="calendar-menu" popover class="inset-auto top-32 right-6 m-0 w-96 max-w-[calc(100vw-2rem)] flex-col gap-4 rounded-[14px] border border-line bg-card p-4 text-ink shadow-xl [&:popover-open]:flex">
+				<div class="flex flex-wrap gap-2">
+					<form method="post" action="/calendar/sync">
+						<input type="hidden" name="back" value={ p.ViewLinks[p.View] }/>
+						<button>Sync now</button>
+					</form>
+					@defaultViewButton(p.DefaultView)
+				</div>
+				<section class="flex flex-col gap-2">
+					<h2>Calendars</h2>
+					<ul class="flex flex-col gap-1">
+						for _, c := range p.Calendars {
+							<li class="flex items-center gap-2">
+								@swatches([]string{c.Color})
+								{ c.Name }
+								<a href={ templ.SafeURL(p.ICS + "?calendars=" + strconv.FormatInt(c.ID, 10)) } class="ml-auto">ICS</a>
+							</li>
+						}
+					</ul>
+					if len(p.Calendars) > 0 {
+						<p class="text-sm break-all">Subscribe to every calendar: <a href={ templ.SafeURL(p.ICS) }>{ p.ICS }</a></p>
+					}
+				</section>
+				<form method="post" action="/calendar/calendars" class="flex flex-wrap items-end gap-2">
+					<label>Name <input name="name" required maxlength="50" class="w-40"/></label>
+					<label>Colour <input type="color" name="color" value="#a855f7" class="w-14 px-1"/></label>
+					<button>Add calendar</button>
+				</form>
+			</div>
+			<a href={ newEventURL(p.Date) } class="fixed right-6 bottom-20 z-30 grid size-16 place-items-center rounded-full bg-accent text-4xl font-light text-on-accent no-underline shadow-lg hover:no-underline min-[760px]:bottom-6">
+				<span aria-hidden="true">+</span>
+				<span class="sr-only">New event</span>
+			</a>
 		</main>
 		@liveDrafts()
+		@timeGridScript()
 	}
+}
+
+const chip = "flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-card px-4 text-xl text-ink no-underline hover:bg-soft hover:no-underline"
+
+// monthShown is how many events a month day lists before "+N more".
+const monthShown = 3
+
+// monthDay is a day of the month view: a few one-line events, the rest behind a
+// link to its day, so every day stays its box's size and the month fits a screen.
+templ monthDay(d CalendarDay, more string) {
+	<section data-date={ d.Date.Format("2006-01-02") } class={ "flex h-full flex-col gap-0.5 text-sm", templ.KV("opacity-50", d.Faded) }>
+		<h3 class="flex items-center justify-between font-normal">
+			if d.Today {
+				<strong class="grid size-7 place-items-center rounded-full bg-now text-white">{ d.Date.Format("2") }</strong>
+			} else {
+				<span class="grid size-7 place-items-center">{ d.Date.Format("2") }</span>
+			}
+			<a href={ newEventURL(d.Date) } aria-label={ "New event on " + d.Date.Format("2 January") } class="grid size-7 place-items-center rounded-full text-lg text-muted no-underline hover:bg-soft hover:no-underline">+</a>
+		</h3>
+		<ul class="flex min-h-0 flex-col gap-0.5">
+			for i, e := range d.Events {
+				if i < monthShown {
+					<li class="flex">
+						@eventLink(e, "flex min-w-0 flex-1 gap-1.5 truncate rounded-md px-1.5 py-0.5 text-ink no-underline hover:no-underline") {
+							<span class="sr-only">{ e.Time }</span> <span class="truncate">{ e.Title }</span>
+							<span aria-hidden="true" class="order-first text-muted tabular-nums empty:hidden">{ startLabel(e) }</span>
+						}
+					</li>
+				}
+			}
+		</ul>
+		if n := len(d.Events) - monthShown; n > 0 {
+			<a href={ templ.SafeURL(more) } class="mt-auto px-1.5 text-xs text-muted">+{ strconv.Itoa(n) } more</a>
+		}
+	</section>
+}
+
+// startLabel is a timed event's start as its Time shows it; "" all-day or from an earlier day.
+func startLabel(e CalendarEvent) string {
+	if e.AllDay {
+		return ""
+	}
+	start, _, _ := strings.Cut(e.Time, "–")
+	return strings.TrimSuffix(start, "…")
+}
+
+// dayURL is the day view of d, keeping the page's Member filter.
+func dayURL(p CalendarPage, d time.Time) string {
+	u, err := url.Parse(p.ViewLinks["day"])
+	if err != nil {
+		return p.ViewLinks["day"]
+	}
+	q := u.Query()
+	q.Set("date", d.Format("2006-01-02"))
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// hourRem is each hour's height on the time grid.
+const hourRem = 5.0
+
+func remAt(min int) string { return strconv.FormatFloat(float64(min)*hourRem/60, 'f', 3, 64) + "rem" }
+
+// blockStyle places a timed event on its day's column: by its minutes down, and
+// across by its Lane, with a floor so a short event stays readable.
+func blockStyle(e CalendarEvent) templ.SafeCSS {
+	lanes := max(e.Lanes, 1)
+	return templ.SafeCSS(fmt.Sprintf("top:%s;height:max(%s,1.75rem);left:%.4f%%;width:%.4f%%;",
+		remAt(e.From), remAt(e.To-e.From), 100*float64(e.Lane)/float64(lanes), 100/float64(lanes)))
+}
+
+// allDayRows makes every day column's header as tall as the one with the most all-day events.
+func allDayRows(days []CalendarDay) templ.SafeCSS {
+	most := 0
+	for _, d := range days {
+		n := 0
+		for _, e := range d.Events {
+			if e.AllDay {
+				n++
+			}
+		}
+		most = max(most, n)
+	}
+	return templ.SafeCSS(fmt.Sprintf("min-height:calc(3.5rem + %d * 2rem);", most))
+}
+
+func hourLabel(h int, clock24 bool) string {
+	if clock24 {
+		return fmt.Sprintf("%02d:00", h)
+	}
+	return time.Date(0, 1, 1, h, 0, 0, 0, time.UTC).Format("3 PM")
+}
+
+func memberIndex(ms []Member) map[int64]Member {
+	idx := make(map[int64]Member, len(ms))
+	for _, m := range ms {
+		idx[m.ID] = m
+	}
+	return idx
+}
+
+// timeGrid is the week and day views: a column per day, all-day events across the
+// top and timed events placed by the clock, with a line at now on today.
+// shortcut: a multi-day bar can sit on a different row on each day when the days'
+// other all-day events differ; give all-day events fixed rows if that bites.
+templ timeGrid(p CalendarPage) {
+	{{ members := memberIndex(p.Members) }}
+	<div class="card flex p-0 max-[760px]:overflow-x-auto">
+		<div class="w-16 flex-none">
+			<div class="sticky top-0 z-10 rounded-tl-[14px] border-b border-line bg-card" style={ allDayRows(p.Days) }></div>
+			<div class="relative" style={ templ.SafeCSS("height:" + remAt(24*60) + ";") }>
+				for h := 1; h < 24; h++ {
+					<span class="absolute right-2 -translate-y-1/2 text-xs whitespace-nowrap text-muted" style={ templ.SafeCSS("top:" + remAt(h*60) + ";") }>{ hourLabel(h, p.Clock24) }</span>
+				}
+			</div>
+		</div>
+		for _, d := range p.Days {
+			<section data-date={ d.Date.Format("2006-01-02") } class="min-w-28 flex-1 border-l border-line">
+				<div class="sticky top-0 z-10 flex flex-col gap-1 border-b border-line bg-card px-2 py-2" style={ allDayRows(p.Days) }>
+					<h3 class="flex items-center gap-2 text-xl font-normal">
+						{ d.Date.Format("Mon") }
+						if d.Today {
+							<span class="grid size-8 place-items-center rounded-full bg-now text-base font-semibold text-white">{ d.Date.Format("2") }</span>
+						} else {
+							{ d.Date.Format("2") }
+						}
+					</h3>
+					<ul class="flex flex-col gap-1">
+						for _, e := range d.Events {
+							if e.AllDay {
+								<li class={ "flex", templ.KV("-ml-2", e.ContinuesBefore), templ.KV("-mr-2", e.ContinuesAfter) }>
+									@eventLink(e, "flex-1 truncate px-2 py-0.5 text-sm text-ink no-underline hover:no-underline "+allDayEnds(e)) {
+										<span class="sr-only">{ e.Time }</span> <span>{ e.Title }</span>
+									}
+								</li>
+							}
+						}
+					</ul>
+				</div>
+				<ul class="relative bg-[repeating-linear-gradient(to_bottom,transparent_0_calc(5rem-1px),var(--color-line)_calc(5rem-1px)_5rem)]" style={ templ.SafeCSS("height:" + remAt(24*60) + ";") } data-grid-body>
+					for _, e := range d.Events {
+						if !e.AllDay {
+							<li class="absolute p-0.5" style={ blockStyle(e) }>
+								@eventLink(e, "flex h-full flex-col gap-0.5 overflow-hidden rounded-xl px-2.5 py-1.5 text-sm text-ink no-underline shadow-sm hover:no-underline") {
+									<span class="order-2 text-muted tabular-nums">{ e.Time }</span> <span class="font-medium">{ e.Title }</span>
+									if len(e.Members) > 0 {
+										<span class="order-3 mt-auto flex justify-end -space-x-1.5 [&_.avatar]:size-6 [&_.avatar]:text-[10px] [&_.avatar]:ring-2 [&_.avatar]:ring-card">
+											for i, mid := range e.Members {
+												if m, ok := members[mid]; ok && i < 3 {
+													@avatar(m)
+												}
+											}
+											if len(e.Members) > 3 {
+												<span class="grid size-6 place-items-center rounded-full bg-card text-[10px] font-semibold">+{ strconv.Itoa(len(e.Members) - 3) }</span>
+											}
+										</span>
+									}
+								}
+							</li>
+						}
+					}
+					if d.Today {
+						<li id="now-line" class="pointer-events-none absolute inset-x-0 z-[5] h-0.5 bg-now before:absolute before:-top-1 before:-left-1 before:size-2.5 before:rounded-full before:bg-now" style={ templ.SafeCSS("top:" + remAt(p.NowMin) + ";") } data-min={ strconv.Itoa(p.NowMin) } aria-hidden="true"></li>
+					}
+				</ul>
+			</section>
+		}
+	</div>
+}
+
+// allDayEnds rounds an all-day bar only where it starts and ends, so a multi-day
+// event reads as one bar across the days.
+func allDayEnds(e CalendarEvent) string {
+	switch {
+	case e.ContinuesBefore && e.ContinuesAfter:
+		return ""
+	case e.ContinuesBefore:
+		return "rounded-r-lg"
+	case e.ContinuesAfter:
+		return "rounded-l-lg"
+	}
+	return "rounded-lg"
+}
+
+// eventLink is an event's link to its edit page (or its Members, from Google),
+// or plain text for a read-only feed event, filled with its colours; class styles it.
+templ eventLink(e CalendarEvent, class string) {
+	if e.Synced {
+		<a href={ templ.SafeURL("/calendar/synced/" + id(e.ID)) } title="From Google" class={ class } style={ eventFill(e.Colors) }>
+			{ children... }
+		</a>
+	} else if e.ReadOnly {
+		<span title="From a calendar feed: read-only" class={ class } style={ eventFill(e.Colors) }>
+			{ children... }
+		</span>
+	} else {
+		<a href={ templ.SafeURL("/calendar/event/" + id(e.ID) + occurrenceQuery(e.Original)) } class={ class } style={ eventFill(e.Colors) }>
+			{ children... }
+		</a>
+	}
+}
+
+// timeGridScript scrolls the time grid's area once, to an hour before now (7am on
+// another week), and moves the now line each minute between refetches.
+templ timeGridScript() {
+	<script>
+	(() => {
+		const body = document.querySelector("[data-grid-body]");
+		if (!body) return;
+		const first = document.getElementById("now-line");
+		const from = first ? Math.max(Number(first.dataset.min) - 60, 0) : 7 * 60;
+		const scroller = body.closest("[data-scroll]");
+		scroller.scrollTop = body.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop + from * body.offsetHeight / (24 * 60) - 120;
+		let seen = first, at = Date.now();
+		setInterval(() => {
+			const line = document.getElementById("now-line");
+			if (!line) return;
+			if (line !== seen) { seen = line; at = Date.now(); }
+			const min = Math.min(Number(line.dataset.min) + (Date.now() - at) / 6e4, 24 * 60); // ms to minutes
+			line.style.top = min * line.parentElement.offsetHeight / (24 * 60) + "px";
+		}, 60000);
+	})();
+	</script>
 }
 
 // live makes a page's #live region refetch the page and swap in its new
@@ -364,7 +654,6 @@ templ liveDrafts() {
 	})();
 	</script>
 }
-
 
 // SyncedEventPage shows a Google event and changes its Members. Changing them
 // here keeps them through later syncs and never reaches Google.
