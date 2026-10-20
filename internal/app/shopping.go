@@ -17,7 +17,12 @@ func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
 	// Opening the lists pulls Mirrored lists on the next scheduler tick; the page never waits on Mealie.
 	// A live refresh isn't an open: a poll's own change would otherwise make the next poll due.
 	if !background(r) {
-		if _, err := a.DB.ExecContext(r.Context(), "UPDATE integrations SET next_sync_at = min(next_sync_at, ?) WHERE type = ?", a.Now().Unix(), mealieType); err != nil {
+		var id int64
+		err := a.DB.QueryRowContext(r.Context(), "SELECT id FROM integrations WHERE type = ?", mealieType).Scan(&id)
+		if err == nil {
+			err = a.integrations.PollSoon(r.Context(), id)
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			a.serverError(w, r, err)
 			return
 		}
@@ -26,9 +31,9 @@ func (a *App) getLists(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) listsPage(w http.ResponseWriter, r *http.Request, status int, msg string) {
-	rows, err := a.DB.QueryContext(r.Context(), `SELECT l.id, l.name, l.integration_id IS NOT NULL, coalesce(g.consecutive_failures >= ?, 0), i.id, i.note, i.checked
+	rows, err := a.DB.QueryContext(r.Context(), `SELECT l.id, l.name, l.integration_id IS NOT NULL, coalesce(`+downSQL("g")+`, 0), i.id, i.note, i.checked
 		FROM shopping_lists l LEFT JOIN shopping_items i ON i.list_id = l.id LEFT JOIN integrations g ON g.id = l.integration_id
-		WHERE NOT l.hidden ORDER BY l.position, l.id, i.position, i.id`, mealieDownPoll)
+		WHERE NOT l.hidden ORDER BY l.position, l.id, i.position, i.id`)
 	if err != nil {
 		a.serverError(w, r, err)
 		return

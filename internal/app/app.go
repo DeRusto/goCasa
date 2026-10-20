@@ -43,16 +43,16 @@ type Options struct {
 }
 
 type App struct {
-	Config    config.Config
-	DB        *sql.DB
-	Now       func() time.Time
-	Upstreams Upstreams
-	Log       *slog.Logger
-	Scheduler *Scheduler
-	Bus       *Bus
-	handler   http.Handler
-	syncLocks sync.Map // integration id → *sync.Mutex; see syncIntegration
-	photos    photoDeck
+	Config       config.Config
+	DB           *sql.DB
+	Now          func() time.Time
+	Upstreams    Upstreams
+	Log          *slog.Logger
+	Scheduler    *Scheduler
+	Bus          *Bus
+	handler      http.Handler
+	integrations integrations
+	photos       photoDeck
 
 	folderMu      sync.Mutex
 	folderScanned time.Time // the Fallback folder's last scan
@@ -91,6 +91,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		Log:       o.Logger,
 		Bus:       newBus(),
 	}
+	a.integrations.app = a
 	a.Scheduler = &Scheduler{now: o.Now, log: o.Logger}
 	if err := a.startBackups(ctx); err != nil {
 		d.Close()

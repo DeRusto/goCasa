@@ -89,7 +89,7 @@ func (a *App) screensaverPhotos(ctx context.Context) (map[int64]bool, error) {
 	}
 	if len(im) > 0 {
 		var failing bool
-		if err := a.DB.QueryRowContext(ctx, "SELECT consecutive_failures > 0 FROM integrations WHERE type = ?", immichType).Scan(&failing); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err := a.DB.QueryRowContext(ctx, "SELECT "+failingSQL("integrations")+" FROM integrations WHERE type = ?", immichType).Scan(&failing); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		if failing { // only cached bytes can show, so rotate through just those

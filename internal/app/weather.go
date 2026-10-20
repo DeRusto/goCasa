@@ -169,16 +169,20 @@ func conditions(code int) string {
 }
 
 // weatherSettings is the Weather section of Settings.
-func (a *App) weatherSettings(ctx context.Context) (web.Weather, error) {
+func (a *App) weatherSettings(ctx context.Context, st map[int64]integrationStatus) (web.Weather, error) {
 	var w web.Weather
 	var lat, lon sql.NullFloat64
-	var ok sql.NullInt64
-	err := a.DB.QueryRowContext(ctx, `SELECT h.weather_lat, h.weather_lon, h.units, i.last_success_at, i.consecutive_failures, i.last_error
-		FROM household_settings h, integrations i WHERE i.type = ?`, openMeteoType).Scan(&lat, &lon, &w.Units, &ok, &w.Failures, &w.LastError)
+	var id int64
+	err := a.DB.QueryRowContext(ctx, `SELECT h.weather_lat, h.weather_lon, h.units, i.id
+		FROM household_settings h, integrations i WHERE i.type = ?`, openMeteoType).Scan(&lat, &lon, &w.Units, &id)
 	if lat.Valid && lon.Valid {
 		w.Lat, w.Lon = strconv.FormatFloat(lat.Float64, 'f', -1, 64), strconv.FormatFloat(lon.Float64, 'f', -1, 64)
 	}
-	w.LastSuccess = a.lastSync(ctx, ok, a.clock(ctx))
+	x, ok := st[id]
+	if !ok {
+		x.LastSuccess = "never"
+	}
+	w.Failures, w.LastError, w.LastSuccess = x.Failures, x.LastError, x.LastSuccess
 	return w, err
 }
 

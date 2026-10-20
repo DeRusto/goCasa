@@ -92,7 +92,7 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 	access, err := a.googleAccess(ctx, tok.RefreshToken)
 	if errors.Is(err, errReconnect) {
 		// Unless reconnected meanwhile: then this refusal was of the old token.
-		if _, uerr := a.DB.ExecContext(ctx, "UPDATE integrations SET status = 'reconnect_needed' WHERE id = ? AND credentials_enc = ?", in.id, in.sealed); uerr != nil {
+		if uerr := a.integrations.NeedsReconnect(ctx, in.id, in.sealed); uerr != nil {
 			return uerr
 		}
 	}
@@ -157,7 +157,7 @@ func (googleSync) Sync(ctx context.Context, a *App, in integrationRow) error {
 	}
 	if full {
 		// A random time tomorrow, so Households don't all re-import at once.
-		cur.NextFull = dayAt(now.In(a.Config.Location), 1).Add(rand.N(24 * time.Hour)).Unix()
+		cur.NextFull = dayAt(now.In(a.location(ctx)), 1).Add(rand.N(24 * time.Hour)).Unix()
 		cursor, _ := json.Marshal(cur)
 		_, err = a.DB.ExecContext(ctx, "UPDATE integrations SET sync_cursor = ? WHERE id = ?", string(cursor), in.id)
 	}
@@ -243,6 +243,7 @@ func (a *App) googleEvents(ctx context.Context, access, cal, token string, now t
 // out. Events outside the window are dropped, whether sent or not.
 func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []googleEvent, calZone string, full bool, cursor string, now time.Time) error {
 	from, to := syncWindow(now)
+	home := a.location(ctx)
 	err := a.inTx(ctx, func(tx *sql.Tx) error {
 		seen := []string{}
 		var upserted []int64
@@ -258,7 +259,7 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 				continue
 			}
 			seen = append(seen, e.ID)
-			c, ok := e.change(cmp.Or(e.Start.TimeZone, calZone), a.Config.Location)
+			c, ok := e.change(cmp.Or(e.Start.TimeZone, calZone), home)
 			if !ok {
 				continue // its last good copy stays
 			}
@@ -291,7 +292,7 @@ func (a *App) storeGoogleEvents(ctx context.Context, id, cal int64, items []goog
 				return err
 			}
 		}
-		fromDate, toDate := from.In(a.Config.Location).Format(dateLayout), to.In(a.Config.Location).Format(dateLayout)
+		fromDate, toDate := from.In(home).Format(dateLayout), to.In(home).Format(dateLayout)
 		if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE calendar_id = ?1
 			AND (NOT all_day AND (end_utc <= ?2 OR start_utc >= ?3) OR all_day AND (all_day_end_date <= ?4 OR all_day_date >= ?5))`,
 			cal, from.Unix(), to.Unix(), fromDate, toDate); err != nil {
@@ -405,10 +406,10 @@ func (e googleEvent) change(zone string, home *time.Location) (c eventChange, ok
 // missed 3 times or needs a reconnect, and whether a view ending at end reaches
 // past the Google window while a Google calendar is shown.
 func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.StaleCalendar, beyond bool, err error) {
-	clock := a.clock(ctx)
-	rows, err := a.DB.QueryContext(ctx, `SELECT c.name, i.last_success_at, i.status = 'reconnect_needed'
+	loc, clock := a.location(ctx), a.clock(ctx)
+	rows, err := a.DB.QueryContext(ctx, `SELECT c.name, i.last_success_at, `+reconnectSQL("i")+`
 		FROM source_calendars c JOIN integrations i ON i.id = c.integration_id
-		WHERE c.enabled AND i.type != 'local' AND (i.status = 'reconnect_needed' OR i.consecutive_failures >= 3) ORDER BY c.name, c.id`)
+		WHERE c.enabled AND i.type != 'local' AND (`+reconnectSQL("i")+` OR `+downSQL("i")+`) ORDER BY c.name, c.id`)
 	if err != nil {
 		return nil, false, err
 	}
@@ -419,7 +420,7 @@ func (a *App) syncNotices(ctx context.Context, end time.Time) (stale []web.Stale
 		if err := rows.Scan(&s.Name, &ok, &s.Reconnect); err != nil {
 			return nil, false, err
 		}
-		s.LastUpdated = a.lastSync(ctx, ok, clock)
+		s.LastUpdated = lastSync(ok, loc, clock)
 		stale = append(stale, s)
 	}
 	if err := rows.Err(); err != nil {
