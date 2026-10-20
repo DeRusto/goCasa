@@ -119,16 +119,13 @@ func (m todos) Create(ctx context.Context, t web.Todo, p todoRepeat) (id int64, 
 // column goes last there. Completed copies are never touched (spec §8).
 func (m todos) Edit(ctx context.Context, id int64, t web.Todo, p todoRepeat) error {
 	return m.inTx(ctx, func(tx *sql.Tx) error {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM todo_columns WHERE id = ?)", t.ColumnID).Scan(&exists); err != nil {
+		if err := columnExists(ctx, tx, t.ColumnID); err != nil {
 			return err
-		} else if !exists {
-			return errNoColumn
 		}
-		res, err := tx.ExecContext(ctx, `UPDATE todos SET title = ?1, notes = ?2, due_date = ?3,
-			position = CASE WHEN column_id = ?4 THEN position ELSE (SELECT coalesce(max(position) + 1, 0) FROM todos WHERE column_id = ?4) END,
-			column_id = ?4, repeat_rule = ?5, repeat_from_completion = ?6 WHERE id = ?7 AND completed_at IS NULL`,
-			t.Title, t.Notes, nullable(t.Due), t.ColumnID, encodeDue(p, t.Due), t.FromCompletion, id)
+		res, err := tx.ExecContext(ctx, `UPDATE todos SET title = ?, notes = ?, due_date = ?,
+			position = CASE WHEN column_id = ? THEN position ELSE `+appendPosition+` END,
+			column_id = ?, repeat_rule = ?, repeat_from_completion = ? WHERE id = ? AND completed_at IS NULL`,
+			t.Title, t.Notes, nullable(t.Due), t.ColumnID, t.ColumnID, t.ColumnID, encodeDue(p, t.Due), t.FromCompletion, id)
 		if err != nil {
 			return err
 		}
@@ -137,6 +134,17 @@ func (m todos) Edit(ctx context.Context, id int64, t web.Todo, p todoRepeat) err
 		}
 		return nil
 	}, KindTodo)
+}
+
+// columnExists is errNoColumn unless column col exists.
+func columnExists(ctx context.Context, tx *sql.Tx, col int64) error {
+	var exists bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM todo_columns WHERE id = ?)", col).Scan(&exists); err != nil {
+		return err
+	} else if !exists {
+		return errNoColumn
+	}
+	return nil
 }
 
 // whyUnchanged is why a guarded write to to-do id changed nothing: errTodoGone
@@ -240,11 +248,8 @@ func (m todos) Delete(ctx context.Context, id int64) error {
 // ties fall back to id.
 func (m todos) Reorder(ctx context.Context, col int64, ids []int64) error {
 	return m.inTx(ctx, func(tx *sql.Tx) error {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM todo_columns WHERE id = ?)", col).Scan(&exists); err != nil {
+		if err := columnExists(ctx, tx, col); err != nil {
 			return err
-		} else if !exists {
-			return errNoColumn
 		}
 		for i, id := range ids {
 			res, err := tx.ExecContext(ctx, "UPDATE todos SET column_id = ?, position = ? WHERE id = ?", col, i, id)
