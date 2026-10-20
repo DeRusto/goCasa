@@ -269,6 +269,23 @@ func presetRule(r *http.Request, byDay map[string]bool) (rule, msg string) {
 	return rule, ""
 }
 
+// anchorRule makes a monthly or yearly preset rule that starts on day keep to
+// the last day of months without day's date (spec §8), instead of skipping
+// them as RFC 5545 does: the 31st falls on April 30 and February 28 or 29. A
+// rule with any BY part is a custom or already anchored one, and is kept.
+func anchorRule(rule string, day time.Time) string {
+	d := day.Day()
+	switch {
+	case d < 29 || strings.Contains(rule, "BY"):
+		return rule
+	case strings.Contains(rule, "FREQ=MONTHLY"):
+		return rule + ";BYMONTHDAY=" + "28,29,30,31"[:3*(d-27)-1] + ";BYSETPOS=-1" // 28 to d
+	case strings.Contains(rule, "FREQ=YEARLY") && day.Month() == time.February:
+		return rule + ";BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1"
+	}
+	return rule
+}
+
 // parseRepeat reads the dialog's repeat fields into a rule and its EXDATEs and
 // RDATEs (as stored), or a message for the person.
 func parseRepeat(f *web.EventForm, r *http.Request) (rule string, exdates, rdates []string, msg string) {
@@ -397,6 +414,9 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 			return f, e, "Pick a first and last day, the last not before the first."
 		}
 		e.date, e.endDate, e.firstDay = f.StartDate, d1.AddDate(0, 0, 1).Format(dateLayout), f.StartDate
+		if rule != "" && f.Repeat != "custom" {
+			e.rrule = anchorRule(rule, d0)
+		}
 		return f, e, ""
 	}
 	zone, err := time.LoadLocation(f.TZ)
@@ -413,6 +433,9 @@ func (a *App) parseEventForm(r *http.Request, withRepeat bool) (web.EventForm, e
 		return f, e, "That time doesn't exist in " + f.TZ + ": the clocks change then."
 	}
 	e.start, e.end, e.tzid = t0.Unix(), t1.Unix(), f.TZ
+	if rule != "" && f.Repeat != "custom" {
+		e.rrule = anchorRule(rule, t0)
+	}
 	e.firstDay = t0.In(a.location(r.Context())).Format(dateLayout)
 	return f, e, ""
 }
