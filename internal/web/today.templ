@@ -28,6 +28,7 @@ templ Today(p TodayPage) {
 				</div>
 				if w := p.Weather; w != nil {
 					<div class="flex flex-wrap items-center gap-6 min-[760px]:ml-auto">
+						@wxIcon(w.Conditions, w.Day, "size-16 flex-none text-accent")
 						<div>
 							<p class="text-5xl tabular-nums">{ deg(w.Current) + w.Unit }</p>
 							<p class="text-muted">
@@ -41,7 +42,10 @@ templ Today(p TodayPage) {
 							for _, d := range w.Ahead {
 								<li class="flex flex-col items-center text-sm">
 									{ d.Day }
-									<span class="text-muted">{ d.Conditions }</span>
+									<span title={ d.Conditions }>
+										@wxIcon(d.Conditions, true, "my-1 size-7 text-muted")
+										<span class="sr-only">{ d.Conditions }</span>
+									</span>
 									<b class="text-lg tabular-nums">{ deg(d.High) } / { deg(d.Low) }</b>
 								</li>
 							}

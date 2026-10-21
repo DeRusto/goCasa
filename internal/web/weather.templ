@@ -8,18 +8,18 @@ import (
 
 // WeatherPill is the cached weather the slim pill shows (spec §8).
 type WeatherPill struct {
-	Current   int    // rounded
-	Unit      string // "C" or "F"
-	HasToday  bool   // the cache has today's high and low
-	High, Low int
+	Current    int    // rounded
+	Unit       string // "C" or "F"
+	HasToday   bool   // the cache has today's high and low
+	High, Low  int
+	Conditions string // e.g. "Overcast"; "" for an unknown code
+	Day        bool   // daylight now, for a sun or moon
 }
 
 // WeatherHeader is the cached weather Today's large header shows.
 type WeatherHeader struct {
 	WeatherPill
-	Conditions string       // e.g. "Overcast"; "" for an unknown code
-	Day        bool         // daylight now, for a sun or moon
-	Ahead      []WeatherDay // up to 5 days after today
+	Ahead []WeatherDay // up to 5 days after today
 }
 
 type WeatherDay struct {
@@ -49,7 +49,9 @@ func deg(n int) string { return strconv.Itoa(n) + "°" }
 
 templ weatherPill() {
 	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
-		<aside aria-label="Weather" class="ml-auto rounded-full bg-soft px-3 py-1 tabular-nums min-[760px]:px-4 min-[760px]:py-1.5 min-[760px]:text-lg">
+		<aside aria-label="Weather" class="ml-auto flex items-center gap-1.5 rounded-full bg-soft px-3 py-1 tabular-nums min-[760px]:px-4 min-[760px]:py-1.5 min-[760px]:text-lg">
+			@wxIcon(p.Conditions, p.Day, "size-5 flex-none text-accent min-[760px]:size-6")
+			<span class="sr-only">{ p.Conditions }</span>
 			{ deg(p.Current) + p.Unit }
 			if p.HasToday {
 				· H { deg(p.High) } L { deg(p.Low) }
