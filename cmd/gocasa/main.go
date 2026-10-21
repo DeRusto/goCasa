@@ -23,6 +23,10 @@ import (
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(log)
+	if err := config.LoadDotEnv(".env"); err != nil {
+		log.Error("reading .env", "err", err)
+		os.Exit(1)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck())
 	}
