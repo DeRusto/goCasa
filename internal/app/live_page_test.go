@@ -36,7 +36,7 @@ func TestPagesRefetchOnlyForTheKindsTheyShow(t *testing.T) {
 		"/todos":       {"todo", "member", "household"},
 		"/chores":      {"chore", "points", "member", "household"},
 		"/today":       {"event", "todo", "chore", "member", "household", "integration"},
-		"/screensaver": {"event", "household"},
+		"/screensaver": {"event", "household", "integration"},
 	} {
 		_, page := h.Get(t, path)
 		tag := liveTag(t, path, page)

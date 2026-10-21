@@ -203,4 +203,7 @@ func TestWeatherPageShowsTheCachedForecast(t *testing.T) {
 	if strings.Contains(page, "08:00") {
 		t.Error("Weather page shows an hour before now")
 	}
+	if _, page := h.Get(t, "/screensaver"); !strings.Contains(page, `aria-label="Overcast, 12°C"`) {
+		t.Error("the screensaver lacks the current weather")
+	}
 }

@@ -18,6 +18,7 @@ type WeatherPill struct {
 type WeatherHeader struct {
 	WeatherPill
 	Conditions string       // e.g. "Overcast"; "" for an unknown code
+	Day        bool         // daylight now, for a sun or moon
 	Ahead      []WeatherDay // up to 5 days after today
 }
 

@@ -150,7 +150,7 @@ func (a *App) weatherHeader(ctx context.Context) (*web.WeatherHeader, error) {
 	if hh.Units == "imperial" {
 		unit = "F"
 	}
-	h := &web.WeatherHeader{WeatherPill: web.WeatherPill{Current: int(math.Round(f.Current.Temperature)), Unit: unit}, Conditions: conditions(f.Current.Code)}
+	h := &web.WeatherHeader{WeatherPill: web.WeatherPill{Current: int(math.Round(f.Current.Temperature)), Unit: unit}, Conditions: conditions(f.Current.Code), Day: f.Current.IsDay == 1 || f.Current.Time == ""}
 	today := hh.Today(a.Now()).Format(dateLayout)
 	for i, d := range f.Daily.Time {
 		if d < today || i >= len(f.Daily.Max) || i >= len(f.Daily.Min) {
