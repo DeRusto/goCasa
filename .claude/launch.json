@@ -13,6 +13,20 @@
         "SESSION_SECRET": "dev-only-session-secret-0123456789abcdef"
       },
       "port": 8080
+    },
+    {
+      "name": "gocasa-demo",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/gocasa"],
+      "env": {
+        "ADDR": ":8090",
+        "BASE_URL": "http://localhost:8090",
+        "DATA_DIR": "./tmp/demo",
+        "TZ": "America/Los_Angeles",
+        "APP_ENCRYPTION_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "SESSION_SECRET": "dev-only-session-secret-0123456789abcdef"
+      },
+      "port": 8090
     }
   ]
 }

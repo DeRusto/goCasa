@@ -1,16 +1,65 @@
 # GoCasa
 
-A self-hosted family calendar dashboard: one static Go binary, one SQLite file, server-rendered UI. See [the spec](docs/skylite-go-spec.md) and [the glossary](GLOSSARY.md).
+**A self-hosted family wall calendar for your homelab.** The kitchen-tablet dashboard you'd otherwise buy as a subscription gadget, running on hardware you already own: calendars, chores, to-dos, shopping lists, weather and a photo screensaver, on any old tablet or screen with a browser.
 
-## Run it with Docker Compose
+One static Go binary, one SQLite file, no cloud account, no subscription, no telemetry. Runs happily on a Raspberry Pi.
+
+![Today view: clock, weather, today's events, chores and to-dos](docs/screenshots/today.png)
+
+## Why homelabbers like it
+
+- **Tiny footprint.** A single static binary (pure Go, no CGO) and one SQLite file. Multi-arch Docker image for `amd64` and `arm64`.
+- **Plays well with your stack.** Shopping lists sync with [Mealie](https://mealie.io), the screensaver shows albums and people from [Immich](https://immich.app), calendars come from Google or any iCal feed, and the whole family calendar is published back out as an `.ics` feed.
+- **Your data stays home.** Everything lives in `/data`. Integration tokens are encrypted at rest. Nightly backups and pre-migration snapshots happen on their own.
+- **No logins for the family.** Anyone at the screen can view and tick things off. Admins have a PIN for settings, and you choose which actions (changing the calendar, completing chores or to-dos) need it.
+- **Built for a wall display.** Screen Wake Lock, a photo screensaver, night mode (black or a dim clock), and optional camera motion-wake that never sends a frame off the device.
+- **Behind your reverse proxy.** Plain HTTP, `BASE_URL` for its public name, a `/healthz` endpoint, and a live-update stream that copes with proxy buffering and idle timeouts.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Month calendar with colour-coded family members](docs/screenshots/calendar.png) **Calendar**: month, week, day and agenda views, colour-coded by person, with recurring events. | ![Chores board with points and rewards](docs/screenshots/chores.png) **Chores**: daily, weekly or per-weekday chores, points, and rewards kids can request. |
+| ![To-do columns](docs/screenshots/todos.png) **To-dos**: columns per person or room, due dates, repeating tasks. | ![Shopping lists](docs/screenshots/lists.png) **Lists**: shopping lists, local or synced two-way with Mealie. |
+| ![Weather page with hourly and 6-day forecast](docs/screenshots/weather.png) **Weather**: current conditions, the next 24 hours and the week, from Open-Meteo (no API key). | ![Photo screensaver with clock, agenda and weather](docs/screenshots/screensaver.jpg) **Screensaver**: Immich photos or a local folder, with the clock, today's agenda and the weather. |
+
+Light mode follows the device, or set it per screen:
+
+![Today view in light mode](docs/screenshots/today-light.png)
+
+## Features
+
+- **Calendars:** a local calendar, two-way Google Calendar sync (several Google accounts, your own OAuth client), read-only iCal/webcal feeds, and an ICS export at `/calendar.ics` for phones and other apps.
+- **Members:** each person (pets too) gets a colour and an optional picture; events, chores and to-dos are tagged by who they're for.
+- **Chores and rewards:** "each" chores everyone does, "anyone" chores the first taker claims, points balances, rewards that need an Admin's approval.
+- **To-dos:** columns, drag to reorder, due dates, repeat on a schedule or from completion.
+- **Shopping lists:** local lists, plus your Mealie (v2+) shopping lists kept in sync.
+- **Weather:** from [Open-Meteo](https://open-meteo.com), metric or imperial, on the Today page, its own page and the screensaver.
+- **Screensaver:** after a configurable idle time, photos from chosen Immich albums or people, or from a folder you mount.
+- **Per-device settings:** default view, light/dark theme, Wall display mode, motion-wake.
+
+## Quick start
+
+You need Docker and two random secrets.
 
 ```sh
+git clone https://github.com/DeRusto/goCasa.git && cd goCasa
 cp .env.example .env
 # fill in APP_ENCRYPTION_KEY and SESSION_SECRET: openssl rand -base64 32
 docker compose up -d
 ```
 
-Open `http://<host>:8080`. `GET /healthz` returns `200 ok` when the app is up and the database answers.
+Open `http://<host>:8080`, add your family under Settings → Members, and point a tablet at it. `GET /healthz` returns `200 ok` when the app is up and the database answers.
+
+Prefer a published image or a bare binary? Each [release](https://github.com/DeRusto/goCasa/releases) ships `ghcr.io/derusto/gocasa:<version>` (amd64 and arm64) and static binaries for Linux, macOS and Windows. To use the image, replace `build: .` in `compose.yaml` with `image: ghcr.io/derusto/gocasa:<version>`. To run the binary, set the variables from [Configuration](#configuration) and start it; it serves on `:8080`.
+
+### Wall display tips
+
+- Any browser works. For a kiosk, open GoCasa full screen and turn on **Wall display** in Settings on that device (an Admin's PIN is needed): it keeps the screen awake and shows the screensaver when idle.
+- Wake Lock and camera motion-wake need HTTPS; see [HTTPS](#https).
+- Night mode blanks the screen or shows a dim clock between the hours you pick.
+
+## Data and photos
 
 Data lives in the `gocasa-data` volume at `/data` (`app.db`, `backups/`, `photo-cache/`, `photos/`). To use a bind mount instead, make the host directory writable by UID 65532, which the container runs as: `sudo chown 65532:65532 ./data`.
 
@@ -100,3 +149,5 @@ go run ./cmd/gocasa      # needs the env vars above, e.g. DATA_DIR=./data
 Styling is Tailwind v4 (`internal/web/input.css`), built by its standalone CLI so there's no Node. Put the [v4.3.3 binary](https://github.com/tailwindlabs/tailwindcss/releases/tag/v4.3.3) for your platform on your PATH as `tailwindcss`. Only changing classes needs it: builds and Docker use the committed `app.css`.
 
 Tests build the real app through `internal/apptest`: a temp SQLite file, a fake clock, fake upstream URLs and `RunDue` to run scheduled work on demand.
+
+The README screenshots come from a fictional household: start the `gocasa-demo` entry in `.claude/launch.json` (port 8090, data in `./tmp/demo`), load `sqlite3 tmp/demo/app.db < docs/screenshots/seed.sql`, and capture at 1600×1000.
