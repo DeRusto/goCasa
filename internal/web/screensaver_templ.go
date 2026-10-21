@@ -47,7 +47,7 @@ func Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</head><body style=\"margin:0;background:#000;color:#ddd\"><img id=\"photo\" src=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</head><body style=\"margin:0;background:#000;color:#ddd;font-family:system-ui,sans-serif\"><img id=\"photo\" src=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -70,7 +70,7 @@ func Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) temp
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " alt=\"\" onerror=\"this.hidden=true\" onload=\"this.hidden=false\" style=\"position:fixed;inset:0;width:100%;height:100%;object-fit:contain\"> <a id=\"wake\" href=\"/\" aria-label=\"Wake\" style=\"position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000\"><div id=\"live\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " alt=\"\" onerror=\"this.hidden=true\" onload=\"this.hidden=false\" style=\"position:fixed;inset:0;width:100%;height:100%;object-fit:cover\"> <a id=\"wake\" href=\"/\" aria-label=\"Wake\" style=\"position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000\"><div id=\"live\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -91,7 +91,7 @@ func Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"><p style=\"font-size:6rem;margin:0;line-height:1.1\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"><p style=\"font-size:6rem;margin:0;line-height:1.1;font-weight:300\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -223,14 +223,14 @@ func Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) temp
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span> <span style=\"font-size:6rem;line-height:1\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span> <span style=\"font-size:6rem;line-height:1;font-weight:300\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(deg(w.Current))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 46, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 46, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -325,7 +325,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</head><body style=\"margin:0;background:#000;color:#333\"><a id=\"wake\" href=\"/\" aria-label=\"Wake\" data-night=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</head><body style=\"margin:0;background:#000;color:#333;font-family:system-ui,sans-serif\"><a id=\"wake\" href=\"/\" aria-label=\"Wake\" data-night=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -343,7 +343,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if mode == "dim_clock" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<p style=\"font-size:6rem;margin:0\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<p style=\"font-size:6rem;margin:0;font-weight:300\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

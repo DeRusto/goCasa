@@ -205,12 +205,13 @@ templ eventLabel(e CalendarEvent) {
 templ Calendar(p CalendarPage) {
 	@page("Calendar", false) {
 		// On a phone the header packs into a title line and one sideways-scrolling row of controls.
+		// The row is relative so its sr-only labels (absolute) scroll with it instead of widening the page.
 		<main class="h-[calc(100dvh-4rem)] max-[759px]:gap-2 max-[759px]:p-3 min-[760px]:h-dvh">
 			<div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2">
 				<h1 class="text-xl font-normal min-[760px]:text-3xl">{ calendarTitle(p) }</h1>
 				@weatherPill()
 			</div>
-			<div class="flex flex-none flex-wrap items-center gap-2 max-[759px]:-mx-3 max-[759px]:flex-nowrap max-[759px]:overflow-x-auto max-[759px]:px-3 max-[759px]:[scrollbar-width:none] max-[759px]:[&>*]:flex-none">
+			<div class="relative flex flex-none flex-wrap items-center gap-2 max-[759px]:-mx-3 max-[759px]:flex-nowrap max-[759px]:overflow-x-auto max-[759px]:px-3 max-[759px]:[scrollbar-width:none] max-[759px]:[&>*]:flex-none">
 				<nav class="flex gap-1">
 					<a href={ templ.SafeURL(p.Prev) } class={ chip } aria-label="Previous">‹</a>
 					<a href={ templ.SafeURL(p.Today) } class={ chip }>Today</a>
