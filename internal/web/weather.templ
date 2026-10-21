@@ -2,22 +2,24 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 )
 
 // WeatherPill is the cached weather the slim pill shows (spec §8).
 type WeatherPill struct {
-	Current   int    // rounded
-	Unit      string // "C" or "F"
-	HasToday  bool   // the cache has today's high and low
-	High, Low int
+	Current    int    // rounded
+	Unit       string // "C" or "F"
+	HasToday   bool   // the cache has today's high and low
+	High, Low  int
+	Conditions string // e.g. "Overcast"; "" for an unknown code
+	Day        bool   // daylight now, for a sun or moon
 }
 
 // WeatherHeader is the cached weather Today's large header shows.
 type WeatherHeader struct {
 	WeatherPill
-	Conditions string       // e.g. "Overcast"; "" for an unknown code
-	Ahead      []WeatherDay // up to 5 days after today
+	Ahead []WeatherDay // up to 5 days after today
 }
 
 type WeatherDay struct {
@@ -29,6 +31,7 @@ type WeatherDay struct {
 // Weather is the Weather section of Settings.
 type Weather struct {
 	Lat, Lon    string // blank: no weather
+	Place       string // the picked place's name; "" for coordinates
 	Units       string // "metric" or "imperial"
 	LastSuccess string
 	Failures    int
@@ -46,7 +49,9 @@ func deg(n int) string { return strconv.Itoa(n) + "°" }
 
 templ weatherPill() {
 	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
-		<aside aria-label="Weather" class="ml-auto rounded-full bg-soft px-4 py-1.5 text-lg tabular-nums">
+		<aside aria-label="Weather" class="ml-auto flex items-center gap-1.5 rounded-full bg-soft px-3 py-1 tabular-nums min-[760px]:px-4 min-[760px]:py-1.5 min-[760px]:text-lg">
+			@wxIcon(p.Conditions, p.Day, "size-5 flex-none text-accent min-[760px]:size-6")
+			<span class="sr-only">{ p.Conditions }</span>
 			{ deg(p.Current) + p.Unit }
 			if p.HasToday {
 				· H { deg(p.High) } L { deg(p.Low) }
@@ -58,11 +63,28 @@ templ weatherPill() {
 templ WeatherSection(w Weather) {
 	<section class="card flex flex-col gap-3">
 		<h2>Weather</h2>
-		<p class="text-muted">Where the weather is for, from Open-Meteo. Leave both blank for no weather.</p>
+		<p class="text-muted">Weather from Open-Meteo. Search for your town or city, then pick it from the list.</p>
 		@syncStatus(w.LastSuccess, w.Failures, w.LastError)
-		<form method="post" action="/settings/weather">
-			<label>Latitude <input name="lat" type="text" inputmode="decimal" value={ w.Lat } placeholder="51.5"/></label>
-			<label>Longitude <input name="lon" type="text" inputmode="decimal" value={ w.Lon } placeholder="-0.12"/></label>
+		<p>
+			<span class="text-muted">Showing weather for</span>
+			switch  {
+				case w.Lat == "":
+					<strong>nowhere (weather is off)</strong>
+				case w.Place != "":
+					<strong>{ w.Place }</strong>
+				default:
+					<strong>{ w.Lat }, { w.Lon }</strong>
+			}
+		</p>
+		<form method="get" action="/settings/weather/places" hx-get="/settings/weather/places" hx-target="#place-results" class="flex flex-wrap items-end gap-2">
+			<label class="grow">Find a place <input name="q" type="search" required placeholder="e.g. London" autocomplete="off"/></label>
+			<button class="btn-primary">Search</button>
+		</form>
+		<div id="place-results" aria-live="polite"></div>
+		<form method="post" action="/settings/weather" class="flex flex-wrap items-end gap-2">
+			<input type="hidden" name="lat" value={ w.Lat }/>
+			<input type="hidden" name="lon" value={ w.Lon }/>
+			<input type="hidden" name="place" value={ w.Place }/>
 			<label>
 				Units
 				<select name="units">
@@ -70,7 +92,234 @@ templ WeatherSection(w Weather) {
 					<option value="imperial" selected?={ w.Units == "imperial" }>Imperial (°F)</option>
 				</select>
 			</label>
-			<button class="btn-primary">Save weather</button>
+			<button class="btn-primary">Save units</button>
 		</form>
+		if w.Lat != "" {
+			<form method="post" action="/settings/weather">
+				<input type="hidden" name="units" value={ w.Units }/>
+				<button class="text-muted underline">Turn weather off</button>
+			</form>
+		}
 	</section>
+}
+
+// Place is one place search result.
+type Place struct {
+	Name     string // "London, England, United Kingdom"
+	Lat, Lon string
+}
+
+// PlaceResults is a place search's answer: Places, or a Message when none.
+type PlaceResults struct {
+	Places  []Place
+	Message string
+	Units   string // kept when a place is picked
+}
+
+templ PlaceList(res PlaceResults) {
+	if res.Message != "" {
+		<p class="text-muted">{ res.Message }</p>
+	}
+	if len(res.Places) > 0 {
+		<ul class="flex flex-col gap-1">
+			for _, p := range res.Places {
+				<li>
+					<form method="post" action="/settings/weather">
+						<input type="hidden" name="lat" value={ p.Lat }/>
+						<input type="hidden" name="lon" value={ p.Lon }/>
+						<input type="hidden" name="place" value={ p.Name }/>
+						<input type="hidden" name="units" value={ res.Units }/>
+						<button class="pick w-full text-left hover:bg-soft">{ p.Name }</button>
+					</form>
+				</li>
+			}
+		</ul>
+	}
+}
+
+// WeatherPage is the full-screen Weather page.
+type WeatherPage struct {
+	Place string      // "" for coordinates
+	Off   bool        // no location is set
+	Now   *WeatherNow // nil until the first fetch
+}
+
+// WeatherNow is the cached forecast as the Weather page shows it.
+type WeatherNow struct {
+	Temp       int
+	Unit       string // "C" or "F"
+	Conditions string
+	Day        bool // daylight now, for a sun or moon
+	Feels      int
+	Humidity   int // %
+	Wind       int
+	WindUnit   string // "km/h" or "mph"
+	HasToday   bool
+	High, Low  int
+	Rain       int // today's chance, %
+	UV         int
+	Sunrise    string
+	Sunset     string
+	Hours      []WeatherHour     // up to the next 24
+	Days       []WeatherDayRange // today onwards
+}
+
+type WeatherHour struct {
+	Time       string
+	Temp       int
+	Conditions string
+	Day        bool
+	Rain       int // %
+}
+
+// WeatherDayRange is a day of the Weather page's forecast; its bar spans Left%
+// to Left+Width% of the week's lowest-to-highest scale.
+type WeatherDayRange struct {
+	Day         string // "Today", "Mon"
+	Conditions  string
+	High, Low   int
+	Rain        int // %
+	Left, Width float64
+}
+
+// weatherIcon is the inner markup of the 24x24 Lucide icon (ISC licence) for
+// conditions, by day or night.
+func weatherIcon(conditions string, day bool) string {
+	const cloud = `<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>`
+	switch conditions {
+	case "Clear":
+		if !day {
+			return `<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`
+		}
+		return `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`
+	case "Partly cloudy":
+		if !day {
+			return `<path d="M10.083 9A6.002 6.002 0 0 1 16 4a4.243 4.243 0 0 0 6 6c0 2.22-1.206 4.16-3 5.197"/><path d="M3 20a5 5 0 1 1 8.9-4H13a3 3 0 0 1 2 5.24"/><path d="M11 20v2"/><path d="M7 19v2"/>`
+		}
+		return `<path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>`
+	case "Fog":
+		return cloud + `<path d="M16 17H7"/><path d="M17 21H9"/>`
+	case "Drizzle":
+		return cloud + `<path d="M8 19v1"/><path d="M8 14v1"/><path d="M16 19v1"/><path d="M16 14v1"/><path d="M12 21v1"/><path d="M12 16v1"/>`
+	case "Rain":
+		return cloud + `<path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/>`
+	case "Snow":
+		return cloud + `<path d="M8 15h.01"/><path d="M8 19h.01"/><path d="M12 17h.01"/><path d="M12 21h.01"/><path d="M16 15h.01"/><path d="M16 19h.01"/>`
+	case "Thunderstorm":
+		return `<path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973"/><path d="m13 12-3 5h4l-3 5"/>`
+	}
+	return `<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>` // overcast, or unknown
+}
+
+templ wxIcon(conditions string, day bool, class string) {
+	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class={ class } aria-hidden="true">
+		@templ.Raw(weatherIcon(conditions, day))
+	</svg>
+}
+
+func rangeBar(d WeatherDayRange) templ.SafeCSS {
+	return templ.SafeCSS(fmt.Sprintf("left:%.1f%%;width:max(%.1f%%,0.5rem);", d.Left, d.Width))
+}
+
+templ wxStat(label, value string) {
+	<div class="flex flex-col gap-1 rounded-xl bg-card/60 px-4 py-3">
+		<span class="text-sm text-muted">{ label }</span>
+		<span class="text-2xl tabular-nums min-[760px]:text-3xl">{ value }</span>
+	</div>
+}
+
+// WeatherFull is the Weather page: now, the next hours, and the week ahead.
+templ WeatherFull(p WeatherPage) {
+	@page("Weather", false) {
+		<main class="min-h-[calc(100dvh-4rem)] min-[760px]:min-h-dvh">
+			<div id="live" { live(KindIntegration, KindHousehold)... } class="flex flex-1 flex-col gap-4">
+				<div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+					<h1>Weather</h1>
+					if p.Place != "" {
+						<span class="text-xl text-muted">{ p.Place }</span>
+					}
+				</div>
+				switch  {
+					case p.Off:
+						<div class="card flex flex-col items-start gap-3">
+							<p class="text-xl">No location set yet.</p>
+							<a href="/settings" class="btn-primary no-underline hover:no-underline">Pick a place in Settings</a>
+						</div>
+					case p.Now == nil:
+						<p class="card text-xl text-muted">Fetching the forecast. It appears here within a minute.</p>
+					default:
+						@weatherBody(*p.Now)
+				}
+			</div>
+		</main>
+	}
+}
+
+templ weatherBody(n WeatherNow) {
+	<section class="card grid gap-6 bg-linear-to-br from-accent-soft to-card min-[1100px]:grid-cols-[auto_1fr] min-[1100px]:items-center">
+		<div class="flex items-center gap-6">
+			@wxIcon(n.Conditions, n.Day, "size-24 flex-none text-accent min-[760px]:size-40")
+			<div class="flex flex-col">
+				<span class="text-7xl leading-none font-light tabular-nums min-[760px]:text-[9rem]">{ deg(n.Temp) }<span class="align-top text-3xl text-muted min-[760px]:text-5xl">{ n.Unit }</span></span>
+				<span class="text-2xl min-[760px]:text-3xl">{ n.Conditions }</span>
+				if n.HasToday {
+					<span class="text-xl text-muted tabular-nums">H { deg(n.High) } · L { deg(n.Low) }</span>
+				}
+			</div>
+		</div>
+		// A cache fetched before the Weather page has no hourly data, nor these.
+		<div class={ "grid grid-cols-2 gap-3 min-[760px]:grid-cols-3", templ.KV("hidden", len(n.Hours) == 0) }>
+			@wxStat("Feels like", deg(n.Feels))
+			@wxStat("Humidity", strconv.Itoa(n.Humidity)+"%")
+			@wxStat("Wind", strconv.Itoa(n.Wind)+" "+n.WindUnit)
+			@wxStat("Chance of rain", strconv.Itoa(n.Rain)+"%")
+			@wxStat("UV index", strconv.Itoa(n.UV))
+			if n.Sunrise != "" {
+				@wxStat("Sunrise · sunset", n.Sunrise+" · "+n.Sunset)
+			}
+		</div>
+	</section>
+	if len(n.Hours) > 0 {
+		<section class="card flex flex-col gap-3">
+			<h2>Next 24 hours</h2>
+			<ol class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+				for i, h := range n.Hours {
+					<li class={ "flex min-w-18 flex-none flex-col items-center gap-1 rounded-xl px-2 py-3 tabular-nums", templ.KV("bg-accent-soft", i == 0) }>
+						<span class="text-sm text-muted">
+							if i == 0 {
+								Now
+							} else {
+								{ h.Time }
+							}
+						</span>
+						@wxIcon(h.Conditions, h.Day, "size-8")
+						<span class="text-xl">{ deg(h.Temp) }</span>
+						<span class={ "text-sm", templ.KV("text-accent", h.Rain >= 30), templ.KV("invisible", h.Rain == 0) }>{ strconv.Itoa(h.Rain) }%</span>
+					</li>
+				}
+			</ol>
+		</section>
+	}
+	if len(n.Days) > 0 {
+		<section class="card flex flex-col gap-1">
+			<h2 class="mb-2">This week</h2>
+			<ul class="flex flex-col divide-y divide-line">
+				for _, d := range n.Days {
+					<li class="grid grid-cols-[4.5rem_2rem_3rem_1fr] items-center gap-3 py-2 text-xl tabular-nums min-[760px]:grid-cols-[6rem_2.5rem_10rem_4rem_1fr] min-[760px]:gap-4">
+						<span>{ d.Day }</span>
+						@wxIcon(d.Conditions, true, "size-8")
+						<span class="hidden text-muted min-[760px]:block">{ d.Conditions }</span>
+						<span class={ "text-base", templ.KV("text-accent", d.Rain >= 30), templ.KV("invisible", d.Rain == 0) }>{ strconv.Itoa(d.Rain) }%</span>
+						<span class="flex items-center gap-3">
+							<span class="w-10 text-right text-muted">{ deg(d.Low) }</span>
+							<span class="relative h-2 flex-1 rounded-full bg-soft">
+								<span class="absolute inset-y-0 rounded-full bg-accent" style={ rangeBar(d) }></span>
+							</span>
+							<span class="w-10">{ deg(d.High) }</span>
+						</span>
+					</li>
+				}
+			</ul>
+		</section>
+	}
 }

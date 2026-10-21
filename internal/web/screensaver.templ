@@ -7,6 +7,9 @@ import "strconv"
 // place after photoSeconds, so the page and its camera stay up. The whole
 // screen is one link to "/", so the first touch only wakes it, back to the
 // Default view at today.
+// frosted is a screensaver panel: dark glass that blurs the photo behind it.
+const frosted templ.SafeCSS = "background:rgba(20,20,20,.35);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(255,255,255,.18);border-radius:28px;padding:1.5rem 2rem;box-shadow:0 8px 32px rgba(0,0,0,.25);"
+
 templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -20,19 +23,29 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 		<body style="margin:0;background:#000;color:#ddd">
 			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
-				<div id="live" { live(KindEvent, KindHousehold)... }>
-					<p style="font-size:6rem;margin:0">@clock(p)</p>
-					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
-					<ul style="font-size:1.5rem;list-style:none;padding:0">
-						for _, e := range p.Days[0].Events {
-							<li
-								style={ templ.KV("opacity:.5", e.Past) }
-								if e.End != 0 {
-									data-end={ strconv.FormatInt(e.End, 10) }
-								}
-							>{ e.Time } { e.Title }</li>
-						}
-					</ul>
+				<div id="live" { live(KindEvent, KindHousehold, KindIntegration)... } style="display:flex;justify-content:space-between;align-items:flex-start;gap:2rem">
+					<div style={ frosted + "max-width:min(40rem,60vw)" }>
+						<p style="font-size:6rem;margin:0;line-height:1.1">@clock(p)</p>
+						<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
+						<ul style="font-size:1.5rem;list-style:none;padding:0;margin:1rem 0 0;display:flex;flex-direction:column;gap:.25rem">
+							for _, e := range p.Days[0].Events {
+								<li
+									style={ templ.KV("opacity:.5", e.Past) }
+									if e.End != 0 {
+										data-end={ strconv.FormatInt(e.End, 10) }
+									}
+								>{ e.Time } { e.Title }</li>
+							}
+						</ul>
+					</div>
+					if w := p.Weather; w != nil {
+						<div style={ frosted + "display:flex;align-items:center;gap:1.5rem" } role="img" aria-label={ w.Conditions + ", " + deg(w.Current) + w.Unit }>
+							<span style="display:block;width:7rem;flex:none">
+								@wxIcon(w.Conditions, w.Day, "")
+							</span>
+							<span style="font-size:6rem;line-height:1">{ deg(w.Current) }</span>
+						</div>
+					}
 				</div>
 			</a>
 			@liveDrafts()

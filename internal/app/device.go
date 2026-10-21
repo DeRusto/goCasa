@@ -240,10 +240,14 @@ func (a *App) getScreensaver(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, web.Screensaver(web.TodayPage{
+	p := web.TodayPage{
 		Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, MidnightIn: secondsTo(now, midnight),
 		Days: [2]web.CalendarDay{calendarDay(evs, today, today, now.Unix(), clock)},
-	}, src, left, secondsTo(now, turn)))
+	}
+	if p.Weather, err = a.weatherHeader(r.Context()); err != nil {
+		a.Log.Error("reading cached weather", "err", err) // the screensaver still shows, without weather
+	}
+	a.render(w, r, http.StatusOK, web.Screensaver(p, src, left, secondsTo(now, turn)))
 }
 
 // secondsTo is the whole seconds from now until t, rounded up; 0 for a zero t.

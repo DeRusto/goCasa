@@ -204,12 +204,13 @@ templ eventLabel(e CalendarEvent) {
 // Calendar is the main calendar page in one of its four views.
 templ Calendar(p CalendarPage) {
 	@page("Calendar", false) {
-		<main class="h-[calc(100dvh-4rem)] min-[760px]:h-dvh">
+		// On a phone the header packs into a title line and one sideways-scrolling row of controls.
+		<main class="h-[calc(100dvh-4rem)] max-[759px]:gap-2 max-[759px]:p-3 min-[760px]:h-dvh">
 			<div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2">
-				<h1 class="text-3xl font-normal">{ calendarTitle(p) }</h1>
+				<h1 class="text-xl font-normal min-[760px]:text-3xl">{ calendarTitle(p) }</h1>
 				@weatherPill()
 			</div>
-			<div class="flex flex-none flex-wrap items-center gap-2">
+			<div class="flex flex-none flex-wrap items-center gap-2 max-[759px]:-mx-3 max-[759px]:flex-nowrap max-[759px]:overflow-x-auto max-[759px]:px-3 max-[759px]:[scrollbar-width:none] max-[759px]:[&>*]:flex-none">
 				<nav class="flex gap-1">
 					<a href={ templ.SafeURL(p.Prev) } class={ chip } aria-label="Previous">‹</a>
 					<a href={ templ.SafeURL(p.Today) } class={ chip }>Today</a>
@@ -222,20 +223,20 @@ templ Calendar(p CalendarPage) {
 							if v == p.View {
 								aria-current="page"
 							}
-							class="flex min-h-10 items-center rounded-full px-4 text-ink capitalize no-underline hover:no-underline aria-[current=page]:bg-accent-soft"
+							class="flex min-h-10 items-center rounded-full px-3 text-ink capitalize min-[760px]:px-4 no-underline hover:no-underline aria-[current=page]:bg-accent-soft"
 						>{ v }</a>
 					}
 				</nav>
-				<form method="get" action="/calendar" class="flex flex-wrap items-center gap-2" onchange="this.requestSubmit()">
+				<form method="get" action="/calendar" class="flex flex-wrap items-center gap-2 max-[759px]:flex-nowrap" onchange="this.requestSubmit()">
 					<input type="hidden" name="view" value={ p.View }/>
 					<input type="hidden" name="date" value={ p.Date.Format("2006-01-02") }/>
 					<fieldset class="contents">
 						<legend class="sr-only">Show Members (Household events always show)</legend>
 						for _, m := range p.Members {
-							<label class="member-chip" style={ memberChip(m) }>
+							<label class="member-chip max-[759px]:pr-1" style={ memberChip(m) }>
 								<input type="checkbox" name="users" value={ id(m.ID) } checked?={ p.Users[m.ID] } class="sr-only"/>
 								@avatar(m)
-								{ m.Name }
+								<span class="max-[759px]:sr-only">{ m.Name }</span>
 							</label>
 						}
 						<button class="sr-only">Filter</button>
@@ -248,7 +249,7 @@ templ Calendar(p CalendarPage) {
 				</button>
 			</div>
 			// The header above stays put; this scrolls, and keeps its place across live refetches of #live.
-			<div class="relative -mx-5 -mb-5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5" data-scroll>
+			<div class="relative -mx-5 -mb-5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5 max-[759px]:-mx-3 max-[759px]:-mb-3 max-[759px]:px-3 max-[759px]:pb-3" data-scroll>
 				<div id="live" { live(KindEvent, KindMember, KindHousehold, KindIntegration)... } hx-select-oob="#calendar-list" class={ "flex flex-col gap-4", templ.KV("h-full", p.View == "month") }>
 					for _, s := range p.Stale {
 						<p role="status">

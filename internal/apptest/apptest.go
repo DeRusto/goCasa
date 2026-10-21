@@ -74,7 +74,7 @@ func New(t testing.TB, opts ...Option) *Harness {
 			GoogleRedirectURI: "http://gocasa.test/auth/google/callback",
 		},
 		Now:       clock.Now,
-		Upstreams: app.Upstreams{GoogleAuth: nowhere, GoogleAPI: nowhere, GoogleOAuth: nowhere, OpenMeteo: nowhere},
+		Upstreams: app.Upstreams{GoogleAuth: nowhere, GoogleAPI: nowhere, GoogleOAuth: nowhere, OpenMeteo: nowhere, Geocoding: nowhere},
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}}
 	for _, opt := range opts {
