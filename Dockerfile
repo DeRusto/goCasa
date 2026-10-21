@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.27-alpine AS build
+# Build on the runner's arch and cross-compile; QEMU-emulated go builds are very slow.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 RUN apk add --no-cache ca-certificates
 ARG GOPROXY=https://proxy.golang.org,direct
@@ -7,7 +9,7 @@ COPY . .
 # templ output (*_templ.go) is committed, so no generate step here. go build fetches
 # only the binary's modules (go mod download would also pull the templ CLI's tools).
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gocasa ./cmd/gocasa \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/gocasa ./cmd/gocasa \
  && mkdir -p /out/data
 
 FROM scratch
