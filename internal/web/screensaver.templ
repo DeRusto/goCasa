@@ -20,12 +20,12 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 			<title>Screensaver</title>
 			@htmx()
 		</head>
-		<body style="margin:0;background:#000;color:#ddd">
-			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:contain"/>
+		<body style="margin:0;background:#000;color:#ddd;font-family:system-ui,sans-serif">
+			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover"/>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
 				<div id="live" { live(KindEvent, KindHousehold, KindIntegration)... } style="display:flex;justify-content:space-between;align-items:flex-start;gap:2rem">
 					<div style={ frosted + "max-width:min(40rem,60vw)" }>
-						<p style="font-size:6rem;margin:0;line-height:1.1">@clock(p)</p>
+						<p style="font-size:6rem;margin:0;line-height:1.1;font-weight:300">@clock(p)</p>
 						<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 						<ul style="font-size:1.5rem;list-style:none;padding:0;margin:1rem 0 0;display:flex;flex-direction:column;gap:.25rem">
 							for _, e := range p.Days[0].Events {
@@ -43,7 +43,7 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 							<span style="display:block;width:7rem;flex:none">
 								@wxIcon(w.Conditions, w.Day, "")
 							</span>
-							<span style="font-size:6rem;line-height:1">{ deg(w.Current) }</span>
+							<span style="font-size:6rem;line-height:1;font-weight:300">{ deg(w.Current) }</span>
 						</div>
 					}
 				</div>
@@ -93,10 +93,10 @@ templ Night(mode string, p TodayPage, reloadSeconds int) {
 			<title>Night</title>
 			@htmx()
 		</head>
-		<body style="margin:0;background:#000;color:#333">
+		<body style="margin:0;background:#000;color:#333;font-family:system-ui,sans-serif">
 			<a id="wake" href="/" aria-label="Wake" data-night={ mode } style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none">
 				if mode == "dim_clock" {
-					<p style="font-size:6rem;margin:0">@clock(p)</p>
+					<p style="font-size:6rem;margin:0;font-weight:300">@clock(p)</p>
 					<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 				}
 			</a>
