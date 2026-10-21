@@ -34,6 +34,8 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
 
   docker:
+    # The image build skips tests, so publish only after binaries' go test passes.
+    needs: binaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
