@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -42,52 +41,21 @@ type mealieConfig struct {
 
 // mealieConn is what a call to Mealie needs.
 type mealieConn struct {
-	id    int64
-	base  string
-	token string
+	id   int64
+	base string
+	sc   syncClient
+}
+
+func newMealieConn(id int64, base, token string) mealieConn {
+	return mealieConn{id: id, base: base, sc: syncClient{name: "Mealie", client: mealieClient,
+		header: http.Header{"Authorization": {"Bearer " + token}, "Accept": {"application/json"}},
+		limit:  10 << 20, overrides: map[int]error{http.StatusNotFound: errMealieGone}}}
 }
 
 // call sends body (if any) as JSON to Mealie and decodes its answer into out
-// (if any). A 404 is errMealieGone; any other failure is transient, so polls
-// keep their 60 s pace.
+// (if any). A 404 is errMealieGone.
 func (c mealieConn) call(ctx context.Context, method, path string, body, out any) error {
-	var rd io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
-		rd = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	res, err := mealieClient.Do(req)
-	if err != nil {
-		return transient(err)
-	}
-	defer res.Body.Close()
-	switch {
-	case res.StatusCode == http.StatusNotFound:
-		return errMealieGone
-	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
-		return errors.New("Mealie refused the API token")
-	case res.StatusCode/100 != 2:
-		return transient(fmt.Errorf("Mealie answered %s", res.Status))
-	}
-	if out == nil {
-		return nil
-	}
-	if err := json.NewDecoder(io.LimitReader(res.Body, 10<<20)).Decode(out); err != nil {
-		return transient(fmt.Errorf("Mealie's answer isn't JSON: %w", err))
-	}
-	return nil
+	return c.sc.json(ctx, method, c.base+path, body, out)
 }
 
 // mealieItem is a Mealie shopping-list item: its raw JSON, kept whole in
@@ -257,7 +225,7 @@ func (a *App) mealieConn(ctx context.Context, id int64, token []byte) (mealieCon
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		return mealieConn{}, err
 	}
-	return mealieConn{id: id, base: cfg.URL, token: string(token)}, nil
+	return newMealieConn(id, cfg.URL, string(token)), nil
 }
 
 // mealieVersionOK says whether Mealie's /api/app/about version is v2.0 or later.
@@ -279,7 +247,7 @@ func (a *App) connectMealie(w http.ResponseWriter, r *http.Request) {
 			var about struct {
 				Version string `json:"version"`
 			}
-			if err := (mealieConn{base: raw, token: token}).call(ctx, http.MethodGet, "/api/app/about", nil, &about); err != nil {
+			if err := newMealieConn(0, raw, token).call(ctx, http.MethodGet, "/api/app/about", nil, &about); err != nil {
 				return "Couldn't reach Mealie at that address."
 			}
 			if !mealieVersionOK(about.Version) {
