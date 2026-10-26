@@ -1,3 +1,7 @@
+---
+status: partly superseded by ADR-0002 (the photo rotation)
+---
+
 # The Screensaver is not a deepening candidate
 
 The Screensaver isn't a deepening candidate: `currentPhoto` is already its deep interface, and Night mode is two small functions with no I/O that are tested across DST. An architecture review (October 2026) proposed a "Screensaver module" over device.go, immich.go and fallback.go. We dropped it because the deletion test fails: the module would only wrap what's already deep, and wouldn't concentrate any complexity.
