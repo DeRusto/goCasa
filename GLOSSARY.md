@@ -154,3 +154,7 @@ _Avoid_: Sleep, do not disturb, off hours
 **Fallback folder**:
 A folder of the Household's own images that the screensaver shows only when Immich has no photos to show.
 _Avoid_: Local photos, default images, backup folder
+
+**Photo pair**:
+Two portrait Immich photos the screensaver shows side by side, as one step of its rotation, so neither is cropped to fill a landscape Wall display.
+_Avoid_: Split view, diptych, double
