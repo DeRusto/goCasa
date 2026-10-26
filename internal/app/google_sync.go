@@ -34,27 +34,6 @@ var (
 	errCalendarGone = errors.New("Google has no such calendar for this account")
 )
 
-// transientError is a failure that retries on the normal schedule, without
-// backoff: network trouble, a 5xx or a 429 (spec §7.2).
-type transientError struct{ error }
-
-// transient marks err as a transientError. It drops a url.Error's URL as
-// runSync would, since runSync can't see inside the wrapper.
-func transient(err error) error {
-	if ue := (*url.Error)(nil); errors.As(err, &ue) {
-		err = ue.Err
-	}
-	return transientError{err}
-}
-
-// googleFailed is Google's answer status as an error, transient where it may pass.
-func googleFailed(status int, err error) error {
-	if status >= 500 || status == http.StatusTooManyRequests {
-		return transient(err)
-	}
-	return err
-}
-
 // googleCursor is a Google account's sync_cursor.
 type googleCursor struct {
 	NextFull int64             `json:"next_full"` // when the daily full re-import is due
@@ -182,7 +161,7 @@ func (a *App) googleAccess(ctx context.Context, refresh string) (string, error) 
 	case body.Error == "invalid_grant":
 		return "", errReconnect
 	case status != http.StatusOK || body.AccessToken == "":
-		return "", googleFailed(status, fmt.Errorf("Google wouldn't refresh access (%d %s)", status, body.Error))
+		return "", byStatus(status, fmt.Errorf("Google wouldn't refresh access (%d %s)", status, body.Error))
 	}
 	return body.AccessToken, nil
 }
@@ -224,7 +203,7 @@ func (a *App) googleEvents(ctx context.Context, access, cal, token string, now t
 		case res.StatusCode == http.StatusNotFound:
 			return nil, "", "", errCalendarGone
 		case res.StatusCode != http.StatusOK:
-			return nil, "", "", googleFailed(res.StatusCode, fmt.Errorf("Google wouldn't list a calendar's events (%s)", res.Status))
+			return nil, "", "", byStatus(res.StatusCode, fmt.Errorf("Google wouldn't list a calendar's events (%s)", res.Status))
 		case err != nil:
 			return nil, "", "", fmt.Errorf("Google's events: %w", err)
 		}
