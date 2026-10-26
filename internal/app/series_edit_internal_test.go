@@ -27,7 +27,7 @@ func TestPlanEdit(t *testing.T) {
 		canRepeat bool
 		want      editOutcome // when not refused
 		refusal   string
-		asked     bool // whether first is called
+		asked     bool // whether first is called, once
 	}{
 		{name: "not a Series", sc: scopeFollowing, c: retimed, canRepeat: true, want: editSingle},
 		{name: "not a Series, no scope", c: rerule, canRepeat: true, want: editSingle},
@@ -48,7 +48,7 @@ func TestPlanEdit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			first, asked := firstIs(tc.first)
 			p, err := planEdit(tc.sc, tc.inSeries, first, tc.c, was, tc.canRepeat)
-			if (*asked > 0) != tc.asked {
+			if want := map[bool]int{true: 1}[tc.asked]; *asked != want {
 				t.Errorf("first called %d times", *asked)
 			}
 			if tc.refusal != "" {
@@ -132,7 +132,7 @@ func TestPlanRemove(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			first, asked := firstIs(tc.first)
 			p, err := planRemove(tc.sc, tc.inSeries, first)
-			if (*asked > 0) != tc.asked {
+			if want := map[bool]int{true: 1}[tc.asked]; *asked != want {
 				t.Errorf("first called %d times", *asked)
 			}
 			if tc.refusal != "" {
