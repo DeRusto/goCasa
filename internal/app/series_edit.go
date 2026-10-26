@@ -38,9 +38,9 @@ func (ch editChanges) membersOnly() bool {
 // planEdit decides how change c applies, in Edit scope sc, to an event that
 // stands as was. first reports whether the Occurrence is its Series' first,
 // and is called only for This and following. canRepeat is whether the event's
-// calendar takes repeat changes; without it c.rerule is ignored. was' archived
-// Members, which c can't hold, should be left out. A change it won't make is a
-// *refusal.
+// calendar takes repeat changes; without it c.rerule is ignored. The changes'
+// members compares c's and was' Members as given, so leave archived ones out of
+// both where it is read. A change it won't make is a *refusal.
 func planEdit(sc scope, inSeries bool, first func() (bool, error), c, was eventChange, canRepeat bool) (editPlan, error) {
 	p := editPlan{changes: editChanges{
 		retimed: c.allDay != was.allDay || shownTimes(c) != shownTimes(was),
