@@ -35,6 +35,25 @@ func (ch editChanges) membersOnly() bool {
 	return ch.title == nil && ch.location == nil && ch.description == nil && !ch.retimed
 }
 
+// changesFrom is what change c alters from was.
+func changesFrom(c, was eventChange) editChanges {
+	ch := editChanges{
+		retimed: c.allDay != was.allDay || shownTimes(c) != shownTimes(was),
+		members: slices.ContainsFunc(c.members, func(m int64) bool { return !slices.Contains(was.members, m) }) ||
+			slices.ContainsFunc(was.members, func(m int64) bool { return !slices.Contains(c.members, m) }),
+	}
+	// Only the fields changed from the Occurrence apply, so an All events edit from a One-off edit doesn't spread its own changes.
+	for _, f := range []struct {
+		to       *any
+		got, was string
+	}{{&ch.title, c.title, was.title}, {&ch.location, c.location, was.location}, {&ch.description, c.description, was.description}} {
+		if f.got != f.was {
+			*f.to = f.got
+		}
+	}
+	return ch
+}
+
 // planEdit decides how change c applies, in Edit scope sc, to an event that
 // stands as was. first reports whether the Occurrence is its Series' first,
 // and is called only for This and following. canRepeat is whether the event's
@@ -42,20 +61,7 @@ func (ch editChanges) membersOnly() bool {
 // members compares c's and was' Members as given, so leave archived ones out of
 // both where it is read. A change it won't make is a *refusal.
 func planEdit(sc scope, inSeries bool, first func() (bool, error), c, was eventChange, canRepeat bool) (editPlan, error) {
-	p := editPlan{changes: editChanges{
-		retimed: c.allDay != was.allDay || shownTimes(c) != shownTimes(was),
-		members: slices.ContainsFunc(c.members, func(m int64) bool { return !slices.Contains(was.members, m) }) ||
-			slices.ContainsFunc(was.members, func(m int64) bool { return !slices.Contains(c.members, m) }),
-	}}
-	// Only the fields changed from the Occurrence apply, so an All events edit from a One-off edit doesn't spread its own changes.
-	for _, f := range []struct {
-		to       *any
-		got, was string
-	}{{&p.changes.title, c.title, was.title}, {&p.changes.location, c.location, was.location}, {&p.changes.description, c.description, was.description}} {
-		if f.got != f.was {
-			*f.to = f.got
-		}
-	}
+	p := editPlan{changes: changesFrom(c, was)}
 	rerule := canRepeat && c.rerule
 	switch {
 	case !inSeries:
