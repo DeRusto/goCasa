@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -55,29 +54,23 @@ func feedURL(u string) string {
 func (icalFeed) Sync(ctx context.Context, a *App, in integrationRow) error {
 	var cur feedCursor
 	json.Unmarshal([]byte(in.cursor), &cur) // "" is no cursor yet
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL(string(in.credentials)), nil)
-	if err != nil {
-		return errors.New("the feed address isn't a URL")
-	}
-	req.Header.Set("User-Agent", "GoCasa")
+	h := http.Header{}
 	if cur.ETag != "" {
-		req.Header.Set("If-None-Match", cur.ETag)
+		h.Set("If-None-Match", cur.ETag)
 	}
 	if cur.LastModified != "" {
-		req.Header.Set("If-Modified-Since", cur.LastModified)
+		h.Set("If-Modified-Since", cur.LastModified)
 	}
-	res, err := feedClient.Do(req)
+	sc := syncClient{name: "the feed", client: feedClient, header: h, limit: maxFeedBytes, overrides: map[int]error{http.StatusNotModified: nil}}
+	res, err := sc.do(ctx, http.MethodGet, feedURL(string(in.credentials)), nil)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
-	switch {
-	case res.StatusCode == http.StatusNotModified:
+	if res.StatusCode == http.StatusNotModified {
 		return nil
-	case res.StatusCode != http.StatusOK:
-		return fmt.Errorf("the feed answered %s", res.Status)
 	}
-	cal, err := ical.NewDecoder(http.MaxBytesReader(nil, res.Body, maxFeedBytes)).Decode()
+	cal, err := ical.NewDecoder(res.Body).Decode()
 	if err != nil {
 		return fmt.Errorf("that isn't an iCal feed: %w", err)
 	}

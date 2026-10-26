@@ -246,10 +246,30 @@ func TestBrokenFeedBacksOffAndLeavesOthersAlone(t *testing.T) {
 
 	bad.fail(0)
 	bad.set(vcal(swim), `"v3"`)
-	h.Clock.Advance(4 * time.Minute)
+	h.Clock.Advance(15 * time.Minute) // a 500 waits the feed's interval, not the backoff
 	h.RunDue()
 	if s := settings(t, h); strings.Contains(s, "Sync failing") {
 		t.Fatalf("still failing after a good sync:\n%s", s)
+	}
+}
+
+func TestFeedHostAnswering503DoesNotBackOff(t *testing.T) {
+	h := household(t)
+	f := newFeed(t, vcal(swim))
+	addFeed(t, h, "School", f.URL)
+	f.fail(http.StatusServiceUnavailable)
+	h.Clock.Advance(15 * time.Minute)
+	h.RunDue()
+	n := len(f.requests())
+	h.Clock.Advance(time.Minute)
+	h.RunDue()
+	if got := len(f.requests()); got != n {
+		t.Fatal("a 503 backed off (retried after a minute) instead of waiting the feed's interval")
+	}
+	h.Clock.Advance(14 * time.Minute)
+	h.RunDue()
+	if got := len(f.requests()); got != n+1 {
+		t.Fatalf("requests = %d, want a retry at the 15-minute interval", got-n)
 	}
 }
 

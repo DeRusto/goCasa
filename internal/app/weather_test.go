@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DeRusto/goCasa/internal/app"
 	"github.com/DeRusto/goCasa/internal/apptest"
@@ -18,6 +19,7 @@ type fakeMeteo struct {
 	mu      sync.Mutex
 	queries []url.Values
 	down    bool
+	dropped bool // hang up without answering: a network failure
 	*httptest.Server
 }
 
@@ -30,8 +32,13 @@ func newMeteo(t *testing.T) *fakeMeteo {
 	m.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.mu.Lock()
 		m.queries = append(m.queries, r.URL.Query())
-		down := m.down
+		down, dropped := m.down, m.dropped
 		m.mu.Unlock()
+		if dropped {
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+			return
+		}
 		if down {
 			http.Error(w, "down", http.StatusServiceUnavailable)
 			return
@@ -84,6 +91,28 @@ func TestWeatherPillRendersFromCacheEvenOffline(t *testing.T) {
 	}
 	if len(m.calls()) != 1 {
 		t.Fatal("a page fetched the weather")
+	}
+}
+
+func TestWeatherNetworkFailureRetriesAtTheNormalInterval(t *testing.T) {
+	h, m := weatherHousehold(t)
+	h.Post(t, "/settings/weather", url.Values{"lat": {"51.5"}, "lon": {"-0.12"}, "units": {"metric"}})
+	h.RunDue()
+	m.mu.Lock()
+	m.dropped = true
+	m.mu.Unlock()
+	h.Clock.Advance(15 * time.Minute)
+	h.RunDue() // fails
+	n := len(m.calls())
+	h.Clock.Advance(time.Minute)
+	h.RunDue()
+	if len(m.calls()) != n {
+		t.Fatal("a network failure backed off (retried after a minute) instead of waiting its interval")
+	}
+	h.Clock.Advance(14 * time.Minute)
+	h.RunDue()
+	if len(m.calls()) == n {
+		t.Fatal("not retried at the 15-minute interval")
 	}
 }
 
