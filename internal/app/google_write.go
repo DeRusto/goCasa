@@ -394,59 +394,105 @@ func (g googleAPI) seriesOf(ctx context.Context, row googleRow) (master googleEv
 	return master, o, o == m, nil
 }
 
+// googleEdit reaches Google for a write to event row, connecting and reading
+// its Series at most once each, and only when asked.
+type googleEdit struct {
+	a      *App
+	row    googleRow
+	g      *googleAPI
+	master *googleEvent // with o, the key of row's Occurrence, and whether it is the Series' first
+	o      int64
+	first  bool
+}
+
+// api is row's calendar in Google, or errNoVersion if GoCasa has no etag to send.
+func (e *googleEdit) api(ctx context.Context) (googleAPI, error) {
+	if e.g == nil {
+		if e.row.etag == "" {
+			return googleAPI{}, errNoVersion
+		}
+		g, err := e.a.googleCalendarAPI(ctx, e.row.account, e.row.calendar)
+		if err != nil {
+			return googleAPI{}, err
+		}
+		e.g = &g
+	}
+	return *e.g, nil
+}
+
+// series is row's Series as seriesOf reads it.
+func (e *googleEdit) series(ctx context.Context) (master googleEvent, o int64, first bool, err error) {
+	if e.master == nil {
+		g, err := e.api(ctx)
+		if err != nil {
+			return master, 0, false, err
+		}
+		if master, o, first, err = g.seriesOf(ctx, e.row); err != nil {
+			return master, 0, false, err
+		}
+		e.master, e.o, e.first = &master, o, first
+	}
+	return *e.master, e.o, e.first, nil
+}
+
+// isFirst is series' first, for the planner.
+func (e *googleEdit) isFirst(ctx context.Context) (bool, error) {
+	_, _, first, err := e.series(ctx)
+	return first, err
+}
+
 // writeGoogle makes change c to Google event row, which stands as was, in
-// Edit scope sc (spec §7.2): This event that occurrence, All events the
-// series' text, This and following a Split, or on the first occurrence the
-// whole series. A Split creates the new series, then ends the old one with
-// UNTIL, deleting the new one if that fails.
+// Edit scope sc (spec §7.2), as planEdit decides. A Split creates the new
+// series, then ends the old one with UNTIL, deleting the new one if that fails.
 func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was eventChange) (googleResult, error) {
 	if row.readOnly {
 		return googleResult{}, errReadOnly
 	}
-	if row.series != "" && sc == scopeAll && (c.allDay != was.allDay || shownTimes(c) != shownTimes(was)) {
-		return googleResult{}, &refusal{msg: "All events changes only the title, location, description and Members; change times with This event or This and following."}
-	}
-	if row.series != "" && sc != scopeThis && sc != scopeAll && sc != scopeFollowing {
-		return googleResult{}, &refusal{msg: "Pick which events to change."}
-	}
-	if c.title == was.title && c.location == was.location && c.description == was.description && c.allDay == was.allDay && shownTimes(c) == shownTimes(was) {
-		// Only the Members, which are GoCasa's own: Google isn't asked.
-		switch {
-		case row.series == "" || sc == scopeThis:
-			return googleResult{target: row.external, local: true}, nil
-		case sc == scopeFollowing:
-			return googleResult{target: row.series, series: true, from: row.id, local: true}, nil
+	ge := &googleEdit{a: a, row: row}
+	p, err := planEdit(sc, row.series != "", func() (bool, error) {
+		// Members only: Google isn't asked, and a Split's and Whole series' Members land alike, so this skips the GETs and plans a Split.
+		if changesFrom(c, was).membersOnly() {
+			return false, nil
 		}
-		return googleResult{target: row.series, series: true, local: true}, nil
-	}
-	if row.etag == "" {
-		return googleResult{}, errNoVersion
-	}
-	g, err := a.googleCalendarAPI(ctx, row.account, row.calendar)
+		return ge.isFirst(ctx)
+	}, c, was, false)
 	if err != nil {
 		return googleResult{}, err
 	}
-	if row.series == "" || sc == scopeThis {
+	if p.changes.membersOnly() {
+		// Only the Members, which are GoCasa's own: Google isn't asked.
+		switch p.outcome {
+		case editSingle, editOneOff:
+			return googleResult{target: row.external, local: true}, nil
+		case editText:
+			return googleResult{target: row.series, series: true, local: true}, nil
+		}
+		return googleResult{target: row.series, series: true, from: row.id, local: true}, nil
+	}
+	g, err := ge.api(ctx)
+	if err != nil {
+		return googleResult{}, err
+	}
+	if p.outcome == editSingle || p.outcome == editOneOff {
 		return googleResult{target: row.external}, g.call(ctx, http.MethodPatch, row.external, row.etag, googleBody(c), nil)
 	}
-	master, o, first, err := g.seriesOf(ctx, row)
+	master, o, _, err := ge.series(ctx)
 	if err != nil {
 		return googleResult{}, err
 	}
-	switch {
-	case sc == scopeAll:
-		// Only the fields changed from the occurrence apply, so editing from an edited one doesn't spread its own changes.
+	switch p.outcome {
+	case editText:
 		patch := map[string]any{}
-		for _, f := range [][3]string{{"summary", c.title, was.title}, {"location", c.location, was.location}, {"description", c.description, was.description}} {
-			if f[1] != f[2] {
-				patch[f[0]] = f[1]
+		for k, v := range map[string]any{"summary": p.changes.title, "location": p.changes.location, "description": p.changes.description} {
+			if v != nil {
+				patch[k] = v
 			}
 		}
 		if len(patch) > 0 {
 			err = g.call(ctx, http.MethodPatch, row.series, master.Etag, patch, nil)
 		}
 		return googleResult{target: row.series, series: true}, err
-	case first: // a new start renames every occurrence, so re-import
+	case editWhole: // a new start renames every occurrence, so re-import
 		body := googleBody(c)
 		if rec := reanchorLines(master.Recurrence, was, c); !slices.Equal(rec, master.Recurrence) {
 			body["recurrence"] = rec
@@ -473,30 +519,28 @@ func (a *App) writeGoogle(ctx context.Context, row googleRow, sc scope, c, was e
 	return googleResult{target: made.ID, series: true, fresh: true, full: true}, nil
 }
 
-// removeGoogle deletes Google event row in Edit scope sc: This event cancels
-// that occurrence, This and following ends the series before it (deleting it
-// from its first occurrence), All events deletes the series.
+// removeGoogle deletes Google event row in Edit scope sc, as planRemove decides.
 func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (googleResult, error) {
-	switch {
-	case row.readOnly:
+	if row.readOnly {
 		return googleResult{}, errReadOnly
-	case row.series != "" && sc != scopeThis && sc != scopeAll && sc != scopeFollowing:
-		return googleResult{}, &refusal{msg: "Pick which events to delete."}
-	case row.etag == "":
-		return googleResult{}, errNoVersion
 	}
-	g, err := a.googleCalendarAPI(ctx, row.account, row.calendar)
+	ge := &googleEdit{a: a, row: row}
+	p, err := planRemove(sc, row.series != "", func() (bool, error) { return ge.isFirst(ctx) })
 	if err != nil {
 		return googleResult{}, err
 	}
-	if row.series == "" || sc == scopeThis {
+	g, err := ge.api(ctx)
+	if err != nil {
+		return googleResult{}, err
+	}
+	if p.outcome == editSingle || p.outcome == editOneOff {
 		return googleResult{}, g.call(ctx, http.MethodDelete, row.external, row.etag, nil, nil)
 	}
-	master, o, first, err := g.seriesOf(ctx, row)
+	master, o, _, err := ge.series(ctx)
 	if err != nil {
 		return googleResult{}, err
 	}
-	if sc == scopeAll || first {
+	if p.outcome == editWhole {
 		return googleResult{}, g.call(ctx, http.MethodDelete, row.series, master.Etag, nil, nil)
 	}
 	old, _, err := a.splitRecurrence(ctx, master, o)
