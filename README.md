@@ -51,7 +51,7 @@ docker compose up -d
 
 Open `http://<host>:8080`, add your family under Settings → Members, and point a tablet at it. `GET /healthz` returns `200 ok` when the app is up and the database answers.
 
-Prefer a published image or a bare binary? Each [release](https://github.com/DeRusto/goCasa/releases) ships `ghcr.io/derusto/gocasa:<version>` (amd64 and arm64) and static binaries for Linux, macOS and Windows. To use the image, replace `build: .` in `compose.yaml` with `image: ghcr.io/derusto/gocasa:<version>`. To run the binary, set the variables from [Configuration](#configuration) and start it; it serves on `:8080`.
+Prefer a published image or a bare binary? Each [release](https://github.com/DeRusto/goCasa/releases) ships `ghcr.io/derusto/gocasa:<version>` (amd64 and arm64) and static binaries for Linux, macOS and Windows. To use the image, replace `build: .` in `compose.yaml` with `image: ghcr.io/derusto/gocasa:<version>`. To run the binary, put a `.env` next to it (or set the variables from [Configuration](#configuration)) and start it from that directory; it serves on `:8080`.
 
 ### Wall display tips
 
@@ -67,7 +67,7 @@ The screensaver's Fallback folder is `/data/photos`: when Immich has no photos t
 
 ## Configuration
 
-Config comes from environment variables only. There is no config file.
+Config comes from environment variables. Without Docker, the binary also reads a `.env` file (same format as `.env.example`) from the directory you start it in; variables already set in the environment win. Set `DATA_DIR` to a real path there, e.g. `DATA_DIR=./data`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -143,7 +143,7 @@ Reaching GoCasa from outside your home network is out of scope. That is your hom
 go test ./...
 go tool templ generate   # after editing any .templ file; *_templ.go is committed
 go generate ./internal/web   # templ, then Tailwind: after changing classes; static/app.css is committed
-go run ./cmd/gocasa      # needs the env vars above, e.g. DATA_DIR=./data
+go run ./cmd/gocasa      # reads ./.env; set DATA_DIR=./data there
 ```
 
 Styling is Tailwind v4 (`internal/web/input.css`), built by its standalone CLI so there's no Node. Put the [v4.3.3 binary](https://github.com/tailwindlabs/tailwindcss/releases/tag/v4.3.3) for your platform on your PATH as `tailwindcss`. Only changing classes needs it: builds and Docker use the committed `app.css`.

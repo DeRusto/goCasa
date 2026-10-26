@@ -241,7 +241,7 @@ type Integration interface {
 
 ## 11. Configuration and deployment
 
-Config is env-only (12-factor), no config file to drift:
+Config is env-only (12-factor), no config file to drift. For bare-binary runs, a `.env` in the working directory fills in variables the environment doesn't set:
 
 ```
 ADDR=:8080
