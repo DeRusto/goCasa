@@ -81,9 +81,9 @@ func TestStartupBackupOnlyWhenNewestOver24h(t *testing.T) {
 }
 
 func TestPreMigrationBackupIsKeptOutOfPruning(t *testing.T) {
-	t.Parallel()
 	h := apptest.New(t)
 	h.App.Close()
+	// Swaps the shared db.Migrations, so this test is not t.Parallel.
 	orig := db.Migrations
 	t.Cleanup(func() { db.Migrations = orig })
 	// The real migrations, plus one more after them.
