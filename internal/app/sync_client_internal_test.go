@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // answering is a server that answers every request with status and body.
@@ -41,6 +42,8 @@ func TestSyncClientRule(t *testing.T) {
 		{400, "", false, "Thing answered 400 Bad Request"},
 		{200, "<html>", false, "Thing's answer isn't JSON"},
 		{200, `{"a":`, false, "Thing's answer isn't JSON"}, // whole, but cut short by the sender
+		{200, `{"a":1}<html>`, false, "Thing's answer isn't JSON"},
+		{200, `{"a":1}` + "\n", false, ""}, // trailing whitespace is fine
 	} {
 		srv := answering(t, tc.status, tc.body)
 		var out struct{ A int }
@@ -84,6 +87,18 @@ func TestSyncClientAnswerCutOffIsTransient(t *testing.T) {
 	defer srv.Close()
 	err := testClient(nil).json(context.Background(), http.MethodGet, srv.URL, nil, new(any))
 	if !errors.As(err, new(transientError)) {
+		t.Errorf("err %v, want transient", err)
+	}
+}
+
+func TestSyncClientTimeoutIsTransient(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-release }))
+	defer srv.Close()
+	defer close(release)
+	c := testClient(nil)
+	c.client = &http.Client{Timeout: 50 * time.Millisecond}
+	if err := c.json(context.Background(), http.MethodGet, srv.URL, nil, new(any)); !errors.As(err, new(transientError)) {
 		t.Errorf("err %v, want transient", err)
 	}
 }

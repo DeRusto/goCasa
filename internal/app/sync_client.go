@@ -91,7 +91,12 @@ func (c syncClient) json(ctx context.Context, method, u string, body, out any) e
 		return nil
 	}
 	rd := &readFailure{Reader: res.Body}
-	if err := json.NewDecoder(rd).Decode(out); err != nil {
+	d := json.NewDecoder(rd)
+	err = d.Decode(out)
+	if err == nil && d.Decode(new(json.RawMessage)) != io.EOF {
+		err = errors.New("more follows the answer")
+	}
+	if err != nil {
 		if rd.err != nil && !errors.As(rd.err, new(*http.MaxBytesError)) { // cut off mid-answer, not garbled
 			return transient(rd.err)
 		}

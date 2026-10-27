@@ -250,7 +250,7 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 	var enc []byte
 	err := a.DB.QueryRowContext(ctx, "SELECT id, credentials_enc FROM integrations WHERE type = ?", immichType).Scan(&id, &enc)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, immichConn{}, nil
+		return 0, newImmichConn("", ""), nil // not connected: calls fail, never panic
 	}
 	if err != nil {
 		return 0, immichConn{}, err
@@ -495,7 +495,7 @@ func (a *App) cachedPhoto(ctx context.Context, id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	n, err := io.Copy(tmp, res.Body) // cut at the client's limit
+	n, err := io.Copy(tmp, io.LimitReader(res.Body, 50<<20)) // cut, as before: past the client's limit the copy would fail on every prefetch
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
