@@ -30,6 +30,7 @@ func (f fakeSync) Sync(context.Context, *App, integrationRow) error {
 }
 
 // fake adds an integration of a fake type to a, due now, whose syncs return *err.
+// It writes the shared integrationTypes map, so tests that use it are not t.Parallel.
 func fake(t *testing.T, a *App) (id int64, err *error, calls *int) {
 	t.Helper()
 	err, calls = new(error), new(int)
@@ -51,7 +52,6 @@ func health(t *testing.T, a *App, id int64) integrationHealth {
 }
 
 func TestOneFailureIsFailingAndThreeAreDown(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	id, syncErr, _ := fake(t, a)
@@ -76,7 +76,6 @@ func TestOneFailureIsFailingAndThreeAreDown(t *testing.T) {
 }
 
 func TestFailuresBackOffDoublingUntilTransient(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	start := a.Now()
@@ -112,7 +111,6 @@ func TestFailuresBackOffDoublingUntilTransient(t *testing.T) {
 }
 
 func TestFailureMessageIsCutTo500Runes(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	id, syncErr, _ := fake(t, a)
 	*syncErr = errors.New(strings.Repeat("é", 600))
@@ -131,7 +129,6 @@ func TestFailureMessageIsCutTo500Runes(t *testing.T) {
 }
 
 func TestARecordedWriteFailureIsDown(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	id, _, _ := fake(t, a)
 	if err := a.integrations.RecordFailure(context.Background(), id, errors.New("refused")); err != nil {
@@ -143,7 +140,6 @@ func TestARecordedWriteFailureIsDown(t *testing.T) {
 }
 
 func TestReconnectNeededWaitsForAReconnect(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	id, _, calls := fake(t, a)
@@ -170,7 +166,6 @@ func TestReconnectNeededWaitsForAReconnect(t *testing.T) {
 }
 
 func TestAWriteWaitsForASyncInProgress(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	id, syncErr, calls := fake(t, a)
 	started, release := make(chan struct{}), make(chan struct{})
@@ -196,7 +191,6 @@ func TestAWriteWaitsForASyncInProgress(t *testing.T) {
 }
 
 func TestConnectChecksTheAddress(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	probed := false
@@ -232,7 +226,6 @@ func TestConnectChecksTheAddress(t *testing.T) {
 }
 
 func TestConnectAddsAnotherWithItsOwnRows(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	_, _, calls := fake(t, a)
@@ -257,7 +250,6 @@ func TestConnectAddsAnotherWithItsOwnRows(t *testing.T) {
 }
 
 func TestReconnectingALoginResetsItsHealth(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	id, syncErr, calls := fake(t, a)
@@ -296,7 +288,6 @@ func TestReconnectingALoginResetsItsHealth(t *testing.T) {
 }
 
 func TestHealthsShowEveryIntegration(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	id, syncErr, _ := fake(t, a)
@@ -334,7 +325,6 @@ func published(ch chan web.Kind) []web.Kind {
 }
 
 func TestReconnectNeededAndAReconnectReachOpenPages(t *testing.T) {
-	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	id, _, _ := fake(t, a)
