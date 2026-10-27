@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -23,6 +24,13 @@ func TestARoundDealsEveryCandidateOnceCachedFirst(t *testing.T) {
 	}
 	if again := flat(deal(cands, seeded())); !slices.Equal(again, got) {
 		t.Errorf("same seed dealt %v then %v", got, again)
+	}
+	orders := map[string]bool{}
+	for seed := range uint64(10) {
+		orders[fmt.Sprint(flat(deal(cands, rand.New(rand.NewPCG(seed, 0)))))] = true
+	}
+	if len(orders) < 2 {
+		t.Errorf("ten seeds all dealt %v: the shuffle ignores rnd", got)
 	}
 }
 

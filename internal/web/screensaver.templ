@@ -151,17 +151,20 @@ templ Screensaver(p TodayPage, s Slides, nightSeconds int) {
 					setTimeout(() => { while (box.firstElementChild !== slide) box.firstElementChild.remove(); }, 1100); // after the fade
 				};
 				for (const f of box.querySelectorAll(".frame")) drift(f, Number(document.currentScript.dataset.photoSeconds) || 30);
+				let timer;
 				const next = async () => {
+					clearTimeout(timer);
 					let due = Date.now() + 60 * 1000;
 					try {
 						const p = await (await fetch("/screensaver/photo" + (portrait.matches ? "?portrait=1" : ""), { headers: { "X-Background": "1" } })).json();
 						due = Date.now() + (p.seconds || 60) * 1000; // the step's end, however long its photos take to load
 						await show(p.photos || [], p.seconds);
 					} catch {}
-					setTimeout(next, Math.max(0, due - Date.now()));
+					timer = setTimeout(next, Math.max(0, due - Date.now()));
 				};
-				// The page renders for a landscape screen; a portrait one asks for its own step now.
-				setTimeout(next, portrait.matches ? 0 : (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);
+				// The page renders for a landscape screen; a portrait one asks for its own step now, and so does a screen turned either way.
+				timer = setTimeout(next, portrait.matches ? 0 : (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);
+				portrait.addEventListener("change", next);
 			})();
 			</script>
 		</body>

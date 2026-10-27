@@ -54,6 +54,12 @@ func (f *fakeImmich) set(owner string, ids ...string) {
 	f.assets[owner] = ids
 }
 
+func (f *fakeImmich) setMeta(id string, m map[string]any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.meta[id] = m
+}
+
 func (f *fakeImmich) fetches(id string) int { f.mu.Lock(); defer f.mu.Unlock(); return f.thumbs[id] }
 
 func (f *fakeImmich) lastSearch() map[string]any {
@@ -214,7 +220,7 @@ func TestImmichPickedAlbumsAndPeopleRotateOnTheScreensaver(t *testing.T) {
 	if p := photo(t, wall); p != "" {
 		t.Fatalf("nothing picked, yet the screensaver shows %s", p)
 	}
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}, "person:per-ada": {"show"}})
 
 	body := f.lastSearch()
 	b, _ := json.Marshal(body["filter"])
@@ -276,8 +282,8 @@ func TestImmichRelistsHourlyAndOnRefreshNow(t *testing.T) {
 	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-pets"}})
-	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "the picked albums and people have no photos") || !strings.Contains(page, `value="alb-pets" checked`) {
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-pets": {"show"}})
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "the shown albums and people have no photos") || !strings.Contains(page, `name="album:alb-pets" value="show" checked`) {
 		t.Errorf("Settings doesn't say the picks are empty: %q", page)
 	}
 	f.set("alb-pets", "c1")
@@ -320,7 +326,7 @@ func TestEachPhotoShowsForSecondsPerPhotoWithoutRepeats(t *testing.T) {
 	t.Parallel()
 	h, _ := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "seconds_per_photo": {"60"}})
 	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `name="seconds_per_photo" value="60"`) {
 		t.Errorf("Settings doesn't show seconds per photo")
@@ -351,7 +357,7 @@ func TestPhotosAreCachedPrefetchedAndOutliveAnImmichOutage(t *testing.T) {
 	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}, "person:per-ada": {"show"}})
 	all := []string{"a1", "a2", "a3", "p1"}
 	first := photo(t, wall)
 	wall.Get(t, first)
@@ -389,7 +395,7 @@ func TestAnOutageWithAPartialCacheRotatesOnlyCachedPhotos(t *testing.T) {
 	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}, "person:per-ada": {"show"}})
 	wall.Get(t, photo(t, wall)) // one cached, no prefetch yet
 	f.setDown(true)
 	h.Clock.Advance(time.Hour)
@@ -407,7 +413,7 @@ func TestThePhotoCacheDropsTheLeastRecentlyUsed(t *testing.T) {
 	defer app.SetPhotoCacheLimit(2 * len("img:a1"))()
 	h, f := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	var ps []string
 	for range 3 {
 		p := photo(t, wall)
@@ -433,7 +439,7 @@ func TestScreensaverRotatesPhotosWithoutReloading(t *testing.T) {
 	t.Parallel()
 	h, _ := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	first := photo(t, wall)
 	var p struct {
 		Photos []struct {
@@ -490,13 +496,13 @@ func TestImmichFavoritesRatingAndExclusionsNarrowThePicks(t *testing.T) {
 	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
-	f.meta["a1"] = map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 5}}
-	f.meta["a2"] = map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 2}}
-	f.meta["p1"] = map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 4}}
+	f.setMeta("a1", map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 5}})
+	f.setMeta("a2", map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 2}})
+	f.setMeta("p1", map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 4}})
 
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}, "exclude_person": {"per-ada"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}, "person:per-ada": {"hide"}})
 	b, _ := json.Marshal(f.lastSearch())
-	for _, want := range []string{`"personIds":{"none":["per-ada"]}`, `"personIds":{"any":["per-ada"]}`, `"withExif":true`} {
+	for _, want := range []string{`"personIds":{"none":["per-ada"]}`, `"withExif":true`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("search %s has no %s", b, want)
 		}
@@ -505,7 +511,7 @@ func TestImmichFavoritesRatingAndExclusionsNarrowThePicks(t *testing.T) {
 		t.Errorf("excluding Ada showed %v, want a1 and a2", got) // a3 is in Summer but shows Ada
 	}
 
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "exclude_album": {"alb-pets"}, "person": {"per-ada"}, "favorites": {"on"}, "min_rating": {"3"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}, "album:alb-pets": {"hide"}, "person:per-ada": {"show"}, "favorites": {"on"}, "min_rating": {"3"}})
 	b, _ = json.Marshal(f.lastSearch())
 	if !strings.Contains(string(b), `"albumIds":{"none":["alb-pets"]}`) {
 		t.Errorf("search %s doesn't exclude Pets", b)
@@ -513,7 +519,7 @@ func TestImmichFavoritesRatingAndExclusionsNarrowThePicks(t *testing.T) {
 	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"a1": true, "p1": true}) {
 		t.Errorf("favorites rated 3+ showed %v, want a1 and p1", got)
 	}
-	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `name="favorites" checked`) || !strings.Contains(page, `<option value="3" selected`) || !strings.Contains(page, `name="exclude_album" value="alb-pets" checked`) {
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `name="favorites" checked`) || !strings.Contains(page, `<option value="3" selected`) || !strings.Contains(page, `name="album:alb-pets" value="hide" checked`) {
 		t.Errorf("Settings doesn't show the filters: %q", page)
 	}
 
@@ -534,7 +540,7 @@ func TestTodaysImmichMemoriesJoinTheRotation(t *testing.T) {
 	f.memories = []string{"m1", "a1", "m2"}
 	f.meta["m2"] = map[string]any{"type": "VIDEO"}
 	f.mu.Unlock()
-	post(t, h, "/settings/immich/picks", url.Values{"memories": {"on"}, "person": {"per-ada"}})
+	post(t, h, "/settings/immich/picks", url.Values{"memories": {"on"}, "person:per-ada": {"show"}})
 	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"m1": true, "a1": true, "a3": true, "p1": true}) {
 		t.Errorf("Memories with Ada showed %v", got)
 	}
@@ -566,10 +572,10 @@ func TestEachPhotoHasACaptionOfItsDateAndPlace(t *testing.T) {
 	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
-	f.meta["a1"] = map[string]any{"localDateTime": "2019-06-30T23:30:00.000Z", "fileCreatedAt": "2019-07-01T06:30:00.000Z", "exifInfo": map[string]any{"city": "Lisbon", "state": "Lisboa", "country": "Portugal"}}
-	f.meta["a2"] = map[string]any{"localDateTime": "2021-03-02T10:00:00.000Z", "exifInfo": map[string]any{"state": "Bavaria", "country": "Germany"}}
-	f.meta["a3"] = map[string]any{"localDateTime": "2022-12-25T10:00:00.000Z", "exifInfo": map[string]any{}}
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	f.setMeta("a1", map[string]any{"localDateTime": "2019-06-30T23:30:00.000Z", "fileCreatedAt": "2019-07-01T06:30:00.000Z", "exifInfo": map[string]any{"city": "Lisbon", "state": "Lisboa", "country": "Portugal"}})
+	f.setMeta("a2", map[string]any{"localDateTime": "2021-03-02T10:00:00.000Z", "exifInfo": map[string]any{"state": "Bavaria", "country": "Germany"}})
+	f.setMeta("a3", map[string]any{"localDateTime": "2022-12-25T10:00:00.000Z", "exifInfo": map[string]any{}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	captions := map[string]bool{}
 	for range 3 {
 		for _, p := range step(t, wall, "") {
@@ -596,12 +602,12 @@ func TestPortraitPhotosShowInPairsOnLandscapeScreens(t *testing.T) {
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	f.set("alb-summer", "l1", "t1", "t2", "t3", "t4", "s1")
-	f.meta["l1"] = map[string]any{"width": 4000, "height": 3000}
+	f.setMeta("l1", map[string]any{"width": 4000, "height": 3000})
 	for _, id := range []string{"t1", "t2", "t3"} {
-		f.meta[id] = map[string]any{"width": 3000, "height": 4000}
+		f.setMeta(id, map[string]any{"width": 3000, "height": 4000})
 	}
-	f.meta["t4"] = map[string]any{"exifInfo": map[string]any{"exifImageWidth": 4000, "exifImageHeight": 3000, "orientation": "6"}} // stored sideways
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	f.setMeta("t4", map[string]any{"exifInfo": map[string]any{"exifImageWidth": 4000, "exifImageHeight": 3000, "orientation": "6"}}) // stored sideways
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	portraits := map[string]bool{"t1": true, "t2": true, "t3": true, "t4": true}
 	seen := map[string]bool{}
 	for range 4 { // l1, s1 and two pairs
@@ -639,7 +645,7 @@ func TestScreensaverPhotoFitAndZoomSettings(t *testing.T) {
 	t.Parallel()
 	h, _ := immichHousehold(t)
 	wall := h.Device()
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `data-fit="fill" data-zoom`) || strings.Contains(page, `class="bg"`) {
 		t.Errorf("by default photos fill the screen and zoom: %q", page)
 	}

@@ -32,8 +32,31 @@ func (a *App) folderScanDue(now time.Time) bool {
 // scanFolder lists the folder's JPEG, PNG and WebP images, subfolders
 // included, as the folder's rotation list. A missing folder lists nothing.
 func (a *App) scanFolder(ctx context.Context, now time.Time) error {
+	type known struct {
+		taken int64
+		w, h  int
+	}
+	seen := map[string]known{} // what the last scan stored, so unchanged files aren't reread
+	rows, err := a.DB.QueryContext(ctx, "SELECT external_id_or_path, coalesce(taken_at, 0), width, height FROM photos_cache WHERE source = ?", photoSourceFolder)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var rel string
+		var k known
+		if err := rows.Scan(&rel, &k.taken, &k.w, &k.h); err != nil {
+			rows.Close()
+			return err
+		}
+		seen[rel] = k
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	loc := a.location(ctx)
 	var found []immichAsset // ID is the slash-separated path inside the folder
-	err := filepath.WalkDir(a.folderDir(), func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(a.folderDir(), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
@@ -63,8 +86,14 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 		if err != nil {
 			return err
 		}
-		as := immichAsset{ID: filepath.ToSlash(rel), TakenAt: info.ModTime()}
-		as.Width, as.Height = imageSize(p)
+		// Local, as Immich has it: the mod time's wall clock in the Household's zone, written as UTC.
+		mod := info.ModTime().In(loc)
+		as := immichAsset{ID: filepath.ToSlash(rel), Local: time.Date(mod.Year(), mod.Month(), mod.Day(), mod.Hour(), mod.Minute(), mod.Second(), 0, time.UTC)}
+		if k, ok := seen[as.ID]; ok && k.taken == as.Local.Unix() && k.w > 0 {
+			as.Width, as.Height = k.w, k.h
+		} else {
+			as.Width, as.Height = imageSize(p)
+		}
 		found = append(found, as)
 		return nil
 	})

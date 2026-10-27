@@ -53,9 +53,9 @@ templ ImmichSection(m *Immich) {
 			}
 			switch  {
 				case m.NothingPicked:
-					<p role="status">No Immich photos show: pick at least one album or person, or Memories.</p>
+					<p role="status">No Immich photos show: pick at least one album or person to show, or Memories.</p>
 				case m.Photos == 0:
-					<p role="status">No Immich photos show: the picked albums and people have no photos.</p>
+					<p role="status">No Immich photos show: the shown albums and people have no photos, or the hidden ones, Favorites only and Minimum rating left none.</p>
 				default:
 					<p role="status">{ strconv.Itoa(m.Photos) } photos in the rotation.</p>
 			}
@@ -63,34 +63,27 @@ templ ImmichSection(m *Immich) {
 				<fieldset>
 					<legend>Albums</legend>
 					for _, p := range m.Albums {
-						<label class="pick"><input type="checkbox" name="album" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+						@immichPick("album", p)
 					}
 				</fieldset>
 				<fieldset>
 					<legend>People</legend>
 					for _, p := range m.People {
-						<label class="pick"><input type="checkbox" name="person" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+						@immichPick("person", p)
 					}
 				</fieldset>
+				<p class="text-muted">A photo in a hidden album, or showing a hidden person, never shows, even if a shown one has it.</p>
 				<label><input type="checkbox" name="memories" checked?={ m.Memories }/> Memories: today's "on this day" photos</label>
-				<fieldset>
-					<legend>Never show (even in a picked album)</legend>
-					for _, p := range m.Albums {
-						<label class="pick"><input type="checkbox" name="exclude_album" value={ p.ID } checked?={ p.Excluded }/> { p.Name }</label>
-					}
-					for _, p := range m.People {
-						<label class="pick"><input type="checkbox" name="exclude_person" value={ p.ID } checked?={ p.Excluded }/> { p.Name }</label>
-					}
-				</fieldset>
 				<label><input type="checkbox" name="favorites" checked?={ m.Favorites }/> Favorites only</label>
 				<label>
 					Minimum rating
-					<select name="min_rating">
+					<select name="min_rating" aria-describedby="immich-rating-note">
 						for n := range 6 {
 							@option(strconv.Itoa(n), ratingLabel(n), strconv.Itoa(m.MinRating))
 						}
 					</select>
 				</label>
+				<p id="immich-rating-note" class="text-muted">With a minimum set, unrated photos don't show.</p>
 				<button class="btn-primary">Save photos</button>
 			</form>
 			@integrationActions() {
@@ -103,4 +96,15 @@ templ ImmichSection(m *Immich) {
 			}
 		}
 	</section>
+}
+
+// immichPick is album or person p's Show / Hide / neither choice.
+templ immichPick(kind string, p ImmichPick) {
+	<fieldset class="flex flex-wrap items-center gap-2">
+		<legend class="sr-only">{ p.Name }</legend>
+		<span aria-hidden="true">{ p.Name }</span>
+		<label class="pick"><input type="radio" name={ kind + ":" + p.ID } value="show" checked?={ p.Picked && !p.Excluded }/> Show</label>
+		<label class="pick"><input type="radio" name={ kind + ":" + p.ID } value="hide" checked?={ p.Excluded }/> Hide</label>
+		<label class="pick"><input type="radio" name={ kind + ":" + p.ID } value="" checked?={ !p.Picked && !p.Excluded }/> Neither</label>
+	</fieldset>
 }

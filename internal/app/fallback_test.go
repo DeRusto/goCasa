@@ -1,6 +1,9 @@
 package app_test
 
 import (
+	"bytes"
+	"image"
+	"image/jpeg"
 	"net/http"
 	"net/url"
 	"os"
@@ -89,7 +92,7 @@ func TestTheFallbackFolderIsNeverMixedWithImmich(t *testing.T) {
 	h, _ := immichHousehold(t)
 	wall := h.Device()
 	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	h.RunDue()
 	for range 6 {
 		_, img := wall.Get(t, photo(t, wall))
@@ -110,7 +113,7 @@ func TestTheFallbackFolderShowsWhileImmichIsDownWithNothingCached(t *testing.T) 
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	f.setDown(true)
 	h.Clock.Advance(time.Hour)
 	h.RunDue() // the re-list fails with nothing cached
@@ -175,5 +178,31 @@ func TestWithNeitherSourceTheClockAndAgendaShowOnDark(t *testing.T) {
 	post(t, h, "/settings/fallback-folder", url.Values{"enabled": {"on"}})
 	if p := photo(t, wall); p == "" {
 		t.Errorf("the Fallback folder is back on, yet no photo shows")
+	}
+}
+
+func TestSidewaysFolderJPEGsPairAsPortraits(t *testing.T) {
+	t.Parallel()
+	h := apptest.New(t)
+	setup(t, h)
+	wall := h.Device()
+	// Stored 400×200 with EXIF orientation 6: upright, a 200×400 portrait.
+	var raw bytes.Buffer
+	jpeg.Encode(&raw, image.NewGray(image.Rect(0, 0, 400, 200)), nil)
+	exif := []byte("Exif\x00\x00MM\x00\x2a\x00\x00\x00\x08\x00\x01\x01\x12\x00\x03\x00\x00\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00")
+	pic := append([]byte{0xff, 0xd8, 0xff, 0xe1, 0, byte(len(exif) + 2)}, exif...)
+	pic = append(pic, raw.Bytes()[2:]...)
+	addFolderPhoto(t, h, "a.jpg", string(pic))
+	addFolderPhoto(t, h, "b.jpg", string(pic))
+	addFolderPhoto(t, h, "broken.jpg", "not a jpeg") // no size: shows alone
+	h.RunDue()
+
+	sizes := map[int]int{}
+	for range 2 {
+		sizes[len(step(t, wall, ""))]++
+		h.Clock.Advance(30 * time.Second)
+	}
+	if sizes[2] != 1 || sizes[1] != 1 {
+		t.Fatalf("steps by photo count = %v, want the two sideways JPEGs paired and the broken one alone", sizes)
 	}
 }

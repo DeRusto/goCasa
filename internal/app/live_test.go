@@ -206,7 +206,7 @@ func TestImmichPicksAndDisconnectPublishTheIntegrationKind(t *testing.T) {
 	t.Parallel()
 	h, _ := immichHousehold(t)
 	_, lines := stream(t, h)
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	wantKind(t, lines, "integration")
 	post(t, h, "/settings/immich/delete", nil)
 	wantKind(t, lines, "integration")

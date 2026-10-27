@@ -387,7 +387,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\">\n\t\t\t(() => {\n\t\t\t\tconst box = document.getElementById(\"slides\"), blur = box.dataset.fit === \"blur\";\n\t\t\t\tconst portrait = matchMedia(\"(orientation: portrait)\");\n\t\t\t\tconst drift = (f, seconds) => { // a random direction per photo\n\t\t\t\t\tf.style.setProperty(\"--s\", seconds + \"s\");\n\t\t\t\t\tf.style.setProperty(\"--x\", (Math.random() * 8 - 4).toFixed(1) + \"%\");\n\t\t\t\t\tf.style.setProperty(\"--y\", (Math.random() * 8 - 4).toFixed(1) + \"%\");\n\t\t\t\t};\n\t\t\t\tconst srcs = el => [...el.querySelectorAll(\".photo\")].map(i => i.getAttribute(\"src\")).join(\" \");\n\t\t\t\t// show fades in step's photos over the current ones once they have\n\t\t\t\t// loaded, so no partly drawn photo shows; a broken one is left out.\n\t\t\t\tconst show = async (photos, seconds) => {\n\t\t\t\t\tconst cur = box.lastElementChild;\n\t\t\t\t\tif (srcs(cur) === photos.map(p => p.src).join(\" \")) return;\n\t\t\t\t\tconst slide = document.createElement(\"div\");\n\t\t\t\t\tslide.className = \"slide\";\n\t\t\t\t\tconst frames = photos.map(p => {\n\t\t\t\t\t\tconst f = document.createElement(\"div\");\n\t\t\t\t\t\tf.className = \"frame\";\n\t\t\t\t\t\tdrift(f, seconds);\n\t\t\t\t\t\tif (blur) {\n\t\t\t\t\t\t\tconst bg = new Image();\n\t\t\t\t\t\t\tbg.className = \"bg\";\n\t\t\t\t\t\t\tbg.alt = \"\";\n\t\t\t\t\t\t\tbg.src = p.src;\n\t\t\t\t\t\t\tf.append(bg);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconst img = new Image();\n\t\t\t\t\t\timg.className = \"photo\";\n\t\t\t\t\t\timg.alt = \"\";\n\t\t\t\t\t\timg.src = p.src;\n\t\t\t\t\t\tf.append(img);\n\t\t\t\t\t\tif (p.caption) {\n\t\t\t\t\t\t\tconst c = document.createElement(\"span\");\n\t\t\t\t\t\t\tc.className = \"caption\";\n\t\t\t\t\t\t\tc.textContent = p.caption;\n\t\t\t\t\t\t\tf.append(c);\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn f;\n\t\t\t\t\t});\n\t\t\t\t\tconst ok = await Promise.all(frames.map(f => f.querySelector(\".photo\").decode().then(() => true, () => false)));\n\t\t\t\t\tslide.append(...frames.filter((_, i) => ok[i]));\n\t\t\t\t\tbox.append(slide);\n\t\t\t\t\tsetTimeout(() => { while (box.firstElementChild !== slide) box.firstElementChild.remove(); }, 1100); // after the fade\n\t\t\t\t};\n\t\t\t\tfor (const f of box.querySelectorAll(\".frame\")) drift(f, Number(document.currentScript.dataset.photoSeconds) || 30);\n\t\t\t\tconst next = async () => {\n\t\t\t\t\tlet due = Date.now() + 60 * 1000;\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst p = await (await fetch(\"/screensaver/photo\" + (portrait.matches ? \"?portrait=1\" : \"\"), { headers: { \"X-Background\": \"1\" } })).json();\n\t\t\t\t\t\tdue = Date.now() + (p.seconds || 60) * 1000; // the step's end, however long its photos take to load\n\t\t\t\t\t\tawait show(p.photos || [], p.seconds);\n\t\t\t\t\t} catch {}\n\t\t\t\t\tsetTimeout(next, Math.max(0, due - Date.now()));\n\t\t\t\t};\n\t\t\t\t// The page renders for a landscape screen; a portrait one asks for its own step now.\n\t\t\t\tsetTimeout(next, portrait.matches ? 0 : (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);\n\t\t\t})();\n\t\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\">\n\t\t\t(() => {\n\t\t\t\tconst box = document.getElementById(\"slides\"), blur = box.dataset.fit === \"blur\";\n\t\t\t\tconst portrait = matchMedia(\"(orientation: portrait)\");\n\t\t\t\tconst drift = (f, seconds) => { // a random direction per photo\n\t\t\t\t\tf.style.setProperty(\"--s\", seconds + \"s\");\n\t\t\t\t\tf.style.setProperty(\"--x\", (Math.random() * 8 - 4).toFixed(1) + \"%\");\n\t\t\t\t\tf.style.setProperty(\"--y\", (Math.random() * 8 - 4).toFixed(1) + \"%\");\n\t\t\t\t};\n\t\t\t\tconst srcs = el => [...el.querySelectorAll(\".photo\")].map(i => i.getAttribute(\"src\")).join(\" \");\n\t\t\t\t// show fades in step's photos over the current ones once they have\n\t\t\t\t// loaded, so no partly drawn photo shows; a broken one is left out.\n\t\t\t\tconst show = async (photos, seconds) => {\n\t\t\t\t\tconst cur = box.lastElementChild;\n\t\t\t\t\tif (srcs(cur) === photos.map(p => p.src).join(\" \")) return;\n\t\t\t\t\tconst slide = document.createElement(\"div\");\n\t\t\t\t\tslide.className = \"slide\";\n\t\t\t\t\tconst frames = photos.map(p => {\n\t\t\t\t\t\tconst f = document.createElement(\"div\");\n\t\t\t\t\t\tf.className = \"frame\";\n\t\t\t\t\t\tdrift(f, seconds);\n\t\t\t\t\t\tif (blur) {\n\t\t\t\t\t\t\tconst bg = new Image();\n\t\t\t\t\t\t\tbg.className = \"bg\";\n\t\t\t\t\t\t\tbg.alt = \"\";\n\t\t\t\t\t\t\tbg.src = p.src;\n\t\t\t\t\t\t\tf.append(bg);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconst img = new Image();\n\t\t\t\t\t\timg.className = \"photo\";\n\t\t\t\t\t\timg.alt = \"\";\n\t\t\t\t\t\timg.src = p.src;\n\t\t\t\t\t\tf.append(img);\n\t\t\t\t\t\tif (p.caption) {\n\t\t\t\t\t\t\tconst c = document.createElement(\"span\");\n\t\t\t\t\t\t\tc.className = \"caption\";\n\t\t\t\t\t\t\tc.textContent = p.caption;\n\t\t\t\t\t\t\tf.append(c);\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn f;\n\t\t\t\t\t});\n\t\t\t\t\tconst ok = await Promise.all(frames.map(f => f.querySelector(\".photo\").decode().then(() => true, () => false)));\n\t\t\t\t\tslide.append(...frames.filter((_, i) => ok[i]));\n\t\t\t\t\tbox.append(slide);\n\t\t\t\t\tsetTimeout(() => { while (box.firstElementChild !== slide) box.firstElementChild.remove(); }, 1100); // after the fade\n\t\t\t\t};\n\t\t\t\tfor (const f of box.querySelectorAll(\".frame\")) drift(f, Number(document.currentScript.dataset.photoSeconds) || 30);\n\t\t\t\tlet timer;\n\t\t\t\tconst next = async () => {\n\t\t\t\t\tclearTimeout(timer);\n\t\t\t\t\tlet due = Date.now() + 60 * 1000;\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst p = await (await fetch(\"/screensaver/photo\" + (portrait.matches ? \"?portrait=1\" : \"\"), { headers: { \"X-Background\": \"1\" } })).json();\n\t\t\t\t\t\tdue = Date.now() + (p.seconds || 60) * 1000; // the step's end, however long its photos take to load\n\t\t\t\t\t\tawait show(p.photos || [], p.seconds);\n\t\t\t\t\t} catch {}\n\t\t\t\t\ttimer = setTimeout(next, Math.max(0, due - Date.now()));\n\t\t\t\t};\n\t\t\t\t// The page renders for a landscape screen; a portrait one asks for its own step now, and so does a screen turned either way.\n\t\t\t\ttimer = setTimeout(next, portrait.matches ? 0 : (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);\n\t\t\t\tportrait.addEventListener(\"change\", next);\n\t\t\t})();\n\t\t\t</script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -437,7 +437,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(mode)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 188, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 191, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -463,7 +463,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 191, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 194, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -501,7 +501,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue("sse:" + string(KindHousehold))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 201, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 204, Col: 100}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -557,7 +557,7 @@ func nightWatch(seconds int) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(seconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 214, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 217, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -635,7 +635,7 @@ func wallDisplay(idleSeconds int) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(idleSeconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 283, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 286, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {

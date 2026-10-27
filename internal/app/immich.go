@@ -410,8 +410,26 @@ func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
 // and the favorites and rating filters, then re-lists.
 func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	// Each album and person is "album:<id>" or "person:<id>", set to show, hide or neither.
+	picks := map[string][]string{}
+	for k, v := range r.PostForm {
+		kind, id, ok := strings.Cut(k, ":")
+		if !ok || (kind != "album" && kind != "person") || id == "" {
+			continue
+		}
+		switch v[0] {
+		case "show":
+			picks[kind] = append(picks[kind], id)
+		case "hide":
+			picks["exclude_"+kind] = append(picks["exclude_"+kind], id)
+		case "":
+		default:
+			a.settingsPage(w, r, http.StatusBadRequest, "Each album and person is Show, Hide or neither.")
+			return
+		}
+	}
 	ids := func(name string) string {
-		b, _ := json.Marshal(append([]string{}, r.PostForm[name]...))
+		b, _ := json.Marshal(append([]string{}, slices.Sorted(slices.Values(picks[name]))...))
 		return string(b)
 	}
 	rating, err := strconv.Atoi(cmp.Or(r.PostFormValue("min_rating"), "0"))

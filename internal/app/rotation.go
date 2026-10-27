@@ -231,7 +231,7 @@ func (a *App) photoCaption(ctx context.Context, id int64) (string, error) {
 	}
 	var parts []string
 	if taken.Valid && taken.Int64 > 0 {
-		// UTC: Immich's taken_at is the photographer's local time stored as UTC.
+		// UTC: taken_at is the local time it was taken, stored as UTC.
 		parts = append(parts, time.Unix(taken.Int64, 0).UTC().Format("January 2006"))
 	}
 	if place != "" {
