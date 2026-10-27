@@ -40,6 +40,7 @@ func TestSyncClientRule(t *testing.T) {
 		{404, "", false, "Thing answered 404 Not Found"},
 		{400, "", false, "Thing answered 400 Bad Request"},
 		{200, "<html>", false, "Thing's answer isn't JSON"},
+		{200, `{"a":`, false, "Thing's answer isn't JSON"}, // whole, but cut short by the sender
 	} {
 		srv := answering(t, tc.status, tc.body)
 		var out struct{ A int }
@@ -72,6 +73,18 @@ func TestSyncClientNetworkErrorIsTransientWithoutTheURL(t *testing.T) {
 	// An address that won't parse leaves its secret out too.
 	if _, err := testClient(nil).do(context.Background(), http.MethodGet, "http://[::1/feed?token=s3cret", nil); err == nil || strings.Contains(err.Error(), "s3cret") {
 		t.Errorf("bad address: %v", err)
+	}
+}
+
+func TestSyncClientAnswerCutOffIsTransient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		io.WriteString(w, `{"a":1,`) // then the connection closes
+	}))
+	defer srv.Close()
+	err := testClient(nil).json(context.Background(), http.MethodGet, srv.URL, nil, new(any))
+	if !errors.As(err, new(transientError)) {
+		t.Errorf("err %v, want transient", err)
 	}
 }
 

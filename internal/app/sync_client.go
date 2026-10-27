@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 )
@@ -91,13 +90,29 @@ func (c syncClient) json(ctx context.Context, method, u string, body, out any) e
 	if out == nil || res.StatusCode/100 != 2 {
 		return nil
 	}
-	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-		if ne := net.Error(nil); errors.As(err, &ne) { // cut off mid-answer, not garbled
-			return transient(err)
+	rd := &readFailure{Reader: res.Body}
+	if err := json.NewDecoder(rd).Decode(out); err != nil {
+		if rd.err != nil && !errors.As(rd.err, new(*http.MaxBytesError)) { // cut off mid-answer, not garbled
+			return transient(rd.err)
 		}
 		return fmt.Errorf("%s's answer isn't JSON: %w", c.name, err)
 	}
 	return nil
+}
+
+// readFailure keeps the first error reading the answer itself, so a
+// connection lost mid-answer isn't mistaken for a garbled one.
+type readFailure struct {
+	io.Reader
+	err error
+}
+
+func (r *readFailure) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err != nil && err != io.EOF && r.err == nil {
+		r.err = err
+	}
+	return n, err
 }
 
 // noURL drops a url.Error's URL, which may hold a feed's secret token.
