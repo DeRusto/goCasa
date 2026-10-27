@@ -24,7 +24,8 @@ const frosted templ.SafeCSS = "background:rgba(20,20,20,.35);-webkit-backdrop-fi
 
 // slideCSS lays out #slides: each step is a .slide of one or two .frames
 // (a Photo pair) side by side, the newest on top fading in over the last.
-// The slow zoom animates only transform, so the clock above doesn't stutter.
+// The slow zoom animates only transform, and while it runs the panels above
+// drop their blur, which would be redrawn every frame and make it judder.
 const slideCSS = `
 #slides .slide{position:fixed;inset:0;display:flex;gap:6px;background:#000;animation:fade 1s}
 #slides .frame{position:relative;flex:1;overflow:hidden}
@@ -36,6 +37,7 @@ const slideCSS = `
 @keyframes fade{from{opacity:0}}
 @keyframes drift{to{transform:scale(1.1) translate(var(--x,0),var(--y,0))}}
 @media (prefers-reduced-motion:reduce){#slides .slide,#slides[data-zoom] .photo{animation:none}}
+@media (prefers-reduced-motion:no-preference){#slides[data-zoom]~#wake .frosted{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:rgba(20,20,20,.55)!important}}
 `
 
 // Screensaver is what an idle Wall display shows: the clock and today's
@@ -71,7 +73,7 @@ templ Screensaver(p TodayPage, s Slides, nightSeconds int) {
 			</div>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
 				<div id="live" { live(KindEvent, KindHousehold, KindIntegration)... } style="display:flex;justify-content:space-between;align-items:flex-start;gap:2rem">
-					<div style={ frosted + "max-width:min(40rem,60vw)" }>
+					<div class="frosted" style={ frosted + "max-width:min(40rem,60vw)" }>
 						<p style="font-size:6rem;margin:0;line-height:1.1;font-weight:300">@clock(p)</p>
 						<p style="font-size:2rem;margin:0">{ p.Now.Format("Monday 2 January") }</p>
 						<ul style="font-size:1.5rem;list-style:none;padding:0;margin:1rem 0 0;display:flex;flex-direction:column;gap:.25rem">
@@ -86,7 +88,7 @@ templ Screensaver(p TodayPage, s Slides, nightSeconds int) {
 						</ul>
 					</div>
 					if w := p.Weather; w != nil {
-						<div style={ frosted + "display:flex;align-items:center;gap:1.5rem" } role="img" aria-label={ w.Conditions + ", " + deg(w.Current) + w.Unit }>
+						<div class="frosted" style={ frosted + "display:flex;align-items:center;gap:1.5rem" } role="img" aria-label={ w.Conditions + ", " + deg(w.Current) + w.Unit }>
 							<span style="display:block;width:7rem;flex:none">
 								@wxIcon(w.Conditions, w.Day, "")
 							</span>

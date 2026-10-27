@@ -32,7 +32,8 @@ const frosted templ.SafeCSS = "background:rgba(20,20,20,.35);-webkit-backdrop-fi
 
 // slideCSS lays out #slides: each step is a .slide of one or two .frames
 // (a Photo pair) side by side, the newest on top fading in over the last.
-// The slow zoom animates only transform, so the clock above doesn't stutter.
+// The slow zoom animates only transform, and while it runs the panels above
+// drop their blur, which would be redrawn every frame and make it judder.
 const slideCSS = `
 #slides .slide{position:fixed;inset:0;display:flex;gap:6px;background:#000;animation:fade 1s}
 #slides .frame{position:relative;flex:1;overflow:hidden}
@@ -44,6 +45,7 @@ const slideCSS = `
 @keyframes fade{from{opacity:0}}
 @keyframes drift{to{transform:scale(1.1) translate(var(--x,0),var(--y,0))}}
 @media (prefers-reduced-motion:reduce){#slides .slide,#slides[data-zoom] .photo{animation:none}}
+@media (prefers-reduced-motion:no-preference){#slides[data-zoom]~#wake .frosted{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:rgba(20,20,20,.55)!important}}
 `
 
 // Screensaver is what an idle Wall display shows: the clock and today's
@@ -90,7 +92,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(s.Fit)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 57, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 59, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -123,7 +125,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(ph.Src)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 62, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 64, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 				if templ_7745c5c3_Err != nil {
@@ -141,7 +143,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(ph.Src)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 64, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 66, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -159,7 +161,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(ph.Caption)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 66, Col: 42}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 68, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -183,14 +185,14 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, " style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:2rem\"><div style=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, " style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:2rem\"><div class=\"frosted\" style=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(frosted + "max-width:min(40rem,60vw)")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 74, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 76, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -211,7 +213,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 76, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 78, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -229,7 +231,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(templ.KV("opacity:.5", e.Past))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 80, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 82, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -247,7 +249,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(e.End, 10))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 82, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 84, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 				if templ_7745c5c3_Err != nil {
@@ -265,7 +267,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(e.Time)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 84, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 86, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -278,7 +280,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(e.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 84, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 86, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -294,14 +296,14 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if w := p.Weather; w != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div style=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"frosted\" style=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(frosted + "display:flex;align-items:center;gap:1.5rem")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 89, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 91, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -314,7 +316,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(w.Conditions + ", " + deg(w.Current) + w.Unit)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 89, Col: 145}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 91, Col: 161}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 			if templ_7745c5c3_Err != nil {
@@ -335,7 +337,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(deg(w.Current))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 93, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 95, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -381,7 +383,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(s.Seconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 107, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 109, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -437,7 +439,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(mode)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 191, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 193, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -463,7 +465,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 194, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 196, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -501,7 +503,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue("sse:" + string(KindHousehold))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 204, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 206, Col: 100}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -557,7 +559,7 @@ func nightWatch(seconds int) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(seconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 217, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 219, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -635,7 +637,7 @@ func wallDisplay(idleSeconds int) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(idleSeconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 286, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 288, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {
