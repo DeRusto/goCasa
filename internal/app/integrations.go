@@ -388,12 +388,7 @@ func (a *App) runSync(ctx context.Context, typ string, enc []byte, in integratio
 			return errors.New("can't decrypt its credentials: was APP_ENCRYPTION_KEY changed? Remove it and add it again")
 		}
 	}
-	err = impl.Sync(ctx, a, in)
-	// A url.Error repeats the URL, which may hold a feed's secret token.
-	if ue := (*url.Error)(nil); errors.As(err, &ue) {
-		err = ue.Err
-	}
-	return err
+	return impl.Sync(ctx, a, in)
 }
 
 // seal encrypts credentials with APP_ENCRYPTION_KEY (spec §9): AES-256-GCM, its random nonce first.
