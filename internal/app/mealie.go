@@ -489,7 +489,7 @@ func (l mirroredList) Check(ctx context.Context, id int64, checked bool) error {
 		d.UseNumber() // numbers go back exactly as they came
 		var item map[string]any
 		if err := d.Decode(&item); err != nil {
-			return transient(fmt.Errorf("Mealie's item isn't JSON: %w", err))
+			return fmt.Errorf("Mealie's item isn't JSON: %w", err)
 		}
 		item["checked"] = checked
 		var col mealieCollection
