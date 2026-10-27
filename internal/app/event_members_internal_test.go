@@ -139,3 +139,25 @@ func TestMembersChangedComparesActiveMembers(t *testing.T) {
 		}
 	}
 }
+
+// New rows start with what the sync gave them, or with none in the window yet, the Default Members.
+func TestFreshMembers(t *testing.T) {
+	a := household(t)
+	ctx := context.Background()
+	cal := addGoogleCalendar(t, a)
+	inTestTx(t, a, func(tx *sql.Tx) error { return setDefaultMembers(ctx, tx, cal, []int64{2}) })
+	row := synced(t, a, cal, "vet", "", at(16, 9))
+	inTestTx(t, a, func(tx *sql.Tx) error { return pickMembers(ctx, tx, []int64{row}, []int64{3}) })
+	for _, c := range []struct {
+		rows []int64
+		want string
+	}{{nil, "[2]"}, {[]int64{row}, "[3]"}} {
+		inTestTx(t, a, func(tx *sql.Tx) error {
+			got, err := freshMembers(ctx, tx, cal, c.rows)
+			if fmt.Sprint(got) != c.want {
+				t.Errorf("freshMembers(%v) = %v, want %s", c.rows, got, c.want)
+			}
+			return err
+		})
+	}
+}

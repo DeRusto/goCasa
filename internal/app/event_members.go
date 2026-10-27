@@ -85,6 +85,21 @@ func googleRows(ctx context.Context, tx *sql.Tx, cal int64, id string, from int6
 	return ids, rows.Err()
 }
 
+// freshMembers is the Members new rows of calendar cal start with: what the
+// sync gave the first of rows, or with none in the window, its Default Members.
+func freshMembers(ctx context.Context, tx *sql.Tx, cal int64, rows []int64) ([]int64, error) {
+	var first any
+	if len(rows) > 0 {
+		first = rows[0]
+	}
+	var got string
+	err := tx.QueryRowContext(ctx, `SELECT json_group_array(member_id) FROM (SELECT member_id FROM event_members WHERE event_id = ?2
+		UNION ALL SELECT member_id FROM source_calendar_members WHERE ?2 IS NULL AND calendar_id = ?1)`, cal, first).Scan(&got)
+	var ids []int64
+	json.Unmarshal([]byte(got), &ids)
+	return ids, err
+}
+
 // forgetSeriesMembers drops the picks for Google Series series on calendar cal, once Google deletes it.
 func forgetSeriesMembers(ctx context.Context, tx *sql.Tx, cal int64, series string) error {
 	_, err := tx.ExecContext(ctx, "DELETE FROM google_series_members WHERE calendar_id = ? AND series_id = ?", cal, series)

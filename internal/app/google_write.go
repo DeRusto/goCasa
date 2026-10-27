@@ -552,7 +552,7 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 
 // landGoogle runs the sync after a write to calendar cal of account, giving
 // res' rows Members members unless they already have them (base, or for fresh
-// rows what the sync gave them) — and
+// rows freshMembers) — and
 // returns once it's done, so the page that follows shows the change.
 // It is errNotLanded if that sync failed.
 func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResult, members, base []int64) (err error) {
@@ -586,13 +586,10 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 		if err != nil {
 			return err
 		}
-		if res.fresh && len(rows) > 0 { // what the sync just gave them
-			var got string
-			if err := tx.QueryRowContext(ctx, "SELECT json_group_array(member_id) FROM event_members WHERE event_id = ?", rows[0]).Scan(&got); err != nil {
+		if res.fresh {
+			if base, err = freshMembers(ctx, tx, cal, rows); err != nil {
 				return err
 			}
-			base = nil
-			json.Unmarshal([]byte(got), &base)
 		}
 		if changed, err = a.membersChanged(ctx, members, base); err != nil || !changed {
 			return err
