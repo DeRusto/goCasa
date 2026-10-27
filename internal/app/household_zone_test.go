@@ -18,6 +18,7 @@ var auckland = apptest.WithHouseholdTimezone("Pacific/Auckland")
 
 // An all-day event's dialog offers the Household's zone for switching to timed.
 func TestAllDayFormDefaultsToTheHouseholdZone(t *testing.T) {
+	t.Parallel()
 	h := household(t, auckland)
 	addEvent(t, h, allDay("Camping", "2026-03-14", "2026-03-16"))
 	if _, body := h.Get(t, "/calendar/event/1"); !strings.Contains(body, `value="Pacific/Auckland"`) {
@@ -27,6 +28,7 @@ func TestAllDayFormDefaultsToTheHouseholdZone(t *testing.T) {
 
 // A feed's floating time is a wall time in the Household's zone.
 func TestFeedFloatingTimeIsInTheHouseholdZone(t *testing.T) {
+	t.Parallel()
 	h := household(t, auckland)
 	addFeed(t, h, "School", newFeed(t, vcal(vevent("UID:lunch@school", "SUMMARY:Lunch", "DTSTART:20260320T100000", "DTEND:20260320T110000"))).URL)
 	if d := day(t, agendaPage(t, h), "2026-03-20"); !strings.Contains(text(d), "10:00–11:00 Lunch") {
@@ -36,6 +38,7 @@ func TestFeedFloatingTimeIsInTheHouseholdZone(t *testing.T) {
 
 // A Google event with no zone, on a calendar with none, is in the Household's.
 func TestGoogleEventWithNoZoneIsInTheHouseholdZone(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.noZone = true
 	g.events["alice@example.com"] = []map[string]any{gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z")}
@@ -49,6 +52,7 @@ func TestGoogleEventWithNoZoneIsInTheHouseholdZone(t *testing.T) {
 // The sync window's all-day edges are the Household's dates: at 01:00 in
 // Auckland (12:00 UTC), an all-day event on the day before the window goes.
 func TestGoogleWindowDatesAreTheHouseholds(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.events["alice@example.com"] = []map[string]any{gAllDay("fair", "Fair", "2025-12-15", "2025-12-16"), gAllDay("fete", "Fete", "2025-12-16", "2025-12-17")}
 	h, alice := syncedGoogle(t, g, auckland)
@@ -62,6 +66,7 @@ func TestGoogleWindowDatesAreTheHouseholds(t *testing.T) {
 // The daily full re-import falls on the Household's next day. The time in the
 // day is random, so check several: each lands in the wrong day half the time.
 func TestGoogleFullReimportIsTheHouseholdsNextDay(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h, _ := syncedGoogle(t, g, auckland)
 	nz, _ := time.LoadLocation("Pacific/Auckland")
@@ -82,6 +87,7 @@ func TestGoogleFullReimportIsTheHouseholdsNextDay(t *testing.T) {
 // Split counts its COUNT and moves its EXDATEs by Auckland's wall times, which
 // shift an hour against UTC when New Zealand summer time ends on 5 April.
 func TestGoogleZonelessSeriesSplitsInTheHouseholdZone(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.noZone = true
 	var occs []map[string]any
@@ -126,6 +132,7 @@ func TestGoogleZonelessSeriesSplitsInTheHouseholdZone(t *testing.T) {
 // One request reads household_settings once, however many parts of the page
 // follow the Household: a Wall display's Settings and screensaver.
 func TestARequestReadsTheHouseholdOnce(t *testing.T) {
+	t.Parallel()
 	h := household(t, auckland)
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
 	for _, page := range []string{"/screensaver", "/settings", "/today", "/calendar", "/chores"} {
@@ -145,6 +152,7 @@ var aucklandMonday = time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
 
 // Today, the calendar, Chores and the screensaver keep the Household's day.
 func TestPagesKeepTheHouseholdsDay(t *testing.T) {
+	t.Parallel()
 	h := household(t, auckland)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})

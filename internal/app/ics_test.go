@@ -29,6 +29,7 @@ func getICS(t *testing.T, h interface {
 }
 
 func TestICSExport(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	london, _ := time.LoadLocation("Europe/London")
 	at := func(d, hour int) time.Time { return time.Date(2026, 3, d, hour, 0, 0, 0, london) }

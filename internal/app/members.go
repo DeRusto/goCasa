@@ -28,6 +28,9 @@ var (
 	pinRE   = regexp.MustCompile(`^[0-9]{4,8}$`)
 )
 
+// pinCost is the bcrypt cost of PIN hashes; tests lower it.
+var pinCost = bcrypt.DefaultCost
+
 const errLastAdmin = "The Household needs at least one Admin."
 
 // keepsAnAdmin is true for a Member whose demotion, archiving or deletion
@@ -65,7 +68,7 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 		return f, "A PIN is 4 to 8 digits."
 	}
 	if pin != "" {
-		h, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+		h, err := bcrypt.GenerateFromPassword([]byte(pin), pinCost)
 		if err != nil {
 			return f, "Could not save the PIN."
 		}
@@ -483,7 +486,7 @@ func (a *App) ResetPIN(ctx context.Context, who string) (string, error) {
 		return "", err
 	}
 	pin := fmt.Sprintf("%06d", n)
-	hash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(pin), pinCost)
 	if err != nil {
 		return "", err
 	}

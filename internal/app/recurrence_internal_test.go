@@ -69,6 +69,7 @@ func golden(t *testing.T, name string, evs []calendarEvent, z *time.Location) {
 }
 
 func TestExpandTimedSeries(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, tz, start, end string
 		s                    series
@@ -106,6 +107,7 @@ func TestExpandTimedSeries(t *testing.T) {
 }
 
 func TestExpandAllDaySeries(t *testing.T) {
+	t.Parallel()
 	m := calendarEvent{id: 7, title: "Leap day", allDay: true, date: "2024-02-29", endDate: "2024-03-01"}
 	from, to := window("2026-01-01", "2029-12-31")
 	evs, err := expand(m, series{rule: "FREQ=YEARLY"}, nil, nil, from, to)
@@ -116,6 +118,7 @@ func TestExpandAllDaySeries(t *testing.T) {
 }
 
 func TestExpandMergesOneOffEdits(t *testing.T) {
+	t.Parallel()
 	m, z := timedMaster(t, "UTC", "2026-03-10T09:00", "2026-03-10T10:00")
 	day := func(d int) int64 { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC).Unix() }
 	moved := calendarEvent{id: 7, title: "Moved", start: time.Date(2026, 3, 11, 15, 0, 0, 0, time.UTC).Unix(), end: time.Date(2026, 3, 11, 16, 0, 0, 0, time.UTC).Unix()}
@@ -133,6 +136,7 @@ func TestExpandMergesOneOffEdits(t *testing.T) {
 }
 
 func TestExpandStopsAtTheCap(t *testing.T) {
+	t.Parallel()
 	m, z := timedMaster(t, "UTC", "2026-01-01T09:00", "2026-01-01T10:00")
 	from, to := window("2026-01-01", "2029-12-31")
 	for _, c := range []struct {
@@ -151,6 +155,7 @@ func TestExpandStopsAtTheCap(t *testing.T) {
 }
 
 func TestExpandCapCountsOneOffEdits(t *testing.T) {
+	t.Parallel()
 	m, z := timedMaster(t, "UTC", "2026-01-01T09:00", "2026-01-01T10:00")
 	var edits []oneOff
 	for i := range maxOccurrences + 1 {
@@ -165,6 +170,7 @@ func TestExpandCapCountsOneOffEdits(t *testing.T) {
 }
 
 func TestSplitAddsUntilAndSplitsRDates(t *testing.T) {
+	t.Parallel()
 	m, london := timedMaster(t, "Europe/London", "2026-06-01T09:00", "2026-06-01T10:00")
 	o := time.Date(2026, 6, 10, 9, 0, 0, 0, london).Unix() // 08:00 UTC
 	before, after, err := split(m, series{rule: "FREQ=DAILY;COUNT=10;INTERVAL=1", rdates: []string{"2026-06-09T09:00", "2026-06-10T09:00", "2026-06-12T09:00"}}, london, o)
@@ -188,6 +194,7 @@ func TestSplitAddsUntilAndSplitsRDates(t *testing.T) {
 }
 
 func TestSplitAllDayUntil(t *testing.T) {
+	t.Parallel()
 	m := calendarEvent{allDay: true, date: "2026-06-03", endDate: "2026-06-04"}
 	day := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC).Unix()
 	before, after, err := split(m, series{rule: "FREQ=WEEKLY;UNTIL=20270101T000000Z", rdates: []string{"2026-06-10"}}, nil, day)
@@ -203,6 +210,7 @@ func TestSplitAllDayUntil(t *testing.T) {
 }
 
 func TestSplitKeepsAnEarlierUntil(t *testing.T) {
+	t.Parallel()
 	m, utc := timedMaster(t, "UTC", "2026-03-01T09:00", "2026-03-01T10:00")
 	o := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC).Unix()
 	before, _, err := split(m, series{rule: "FREQ=DAILY;UNTIL=20260303T090000Z"}, utc, o)
@@ -212,6 +220,7 @@ func TestSplitKeepsAnEarlierUntil(t *testing.T) {
 }
 
 func TestSplitAcrossDST(t *testing.T) {
+	t.Parallel()
 	// Clocks go forward at 01:00 on 29 March 2026 in London.
 	m, london := timedMaster(t, "Europe/London", "2026-03-25T09:00", "2026-03-25T10:00")
 	o := time.Date(2026, 3, 31, 9, 0, 0, 0, london).Unix() // 08:00 UTC, BST
@@ -232,6 +241,7 @@ func TestSplitAcrossDST(t *testing.T) {
 }
 
 func TestRetypeMovesStoredDatesBetweenKinds(t *testing.T) {
+	t.Parallel()
 	if got := retype([]string{"2026-03-25T09:00"}, true, ""); got[0] != "2026-03-25" {
 		t.Errorf("to all-day = %v", got)
 	}
@@ -241,6 +251,7 @@ func TestRetypeMovesStoredDatesBetweenKinds(t *testing.T) {
 }
 
 func TestSplitRecountsCount(t *testing.T) {
+	t.Parallel()
 	m, z := timedMaster(t, "Europe/London", "2026-06-01T09:00", "2026-06-01T10:00")
 	o := time.Date(2026, 6, 5, 9, 0, 0, 0, z).Unix()
 	before, after, err := split(m, series{rule: "FREQ=DAILY;COUNT=10", exdates: []string{"2026-06-07T09:00"}}, z, o)

@@ -13,6 +13,7 @@ import (
 const idleWatch = `data-idle-seconds="`
 
 func TestAnAdminSwitchesThisBrowserIntoAWallDisplay(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	other := h.Device()
 	if !asksForPIN(t, other, "/device/wall-display", url.Values{"wall_display": {"on"}}) {
@@ -42,6 +43,7 @@ func TestAnAdminSwitchesThisBrowserIntoAWallDisplay(t *testing.T) {
 }
 
 func TestTheHouseholdSetsTheScreensaverIdleTime(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
 	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "clock_24h": {"on"}, "screensaver_idle_seconds": {"60"}})
@@ -60,6 +62,7 @@ func TestTheHouseholdSetsTheScreensaverIdleTime(t *testing.T) {
 }
 
 func TestTheScreensaverShowsClockAndTodaysAgendaAndEndsTheUnlock(t *testing.T) {
+	t.Parallel()
 	h := household(t) // unlocked as Ada; now is Sunday 15 March 2026 09:00 UTC
 	addEvent(t, h, timed("Dentist", "2026-03-15T15:00", "2026-03-15T16:00", "UTC"))
 	addEvent(t, h, timed("Swim", "2026-03-16T10:00", "2026-03-16T11:00", "UTC"))
@@ -90,6 +93,7 @@ func nightMode(t *testing.T, h *apptest.Harness, mode string) {
 }
 
 func TestNightModeIsOffByDefault(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
 	if _, body := h.Get(t, "/settings"); !strings.Contains(body, `<option value="off" selected`) {
@@ -103,6 +107,7 @@ func TestNightModeIsOffByDefault(t *testing.T) {
 }
 
 func TestBlackNightModeReleasesTheWakeLockBetweenItsHours(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
 	addEvent(t, h, timed("Dentist", "2026-03-15T15:00", "2026-03-15T23:30", "UTC"))
@@ -136,6 +141,7 @@ func TestBlackNightModeReleasesTheWakeLockBetweenItsHours(t *testing.T) {
 // reload when it next starts or ends, at its hours on either side of a DST
 // change, and whenever the Household's settings change.
 func TestNightModeTurnsOnItsHoursAcrossDST(t *testing.T) {
+	t.Parallel()
 	h := household(t, apptest.WithHouseholdTimezone("America/New_York"))
 	nightMode(t, h, "black")
 	for _, c := range []struct {
@@ -159,6 +165,7 @@ func TestNightModeTurnsOnItsHoursAcrossDST(t *testing.T) {
 }
 
 func TestNightModeEndsInTheSpringForwardGapAndAcrossTheFold(t *testing.T) {
+	t.Parallel()
 	h := household(t, apptest.WithHouseholdTimezone("America/New_York"))
 	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "clock_24h": {"on"},
 		"night_mode": {"black"}, "night_start": {"23"}, "night_end": {"2"}})
@@ -180,6 +187,7 @@ func TestNightModeEndsInTheSpringForwardGapAndAcrossTheFold(t *testing.T) {
 }
 
 func TestWithNightModeOffTheScreensaverNeverReloads(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	if _, body := h.Get(t, "/screensaver"); !strings.Contains(body, `data-reload-seconds="0"`) || strings.Contains(body, "60000") {
 		t.Fatalf("with Night mode off the screensaver reloads or refetches by the minute: %q", body)
@@ -187,6 +195,7 @@ func TestWithNightModeOffTheScreensaverNeverReloads(t *testing.T) {
 }
 
 func TestDimClockNightModeKeepsTheWakeLockAndShowsTheTime(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
 	addEvent(t, h, timed("Dentist", "2026-03-15T15:00", "2026-03-15T23:30", "UTC"))
@@ -208,6 +217,7 @@ func TestDimClockNightModeKeepsTheWakeLockAndShowsTheTime(t *testing.T) {
 }
 
 func TestNightModeSettingsAreValidated(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	for _, bad := range []url.Values{
 		{"night_mode": {"black"}, "night_start": {"24"}, "night_end": {"6"}},
@@ -224,6 +234,7 @@ func TestNightModeSettingsAreValidated(t *testing.T) {
 const watchesMotion = `getUserMedia`
 
 func TestAnAdminTurnsOnMotionWakeWhichRunsOnlyOnTheScreensaverAndDimClock(t *testing.T) {
+	t.Parallel()
 	h := household(t) // unlocked as Ada at 09:00
 	post(t, h, "/device/wall-display", url.Values{"wall_display": {"on"}})
 	if _, body := h.Get(t, "/settings"); !strings.Contains(body, `name="motion_wake"`) || strings.Contains(body, `name="motion_wake" checked`) {

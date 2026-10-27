@@ -13,6 +13,7 @@ import (
 )
 
 func TestUnknownPathIs404(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	if code, _ := h.Get(t, "/nope"); code != http.StatusNotFound {
 		t.Fatalf("GET /nope = %d, want 404", code)
@@ -20,6 +21,7 @@ func TestUnknownPathIs404(t *testing.T) {
 }
 
 func TestHealthzPingsDB(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	if code, body := h.Get(t, "/healthz"); code != http.StatusOK || body != "ok\n" {
 		t.Fatalf("healthz = %d %q", code, body)
@@ -31,6 +33,7 @@ func TestHealthzPingsDB(t *testing.T) {
 }
 
 func TestRefusesDatabaseNewerThanBinary(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	if _, err := h.App.DB.Exec("PRAGMA user_version = 9999"); err != nil {
 		t.Fatal(err)
@@ -44,6 +47,7 @@ func TestRefusesDatabaseNewerThanBinary(t *testing.T) {
 }
 
 func TestRunDueRunsOnlyDueJobsAtTheFakeClock(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	at := apptest.Start.Add(time.Hour)
 	var ran []time.Time
@@ -62,6 +66,7 @@ func TestRunDueRunsOnlyDueJobsAtTheFakeClock(t *testing.T) {
 }
 
 func TestFailingJobDoesNotStopOthers(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	always := func(time.Time) bool { return true }
 	h.App.Scheduler.Add("panics", always, func(context.Context, time.Time) error { panic("boom") })

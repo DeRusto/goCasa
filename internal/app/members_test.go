@@ -40,6 +40,7 @@ func adminCount(t *testing.T, h *apptest.Harness) int {
 }
 
 func TestFirstRunCreatesAdminThenSettingsNeedsPIN(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	if _, body := h.Get(t, "/settings"); !strings.Contains(body, "Add the first Admin") {
 		t.Fatalf("first run did not offer setup: %q", body)
@@ -75,6 +76,7 @@ func TestFirstRunCreatesAdminThenSettingsNeedsPIN(t *testing.T) {
 }
 
 func TestOnlyAdminsHavePINs(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	if code, _ := h.Post(t, "/settings/members", member("Rex", "#22c55e", "member", "1111")); code != http.StatusBadRequest {
@@ -106,6 +108,7 @@ func TestOnlyAdminsHavePINs(t *testing.T) {
 }
 
 func TestRefusesToDeleteOrDemoteTheLastAdmin(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	if code, body := h.Post(t, "/settings/members/1/delete", nil); code != http.StatusConflict || !strings.Contains(body, "at least one Admin") {
@@ -121,6 +124,7 @@ func TestRefusesToDeleteOrDemoteTheLastAdmin(t *testing.T) {
 }
 
 func TestUnlockLastsFiveIdleMinutesOnThatDeviceOnly(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	other := h.Device()
@@ -147,6 +151,7 @@ func TestUnlockLastsFiveIdleMinutesOnThatDeviceOnly(t *testing.T) {
 }
 
 func TestBackgroundRefreshesDontKeepTheUnlockAlive(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	for range 6 {
@@ -165,6 +170,7 @@ func TestBackgroundRefreshesDontKeepTheUnlockAlive(t *testing.T) {
 }
 
 func TestUnlockCookieFlags(t *testing.T) {
+	t.Parallel()
 	for _, scheme := range []string{"http", "https"} {
 		h := apptest.New(t, func(o *apptest.Setup) { o.Config.BaseURL.Scheme = scheme })
 		h.Client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -183,6 +189,7 @@ func TestUnlockCookieFlags(t *testing.T) {
 }
 
 func TestCrossSiteFormsAreRefused(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	req, _ := http.NewRequest(http.MethodPost, h.Server.URL+"/setup", strings.NewReader(member("Eve", "#ff0000", "", "1234").Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -198,6 +205,7 @@ func TestCrossSiteFormsAreRefused(t *testing.T) {
 }
 
 func TestDeletedAdminsUnlockDoesNotPassToANewAdmin(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "admin", "5678")) // id 2

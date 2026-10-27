@@ -99,6 +99,7 @@ func settings(t *testing.T, h *apptest.Harness) string {
 }
 
 func TestFeedImportUpdateAndSoftDelete(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	f := newFeed(t, vcal(swim, fair))
 	addFeed(t, h, "School", f.URL)
@@ -167,6 +168,7 @@ func TestFeedImportUpdateAndSoftDelete(t *testing.T) {
 }
 
 func TestFeedSeries(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addFeed(t, h, "School", newFeed(t, vcal(recessOff, recess, recessMoved, extra, choirOff, choir)).URL) // overrides before their Series
 	page := agendaPage(t, h)
@@ -188,6 +190,7 @@ func TestFeedSeries(t *testing.T) {
 }
 
 func TestFeedEventsAreReadOnly(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addFeed(t, h, "School", newFeed(t, vcal(swim)).URL)
 	var id string
@@ -212,6 +215,7 @@ func TestFeedEventsAreReadOnly(t *testing.T) {
 }
 
 func TestBrokenFeedBacksOffAndLeavesOthersAlone(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	bad, good := newFeed(t, vcal(swim)), newFeed(t, vcal(fair))
 	addFeed(t, h, "Club", bad.URL)
@@ -286,6 +290,7 @@ func TestSyncInterruptedMidTransaction(t *testing.T) {
 }
 
 func TestFeedURLIsEncrypted(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	f := newFeed(t, vcal(swim))
 	addFeed(t, h, "School", f.URL+"/private/s3cret-token.ics")
@@ -306,6 +311,7 @@ func TestFeedURLIsEncrypted(t *testing.T) {
 }
 
 func TestRemoveFeed(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addFeed(t, h, "School", newFeed(t, vcal(swim)).URL)
 	var id int64

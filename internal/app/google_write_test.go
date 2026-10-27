@@ -53,6 +53,7 @@ func syncedWith(t *testing.T, g *fakeGoogle, events ...map[string]any) (*apptest
 // An edit goes to Google first and lands through the sync straight after; when
 // Google can't be reached, nothing changes.
 func TestGoogleEditWritesFirst(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h, _ := syncedWith(t, g, withEtag(gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z"), "e1"))
 	dentist := eventID(t, h, "dentist")
@@ -111,6 +112,7 @@ func TestGoogleEditWritesFirst(t *testing.T) {
 // An edit made over a newer change in Google is refused, and the dialog shows
 // Google's version to redo it on.
 func TestGoogleStaleEditShowsTheCurrentVersion(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h, _ := syncedWith(t, g, withEtag(gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z"), "e1"))
 	path := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "dentist"))
@@ -159,6 +161,7 @@ func TestGoogleStaleEditShowsTheCurrentVersion(t *testing.T) {
 // Creating and deleting on a Google calendar go to Google; a read-only
 // calendar refuses both.
 func TestGoogleCreateAndDelete(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h, alice := syncedWith(t, g, withEtag(gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z"), "e1"))
 	if _, page := h.Get(t, "/calendar/event/new"); !strings.Contains(page, ">Alice</option>") {
@@ -243,6 +246,7 @@ func swimSeries(t *testing.T, g *fakeGoogle) *apptest.Harness {
 // Each Edit scope on a Google Series writes the occurrence or the Series, and
 // a Split creates the new Series before ending the old one.
 func TestGoogleSeriesScopes(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := swimSeries(t, g)
 	second := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260321"))
@@ -326,6 +330,7 @@ func TestGoogleSeriesScopes(t *testing.T) {
 
 // A Split made in Google's own app arrives through sync like any other change.
 func TestGoogleSplitMadeInGoogle(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := swimSeries(t, g)
 	g.set(func(g *fakeGoogle) {
@@ -346,6 +351,7 @@ func TestGoogleSplitMadeInGoogle(t *testing.T) {
 // Members changed This and following go on this Occurrence and later ones
 // only, and never reach Google.
 func TestGoogleMembersFromHereOn(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := swimSeries(t, g)
 	second := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260321"))
@@ -362,6 +368,7 @@ func TestGoogleMembersFromHereOn(t *testing.T) {
 // A Split lands through the full re-import after it: the old Series' later
 // Occurrences go and the new Series arrives with the Members picked.
 func TestGoogleSplitLands(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := swimSeries(t, g)
 	second := fmt.Sprintf("/calendar/synced/%d", eventID(t, h, "swim_20260321"))
@@ -394,6 +401,7 @@ func membersOf(t *testing.T, h *apptest.Harness, external string) string {
 // Members picked for a Series also go on its Occurrences that sync later:
 // All events on every one, This and following from that Occurrence on.
 func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := swimSeries(t, g)
 	var alice int64
@@ -461,6 +469,7 @@ func TestGoogleSeriesMembersReachLaterOccurrences(t *testing.T) {
 
 // Google gets the clamped rule a monthly preset on the 31st makes.
 func TestGoogleMonthlyPresetSendsTheClampedRule(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h, alice := syncedWith(t, g)
 	form := googleEdit("Rent", "2026-03-31T10:00", "2026-03-31T11:00", "calendar_id", fmt.Sprint(alice), "repeat", "monthly")
@@ -475,6 +484,7 @@ func TestGoogleMonthlyPresetSendsTheClampedRule(t *testing.T) {
 // Moving a Google Series made from a monthly preset on the 31st to the 15th
 // re-anchors its month-end rule there, as a new preset would.
 func TestGoogleMovedMonthEndSeriesIsReanchored(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	var occs []map[string]any
 	for i, d := range []string{"2026-03-31", "2026-04-30"} {

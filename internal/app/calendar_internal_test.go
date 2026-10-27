@@ -8,6 +8,7 @@ import (
 )
 
 func TestLanesPutOverlapsSideBySide(t *testing.T) {
+	t.Parallel()
 	evs := []web.CalendarEvent{
 		{AllDay: true},
 		{From: 9 * 60, To: 10 * 60},       // A, with B
@@ -29,6 +30,7 @@ func TestLanesPutOverlapsSideBySide(t *testing.T) {
 }
 
 func TestCalendarDayDrawsAnEventInTheRepeatedHourAtItsLength(t *testing.T) {
+	t.Parallel()
 	la, err := time.LoadLocation("America/Los_Angeles")
 	if err != nil {
 		t.Fatal(err)

@@ -61,6 +61,7 @@ func weatherHousehold(t *testing.T) (*apptest.Harness, *fakeMeteo) {
 }
 
 func TestWeatherPillRendersFromCacheEvenOffline(t *testing.T) {
+	t.Parallel()
 	h, m := weatherHousehold(t)
 	if code, page := h.Post(t, "/settings/weather", url.Values{"lat": {"51.5"}, "lon": {"-0.12"}, "units": {"metric"}}); code != http.StatusOK || !strings.Contains(page, `value="51.5"`) {
 		t.Fatalf("save weather = %d %q", code, page)
@@ -88,6 +89,7 @@ func TestWeatherPillRendersFromCacheEvenOffline(t *testing.T) {
 }
 
 func TestWeatherImperialAsksForFahrenheit(t *testing.T) {
+	t.Parallel()
 	h, m := weatherHousehold(t)
 	h.Post(t, "/settings/weather", url.Values{"lat": {"40.7"}, "lon": {"-74"}, "units": {"imperial"}})
 	h.RunDue()
@@ -109,6 +111,7 @@ func TestWeatherImperialAsksForFahrenheit(t *testing.T) {
 }
 
 func TestWeatherNotFetchedWithoutALocation(t *testing.T) {
+	t.Parallel()
 	h, m := weatherHousehold(t)
 	h.RunDue()
 	if len(m.calls()) != 0 {
@@ -117,6 +120,7 @@ func TestWeatherNotFetchedWithoutALocation(t *testing.T) {
 }
 
 func TestWeatherSettingsValidated(t *testing.T) {
+	t.Parallel()
 	h, _ := weatherHousehold(t)
 	for _, f := range []url.Values{
 		{"lat": {"91"}, "lon": {"0"}, "units": {"metric"}},
@@ -136,6 +140,7 @@ func TestWeatherSettingsValidated(t *testing.T) {
 }
 
 func TestWeatherPlaceSearchPicksALocation(t *testing.T) {
+	t.Parallel()
 	geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("name") {
 		case "Down":
@@ -185,6 +190,7 @@ func TestWeatherPlaceSearchPicksALocation(t *testing.T) {
 }
 
 func TestWeatherPageShowsTheCachedForecast(t *testing.T) {
+	t.Parallel()
 	h, _ := weatherHousehold(t)
 	if _, page := h.Get(t, "/weather"); !strings.Contains(page, "No location set yet") || !strings.Contains(page, `href="/weather"`) {
 		t.Fatal("the Weather page without a location doesn't point at Settings, or the nav lacks it")

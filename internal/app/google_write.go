@@ -44,8 +44,8 @@ type googleRow struct {
 // googleResult is what a write leaves for the sync after it: the Google id
 // whose event or series rows the change's Members go on (only those from
 // event row from on, if set), whether target is a Series (its later
-// occurrences keep the choice), whether those rows are new (so the Members to
-// compare with are those the sync gave them), whether a series' rule changed, so its
+// occurrences keep the choice), whether to compare the Members with those new
+// rows start with (freshMembers) instead of the caller's, whether a series' rule changed, so its
 // calendar re-imports in full, and whether Google was left alone (local), so
 // there is nothing to sync.
 type googleResult struct {

@@ -240,6 +240,7 @@ func storedToken(t *testing.T, h *apptest.Harness, id int64) string {
 }
 
 func TestGoogleNeedsItsOwnClient(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "GOOGLE_CLIENT_ID") || !strings.Contains(page, "http://gocasa.test/auth/google/callback") {
 		t.Fatalf("Settings doesn't explain Google setup:\n%s", page)
@@ -250,6 +251,7 @@ func TestGoogleNeedsItsOwnClient(t *testing.T) {
 }
 
 func TestConnectReconnectDisconnectGoogle(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.list(cal("alice@example.com", "Alice", "#9FC6E7", "owner"), cal("en.usa#holiday", "Holidays", "bad", "reader"))
 	h := googleHousehold(t, g)
@@ -358,6 +360,7 @@ func TestConnectReconnectDisconnectGoogle(t *testing.T) {
 }
 
 func TestGoogleCallbackChecksState(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := googleHousehold(t, g)
 	if code, _ := h.Get(t, "/auth/google/callback?code=code-sub-alice&state=forged"); code != http.StatusBadRequest {
@@ -377,6 +380,7 @@ func TestGoogleCallbackChecksState(t *testing.T) {
 // Reconnecting one account as another connected login is refused without
 // revoking: that would end the other account's grant too.
 func TestGoogleRefusalKeepsAnotherAccountsGrant(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h := googleHousehold(t, g)
 	h.Post(t, "/integrations/google/connect", nil)

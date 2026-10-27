@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // SetHeartbeat shortens the stream heartbeat for a test.
@@ -39,3 +41,6 @@ func (a *App) ShoppingList(ctx context.Context, id int64) (ShoppingList, error) 
 
 // HouseholdReads counts the queries on household_settings so far.
 func HouseholdReads(a *App) int64 { return a.householdReads.Load() }
+
+// Cheap PIN hashes: bcrypt's default cost is most of a test's time under -race.
+func init() { pinCost = bcrypt.MinCost }

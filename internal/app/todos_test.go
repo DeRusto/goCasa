@@ -41,6 +41,7 @@ func column(t *testing.T, page, id string) []string {
 }
 
 func TestToDosAndColumnsCanBeCreatedEditedCompletedAndDeleted(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todo-columns", url.Values{"name": {"Garden"}})
@@ -96,6 +97,7 @@ func TestToDosAndColumnsCanBeCreatedEditedCompletedAndDeleted(t *testing.T) {
 // Dragging sends a column's whole order; a to-do dragged in from another
 // column moves there. The order survives a restart.
 func TestReorderPersistsAcrossRestartIncludingFirstAndLast(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todo-columns", url.Values{"name": {"Garden"}})
@@ -130,6 +132,7 @@ func TestReorderPersistsAcrossRestartIncludingFirstAndLast(t *testing.T) {
 }
 
 func TestToDosSortAndFilterByDueRangeAndStatus(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t) // today is 2026-03-15
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", todo("1", "Later", "2026-04-30"))
@@ -162,6 +165,7 @@ func TestToDosSortAndFilterByDueRangeAndStatus(t *testing.T) {
 }
 
 func TestCompletedToDosCannotBeEdited(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", todo("1", "Fix tap", ""))

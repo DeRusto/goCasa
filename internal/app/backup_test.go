@@ -30,6 +30,7 @@ func backups(t *testing.T, a *app.App) []string {
 }
 
 func TestNightlyBackupAt0300KeepsLast14(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t) // starts 2026-03-15 09:00 UTC
 	h.Clock.Set(time.Date(2026, 3, 16, 2, 59, 0, 0, time.UTC))
 	h.RunDue()
@@ -53,6 +54,7 @@ func TestNightlyBackupAt0300KeepsLast14(t *testing.T) {
 }
 
 func TestStartupBackupOnlyWhenNewestOver24h(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t) // fresh install: no backup yet, so one is taken at Start
 	if got := backups(t, h.App); !slices.Equal(got, []string{"app-20260315.db"}) {
 		t.Fatalf("backups after first start = %v", got)
@@ -79,6 +81,7 @@ func TestStartupBackupOnlyWhenNewestOver24h(t *testing.T) {
 }
 
 func TestPreMigrationBackupIsKeptOutOfPruning(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	h.App.Close()
 	orig := db.Migrations

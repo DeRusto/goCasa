@@ -58,6 +58,7 @@ func next(t *testing.T, lines <-chan string, prefix string) string {
 }
 
 func TestStreamIsUnbufferedEventStream(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	res, _ := stream(t, h)
 	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "text/event-stream" || res.Header.Get("X-Accel-Buffering") != "no" {
@@ -66,6 +67,7 @@ func TestStreamIsUnbufferedEventStream(t *testing.T) {
 }
 
 func TestEditsOnOneDeviceReachAnothersStream(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	wall := a.Device()
 	_, lines := stream(t, wall)
@@ -116,6 +118,7 @@ func ends(t *testing.T, lines <-chan string) {
 }
 
 func TestClosingTheBusEndsStreams(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	_, lines := stream(t, h)
 	next(t, lines, ": hello")
@@ -134,6 +137,7 @@ func nothingPublished(t *testing.T, h *apptest.Harness, lines <-chan string) {
 }
 
 func TestMealiePollPublishesOnlyRealChangesAndHealthTransitions(t *testing.T) {
+	t.Parallel()
 	h, _, m := mealieHousehold(t)
 	h.RunDue() // the poll a list open would make due, if any
 	_, lines := stream(t, h)
@@ -166,6 +170,7 @@ func TestMealiePollPublishesOnlyRealChangesAndHealthTransitions(t *testing.T) {
 }
 
 func TestAFeedRefetchedUnchangedPublishesNothing(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	f := newFeed(t, vcal(swim))
 	addFeed(t, h, "School", f.URL)
@@ -185,6 +190,7 @@ func TestAFeedRefetchedUnchangedPublishesNothing(t *testing.T) {
 }
 
 func TestHouseholdSettingsPublishTheHouseholdKind(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	_, lines := stream(t, h)
@@ -197,6 +203,7 @@ func TestHouseholdSettingsPublishTheHouseholdKind(t *testing.T) {
 }
 
 func TestImmichPicksAndDisconnectPublishTheIntegrationKind(t *testing.T) {
+	t.Parallel()
 	h, _ := immichHousehold(t)
 	_, lines := stream(t, h)
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})

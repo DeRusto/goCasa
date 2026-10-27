@@ -25,6 +25,7 @@ func addFolderPhoto(t *testing.T, h *apptest.Harness, rel, body string) {
 }
 
 func TestTheFallbackFolderShowsWithoutImmich(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	wall := h.Device()
@@ -62,6 +63,7 @@ func TestTheFallbackFolderShowsWithoutImmich(t *testing.T) {
 // A photo replaced in place keeps its address, so browsers must check back
 // rather than show cached bytes for a day.
 func TestAFallbackPhotoReplacedInPlaceIsRefetched(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	wall := h.Device()
@@ -83,6 +85,7 @@ func TestAFallbackPhotoReplacedInPlaceIsRefetched(t *testing.T) {
 }
 
 func TestTheFallbackFolderIsNeverMixedWithImmich(t *testing.T) {
+	t.Parallel()
 	h, _ := immichHousehold(t)
 	wall := h.Device()
 	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
@@ -103,6 +106,7 @@ func TestTheFallbackFolderIsNeverMixedWithImmich(t *testing.T) {
 }
 
 func TestTheFallbackFolderShowsWhileImmichIsDownWithNothingCached(t *testing.T) {
+	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
@@ -123,6 +127,7 @@ func TestTheFallbackFolderShowsWhileImmichIsDownWithNothingCached(t *testing.T) 
 }
 
 func TestTheFallbackFolderRescansHourlyAndOnRefreshNow(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	wall := h.Device()
@@ -152,6 +157,7 @@ func TestTheFallbackFolderRescansHourlyAndOnRefreshNow(t *testing.T) {
 }
 
 func TestWithNeitherSourceTheClockAndAgendaShowOnDark(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	wall := h.Device()

@@ -23,6 +23,7 @@ func balance(t *testing.T, h *apptest.Harness, id string) string {
 // An archived Member's pending request leaves the board and can't be approved
 // until they're restored.
 func TestAnArchivedMembersPendingRedemptionIsHiddenAndCantBeApproved(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/adjustments", url.Values{"member_id": {"2"}, "points": {"5"}, "reason": {"Start"}})
 	post(t, h, "/rewards", url.Values{"name": {"Ice cream"}, "points": {"3"}})
@@ -42,6 +43,7 @@ func TestAnArchivedMembersPendingRedemptionIsHiddenAndCantBeApproved(t *testing.
 }
 
 func TestBalanceIsCompletionsLessApprovedRedemptionsPlusAdjustments(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))
 	complete(h, t, "1", "2", "2026-03-15")
@@ -84,6 +86,7 @@ func TestBalanceIsCompletionsLessApprovedRedemptionsPlusAdjustments(t *testing.T
 }
 
 func TestARedemptionCannotTakeABalanceBelowZero(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
 	complete(h, t, "1", "2", "2026-03-15")
@@ -111,6 +114,7 @@ func TestARedemptionCannotTakeABalanceBelowZero(t *testing.T) {
 }
 
 func TestOnlyAnAdminDecidesAndAdjusts(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/rewards", url.Values{"name": {"Sticker"}, "points": {"1"}})
 	post(t, h, "/adjustments", url.Values{"member_id": {"2"}, "points": {"3"}, "reason": {"Helped out"}})
@@ -140,6 +144,7 @@ func TestOnlyAnAdminDecidesAndAdjusts(t *testing.T) {
 }
 
 func TestRewardsArchiveRatherThanDelete(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/adjustments", url.Values{"member_id": {"2"}, "points": {"10"}, "reason": {"Birthday"}})
 	if code, _ := h.Post(t, "/rewards", url.Values{"name": {"Free"}, "points": {"0"}}); code != http.StatusBadRequest {

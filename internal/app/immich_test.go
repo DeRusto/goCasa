@@ -173,6 +173,7 @@ func photo(t *testing.T, h *apptest.Harness) string {
 }
 
 func TestImmichPickedAlbumsAndPeopleRotateOnTheScreensaver(t *testing.T) {
+	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	if p := photo(t, wall); p != "" {
@@ -211,6 +212,7 @@ func TestImmichPickedAlbumsAndPeopleRotateOnTheScreensaver(t *testing.T) {
 }
 
 func TestImmichRefusesOldVersionsAndRefusedKeys(t *testing.T) {
+	t.Parallel()
 	f := newImmich(t)
 	f.version = [3]int{3, 1, 9}
 	h := apptest.New(t)
@@ -236,6 +238,7 @@ func TestImmichRefusesOldVersionsAndRefusedKeys(t *testing.T) {
 }
 
 func TestImmichRelistsHourlyAndOnRefreshNow(t *testing.T) {
+	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-pets"}})
@@ -279,6 +282,7 @@ func TestImmichRelistsHourlyAndOnRefreshNow(t *testing.T) {
 }
 
 func TestEachPhotoShowsForSecondsPerPhotoWithoutRepeats(t *testing.T) {
+	t.Parallel()
 	h, _ := immichHousehold(t)
 	wall := h.Device()
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
@@ -309,6 +313,7 @@ func fetchesOf(f *fakeImmich, ids ...string) int {
 }
 
 func TestPhotosAreCachedPrefetchedAndOutliveAnImmichOutage(t *testing.T) {
+	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}})
@@ -346,6 +351,7 @@ func TestPhotosAreCachedPrefetchedAndOutliveAnImmichOutage(t *testing.T) {
 }
 
 func TestAnOutageWithAPartialCacheRotatesOnlyCachedPhotos(t *testing.T) {
+	t.Parallel()
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}})
@@ -389,6 +395,7 @@ func TestThePhotoCacheDropsTheLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestScreensaverRotatesPhotosWithoutReloading(t *testing.T) {
+	t.Parallel()
 	h, _ := immichHousehold(t)
 	wall := h.Device()
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})

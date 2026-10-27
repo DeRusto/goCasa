@@ -44,6 +44,7 @@ func choreHousehold(t *testing.T) *apptest.Harness {
 }
 
 func TestAnAdminSetsUpChoresForPeopleOnly(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t) // Sunday 15 March 2026, 09:00
 
 	other := h.Device()
@@ -68,6 +69,7 @@ func TestAnAdminSetsUpChoresForPeopleOnly(t *testing.T) {
 }
 
 func TestAPetCannotBeAnAdmin(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	f := member("Rex", "#a16207", "admin", "1234")
 	f.Set("pet", "on")
@@ -77,6 +79,7 @@ func TestAPetCannotBeAnAdmin(t *testing.T) {
 }
 
 func TestEachChoreIsDoneOncePerRoundByEveryAssignee(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))
 	kid := h.Device()
@@ -123,6 +126,7 @@ func TestEachChoreIsDoneOncePerRoundByEveryAssignee(t *testing.T) {
 // A change mid-Round applies from the next Round, even to assignees who
 // haven't done this one yet.
 func TestAPointsChangeWaitsForTheNextRound(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))
 	complete(h, t, "1", "2", "2026-03-15")
@@ -134,6 +138,7 @@ func TestAPointsChangeWaitsForTheNextRound(t *testing.T) {
 }
 
 func TestAnyoneChoreIsDoneOncePerRound(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Feed Rex", "daily", "anyone", "2", "2", "3"))
 	kid := h.Device()
@@ -149,6 +154,7 @@ func TestAnyoneChoreIsDoneOncePerRound(t *testing.T) {
 }
 
 func TestArchivedChoresAndMembersLeaveTheBoard(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2", "3"))
 	post(t, h, "/chores", chore("Bins", "weekly", "each", "5", "2"))
@@ -177,6 +183,7 @@ func TestArchivedChoresAndMembersLeaveTheBoard(t *testing.T) {
 }
 
 func TestAnAssignedMemberCannotBecomeAPet(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
 	f := member("Bob", "#2563eb", "member", "")
@@ -190,6 +197,7 @@ func TestAnAssignedMemberCannotBecomeAPet(t *testing.T) {
 }
 
 func TestAnArchivedMembersAnyoneCompletionLeavesTheBoardButStillCounts(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Feed Rex", "daily", "anyone", "2", "2", "3"))
 	complete(h, t, "1", "3", "2026-03-15")
@@ -239,6 +247,7 @@ func claimableAt(t *testing.T, h *apptest.Harness, chore, at string, want map[st
 }
 
 func TestLateUntilTheNextRoundEndsThenMissed(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t) // created Sunday 15 March 2026
 	post(t, h, "/chores", chore("Daily", "daily", "each", "1", "2"))
 	f := chore("Mon+Wed", "weekdays", "each", "1", "2")
@@ -273,6 +282,7 @@ func TestLateUntilTheNextRoundEndsThenMissed(t *testing.T) {
 }
 
 func TestAnAnyoneChoreCanBeClaimedLateOnlyIfNobodyDidThatRound(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Feed Rex", "daily", "anyone", "2", "2", "3"))
 	complete(h, t, "1", "3", "2026-03-15")
@@ -287,6 +297,7 @@ func TestAnAnyoneChoreCanBeClaimedLateOnlyIfNobodyDidThatRound(t *testing.T) {
 }
 
 func TestChoreLockGatesCompleting(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t)
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
 	kid := h.Device()
@@ -312,6 +323,7 @@ func TestChoreLockGatesCompleting(t *testing.T) {
 }
 
 func TestTodaysChoresAreOnTodayButNeverOnTheCalendar(t *testing.T) {
+	t.Parallel()
 	h := choreHousehold(t) // Sunday 15 March
 	post(t, h, "/chores", chore("Dishes", "daily", "each", "5", "2"))
 	f := chore("Bins", "weekdays", "each", "1", "2")

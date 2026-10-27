@@ -76,6 +76,7 @@ func wantMembers(t *testing.T, a *App, want map[int64]string) {
 // which beats the calendar's Default Members — through later syncs, a change
 // of defaults, and an Occurrence Google sends back as a new row.
 func TestEventMembersOrder(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	cal := addGoogleCalendar(t, a)
@@ -104,6 +105,7 @@ func TestEventMembersOrder(t *testing.T) {
 // Occurrences that sync later; Default Members never add an Archived Member,
 // never take one off an event, and keep their default for their return.
 func TestEventMembersArchived(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	cal := addGoogleCalendar(t, a)
@@ -128,6 +130,7 @@ func TestEventMembersArchived(t *testing.T) {
 
 // Archived Members can't be picked: only active ones count as a change.
 func TestMembersChangedComparesActiveMembers(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	archive(t, a, 2, true)
 	for _, c := range []struct {
@@ -142,6 +145,7 @@ func TestMembersChangedComparesActiveMembers(t *testing.T) {
 
 // New rows start with what the sync gave them, or with none in the window yet, the Default Members.
 func TestFreshMembers(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	ctx := context.Background()
 	cal := addGoogleCalendar(t, a)

@@ -65,6 +65,7 @@ func mirroredGroceries(t *testing.T) (groceries, *fakeMealie) {
 // TestShoppingListAdapters runs one table against both adapters: Local
 // in-process, Mirrored against the fake Mealie.
 func TestShoppingListAdapters(t *testing.T) {
+	t.Parallel()
 	adapters := map[string]func(t *testing.T) groceries{
 		"Local":    localGroceries,
 		"Mirrored": func(t *testing.T) groceries { g, _ := mirroredGroceries(t); return g },
@@ -99,6 +100,7 @@ func TestShoppingListAdapters(t *testing.T) {
 }
 
 func TestOnlyALocalListMoves(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	g := localGroceries(t)
 	if err := g.list.Move(ctx, g.eggs, 0); err != nil {
@@ -121,6 +123,7 @@ func TestOnlyALocalListMoves(t *testing.T) {
 }
 
 func TestAMirroredListIsReadOnlyWhileMealieFails(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	g, m := mirroredGroceries(t)
 	m.setDown(true)
@@ -135,6 +138,7 @@ func TestAMirroredListIsReadOnlyWhileMealieFails(t *testing.T) {
 }
 
 func TestAMirroredItemGoneFromMealieRepullsTheList(t *testing.T) {
+	t.Parallel()
 	g, m := mirroredGroceries(t)
 	m.remove("I1")
 	if err := g.list.Check(context.Background(), g.milk, true); !errors.Is(err, app.ErrGoneFromMealie) {

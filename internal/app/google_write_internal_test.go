@@ -10,6 +10,7 @@ import (
 // A Split moving a Series an hour earlier moves its EXDATEs and RDATEs too,
 // with or without parameters on the line.
 func TestSplitShiftsBareExdatesAndRdates(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	master := googleEvent{Start: googleTime{DateTime: "2026-03-14T10:00:00Z", TimeZone: "Europe/London"}}
 	o := time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC).Unix()

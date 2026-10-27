@@ -67,6 +67,7 @@ func eventID(t *testing.T, h *apptest.Harness, external string) int64 {
 }
 
 func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	dentist := gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z")
 	dentist["start"].(map[string]any)["timeZone"] = "Europe/London"
@@ -172,6 +173,7 @@ func TestGoogleSyncKeepsTheWindowInStep(t *testing.T) {
 }
 
 func TestGoogleFullReimports(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.events["alice@example.com"] = []map[string]any{gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z")}
 	h, alice := syncedGoogle(t, g)
@@ -216,6 +218,7 @@ func TestGoogleFullReimports(t *testing.T) {
 }
 
 func TestGoogleReconnectNeededAndStaleNotice(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.events["alice@example.com"] = []map[string]any{gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z")}
 	h, _ := syncedGoogle(t, g)
@@ -278,6 +281,7 @@ func TestGoogleReconnectNeededAndStaleNotice(t *testing.T) {
 }
 
 func TestSyncNowAndTheTwelveMonthNotice(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	h, _ := syncedGoogle(t, g)
 	res, err := h.Client.Do(func() *http.Request {
@@ -308,6 +312,7 @@ func TestSyncNowAndTheTwelveMonthNotice(t *testing.T) {
 
 // A calendar Google no longer has is hidden, and the account's others still sync.
 func TestGoogleCalendarGoneIsHidden(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.list(cal("alice@example.com", "Alice", "#9fc6e7", "owner"), cal("club", "Club", "#f59e0b", "reader"))
 	h := googleHousehold(t, g)
@@ -336,6 +341,7 @@ func TestGoogleCalendarGoneIsHidden(t *testing.T) {
 // While a Member is archived, Default Members don't add them to a newly synced
 // event, and a change of defaults doesn't take them off an older one.
 func TestDefaultMembersLeaveArchivedMembersAlone(t *testing.T) {
+	t.Parallel()
 	g := newGoogle(t)
 	g.events["alice@example.com"] = []map[string]any{gTimed("dentist", "Dentist", "2026-03-16T10:00:00Z", "2026-03-16T11:00:00Z")}
 	h, alice := syncedGoogle(t, g) // Bob by default
