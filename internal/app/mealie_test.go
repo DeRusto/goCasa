@@ -26,6 +26,7 @@ type fakeMealie struct {
 	items   map[string]map[string]any // by id
 	order   []string                  // item ids in creation order
 	down    bool                      // answer 503 to everything
+	garbled bool                      // answer 200 with a body that isn't JSON
 	puts    []map[string]any          // each item PUT body
 	auth    []string                  // each request's Authorization
 	gone    map[string]bool           // items deleted in Mealie behind GoCasa's back, for GET/PUT 404
@@ -71,7 +72,9 @@ func (m *fakeMealie) remove(id string) {
 	m.order = slices.DeleteFunc(m.order, func(s string) bool { return s == id })
 }
 
-func (m *fakeMealie) setDown(d bool) { m.mu.Lock(); m.down = d; m.mu.Unlock() }
+func (m *fakeMealie) setDown(d bool)    { m.mu.Lock(); m.down = d; m.mu.Unlock() }
+func (m *fakeMealie) setGarbled(g bool) { m.mu.Lock(); m.garbled = g; m.mu.Unlock() }
+func (m *fakeMealie) requests() int     { m.mu.Lock(); defer m.mu.Unlock(); return len(m.auth) }
 
 func (m *fakeMealie) listItems(list string) []any {
 	out := []any{}
@@ -89,6 +92,10 @@ func (m *fakeMealie) serve(w http.ResponseWriter, r *http.Request) {
 	m.auth = append(m.auth, r.Header.Get("Authorization"))
 	if m.down {
 		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if m.garbled {
+		w.Write([]byte("<html>maintenance</html>"))
 		return
 	}
 	if r.URL.Path == "/api/app/about" {
@@ -463,6 +470,26 @@ func TestMealieThreeFailedPollsMakeListsReadOnly(t *testing.T) {
 	}
 	if got := listByName(t, d, "Groceries"); len(got) == 0 || got[0] != "2 Milk" {
 		t.Errorf("last contents lost: %q", got)
+	}
+}
+
+func TestMealieGarbledAnswerBacksOff(t *testing.T) {
+	h, _, m := mealieHousehold(t)
+	m.setGarbled(true)
+	h.Clock.Advance(time.Minute)
+	h.RunDue() // fails: next in 1 minute
+	h.Clock.Advance(time.Minute)
+	h.RunDue() // fails again: next in 2
+	n := m.requests()
+	h.Clock.Advance(time.Minute)
+	h.RunDue()
+	if got := m.requests(); got != n {
+		t.Fatalf("a garbled answer was retried at the 60s poll pace (%d requests, want %d)", got, n)
+	}
+	h.Clock.Advance(time.Minute)
+	h.RunDue()
+	if got := m.requests(); got == n {
+		t.Fatal("not retried after its 2-minute backoff")
 	}
 }
 

@@ -53,21 +53,9 @@ func (openMeteo) Sync(ctx context.Context, a *App, _ integrationRow) error {
 		q.Set("temperature_unit", "fahrenheit")
 		q.Set("wind_speed_unit", "mph")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.Upstreams.OpenMeteo+"/v1/forecast?"+q.Encode(), nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "GoCasa")
-	res, err := meteoClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Open-Meteo answered %s", res.Status)
-	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if err != nil {
+	var body json.RawMessage
+	sc := syncClient{name: "Open-Meteo", client: meteoClient, limit: 1 << 20}
+	if err := sc.json(ctx, http.MethodGet, a.Upstreams.OpenMeteo+"/v1/forecast?"+q.Encode(), nil, &body); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(body, new(forecast)); err != nil {

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -53,53 +52,25 @@ type immichNamed struct {
 	Name string `json:"name"`
 }
 
-type immichConn struct{ base, key string }
+type immichConn struct {
+	base string
+	sc   syncClient
+}
+
+func newImmichConn(base, key string) immichConn {
+	refused := errors.New("Immich refused the API key: it needs asset.read, asset.view, album.read and person.read")
+	return immichConn{base, syncClient{name: "Immich", client: immichClient,
+		header: http.Header{"X-Api-Key": {key}, "Accept": {"application/json"}}, // never ?apiKey=, which ends up in logs
+		limit:  50 << 20, overrides: map[int]error{http.StatusUnauthorized: refused, http.StatusForbidden: refused}}}
+}
 
 // call sends body (if any) as JSON to Immich and decodes its answer into out.
-// A refused key is permanent; any other failure is transient.
 func (c immichConn) call(ctx context.Context, method, path string, body, out any) error {
-	res, err := c.do(ctx, method, path, body)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if err := json.NewDecoder(io.LimitReader(res.Body, 50<<20)).Decode(out); err != nil {
-		return transient(fmt.Errorf("Immich's answer isn't JSON: %w", err))
-	}
-	return nil
+	return c.sc.json(ctx, method, c.base+path, body, out)
 }
 
 func (c immichConn) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
-	var rd io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		rd = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("x-api-key", c.key) // never ?apiKey=, which ends up in logs
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	res, err := immichClient.Do(req)
-	if err != nil {
-		return nil, transient(err)
-	}
-	switch {
-	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
-		res.Body.Close()
-		return nil, errors.New("Immich refused the API key: it needs asset.read, asset.view, album.read and person.read")
-	case res.StatusCode/100 != 2:
-		res.Body.Close()
-		return nil, transient(fmt.Errorf("Immich answered %s", res.Status))
-	}
-	return res, nil
+	return c.sc.do(ctx, method, c.base+path, body)
 }
 
 func (immich) Sync(ctx context.Context, a *App, in integrationRow) error {
@@ -107,7 +78,7 @@ func (immich) Sync(ctx context.Context, a *App, in integrationRow) error {
 	if err != nil {
 		return err
 	}
-	c := immichConn{cfg.URL, string(in.credentials)}
+	c := newImmichConn(cfg.URL, string(in.credentials))
 	albums, people, err := c.pickable(ctx)
 	if err != nil {
 		return err
@@ -279,7 +250,7 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 	var enc []byte
 	err := a.DB.QueryRowContext(ctx, "SELECT id, credentials_enc FROM integrations WHERE type = ?", immichType).Scan(&id, &enc)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, immichConn{}, nil
+		return 0, newImmichConn("", ""), nil // not connected: calls fail, never panic
 	}
 	if err != nil {
 		return 0, immichConn{}, err
@@ -289,7 +260,7 @@ func (a *App) immichOf(ctx context.Context) (int64, immichConn, error) {
 		return 0, immichConn{}, err
 	}
 	cfg, err := a.immichConfig(ctx, id)
-	return id, immichConn{cfg.URL, string(key)}, err
+	return id, newImmichConn(cfg.URL, string(key)), err
 }
 
 // connectImmich checks the server is Immich v3.2+ and takes the key, then
@@ -302,7 +273,7 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 		check: func(ctx context.Context) string {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			c := immichConn{raw, key}
+			c := newImmichConn(raw, key)
 			var v struct{ Major, Minor, Patch int }
 			if err := c.call(ctx, http.MethodGet, "/api/server/version", nil, &v); err != nil {
 				return "Couldn't reach Immich at that address."
@@ -524,7 +495,7 @@ func (a *App) cachedPhoto(ctx context.Context, id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	n, err := io.Copy(tmp, io.LimitReader(res.Body, 50<<20))
+	n, err := io.Copy(tmp, io.LimitReader(res.Body, 50<<20)) // cut, as before: past the client's limit the copy would fail on every prefetch
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}

@@ -34,27 +34,6 @@ var (
 	errCalendarGone = errors.New("Google has no such calendar for this account")
 )
 
-// transientError is a failure that retries on the normal schedule, without
-// backoff: network trouble, a 5xx or a 429 (spec §7.2).
-type transientError struct{ error }
-
-// transient marks err as a transientError. It drops a url.Error's URL as
-// runSync would, since runSync can't see inside the wrapper.
-func transient(err error) error {
-	if ue := (*url.Error)(nil); errors.As(err, &ue) {
-		err = ue.Err
-	}
-	return transientError{err}
-}
-
-// googleFailed is Google's answer status as an error, transient where it may pass.
-func googleFailed(status int, err error) error {
-	if status >= 500 || status == http.StatusTooManyRequests {
-		return transient(err)
-	}
-	return err
-}
-
 // googleCursor is a Google account's sync_cursor.
 type googleCursor struct {
 	NextFull int64             `json:"next_full"` // when the daily full re-import is due
@@ -182,7 +161,7 @@ func (a *App) googleAccess(ctx context.Context, refresh string) (string, error) 
 	case body.Error == "invalid_grant":
 		return "", errReconnect
 	case status != http.StatusOK || body.AccessToken == "":
-		return "", googleFailed(status, fmt.Errorf("Google wouldn't refresh access (%d %s)", status, body.Error))
+		return "", byStatus(status, fmt.Errorf("Google wouldn't refresh access (%d %s)", status, body.Error))
 	}
 	return body.AccessToken, nil
 }
@@ -200,33 +179,17 @@ func (a *App) googleEvents(ctx context.Context, access, cal, token string, now t
 		q.Set("timeMin", from.UTC().Format(time.RFC3339))
 		q.Set("timeMax", to.UTC().Format(time.RFC3339))
 	}
+	sc := syncClient{name: "Google", client: googleClient, header: http.Header{"Authorization": {"Bearer " + access}}, limit: 32 << 20,
+		overrides: map[int]error{http.StatusGone: errGoogleGone, http.StatusNotFound: errCalendarGone}}
 	for range maxGooglePages {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.Upstreams.GoogleAPI+"/calendar/v3/calendars/"+url.PathEscape(cal)+"/events?"+q.Encode(), nil)
-		if err != nil {
-			return nil, "", "", err
-		}
-		req.Header.Set("Authorization", "Bearer "+access)
-		res, err := googleClient.Do(req)
-		if err != nil {
-			return nil, "", "", transient(err)
-		}
 		var body struct {
 			Items         []googleEvent `json:"items"`
 			NextPageToken string        `json:"nextPageToken"`
 			NextSyncToken string        `json:"nextSyncToken"`
 			TimeZone      string        `json:"timeZone"`
 		}
-		err = json.NewDecoder(http.MaxBytesReader(nil, res.Body, 32<<20)).Decode(&body)
-		res.Body.Close()
-		switch {
-		case res.StatusCode == http.StatusGone:
-			return nil, "", "", errGoogleGone
-		case res.StatusCode == http.StatusNotFound:
-			return nil, "", "", errCalendarGone
-		case res.StatusCode != http.StatusOK:
-			return nil, "", "", googleFailed(res.StatusCode, fmt.Errorf("Google wouldn't list a calendar's events (%s)", res.Status))
-		case err != nil:
-			return nil, "", "", fmt.Errorf("Google's events: %w", err)
+		if err := sc.json(ctx, http.MethodGet, a.Upstreams.GoogleAPI+"/calendar/v3/calendars/"+url.PathEscape(cal)+"/events?"+q.Encode(), nil, &body); err != nil {
+			return nil, "", "", err
 		}
 		items = append(items, body.Items...)
 		if body.NextPageToken == "" {
