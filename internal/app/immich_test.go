@@ -154,6 +154,15 @@ func (f *fakeImmich) serve(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		if fav, _ := filter["isFavorite"].(map[string]any); fav != nil {
+			ids = slices.DeleteFunc(ids, func(id string) bool { return f.meta[id]["isFavorite"] != true })
+		}
+		if r, _ := filter["rating"].(map[string]any); r != nil {
+			ids = slices.DeleteFunc(ids, func(id string) bool {
+				rating, _ := f.meta[id]["exifInfo"].(map[string]any)["rating"].(int)
+				return rating < int(r["gte"].(float64))
+			})
+		}
 		start := 0
 		if c, ok := body["cursor"].(string); ok {
 			fmt.Sscan(c, &start)
@@ -507,14 +516,19 @@ func TestImmichFavoritesRatingAndExclusionsNarrowThePicks(t *testing.T) {
 			t.Errorf("search %s has no %s", b, want)
 		}
 	}
+	if strings.Contains(string(b), "isFavorite") || strings.Contains(string(b), "rating") {
+		t.Errorf("search %s filters favorites or rating, which are off", b)
+	}
 	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"a1": true, "a2": true}) {
 		t.Errorf("excluding Ada showed %v, want a1 and a2", got) // a3 is in Summer but shows Ada
 	}
 
 	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}, "album:alb-pets": {"hide"}, "person:per-ada": {"show"}, "favorites": {"on"}, "min_rating": {"3"}})
 	b, _ = json.Marshal(f.lastSearch())
-	if !strings.Contains(string(b), `"albumIds":{"none":["alb-pets"]}`) {
-		t.Errorf("search %s doesn't exclude Pets", b)
+	for _, want := range []string{`"albumIds":{"none":["alb-pets"]}`, `"isFavorite":{"eq":true}`, `"rating":{"gte":3}`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("search %s has no %s", b, want)
+		}
 	}
 	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"a1": true, "p1": true}) {
 		t.Errorf("favorites rated 3+ showed %v, want a1 and p1", got)
@@ -544,6 +558,12 @@ func TestTodaysImmichMemoriesJoinTheRotation(t *testing.T) {
 	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"m1": true, "a1": true, "a3": true, "p1": true}) {
 		t.Errorf("Memories with Ada showed %v", got)
 	}
+	f.setMeta("p1", map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 5}})
+	post(t, h, "/settings/immich/picks", url.Values{"memories": {"on"}, "person:per-ada": {"show"}, "favorites": {"on"}, "min_rating": {"4"}})
+	if got := shown(t, h, wall, 3); !maps.Equal(got, map[string]bool{"m1": true, "a1": true, "p1": true}) {
+		t.Errorf("Memories with Ada's 4-star favorites showed %v, want every Memory and p1", got) // the filters narrow picks, never Memories
+	}
+	post(t, h, "/settings/immich/picks", url.Values{"memories": {"on"}, "person:per-ada": {"show"}})
 
 	f.mu.Lock()
 	f.noMemory = true

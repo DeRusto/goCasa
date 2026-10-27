@@ -198,7 +198,7 @@ func ImmichSection(m *Immich) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</select></label><p id=\"immich-rating-note\" class=\"text-muted\">With a minimum set, unrated photos don't show.</p><button class=\"btn-primary\">Save photos</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</select></label><p id=\"immich-rating-note\" class=\"text-muted\">Favorites only and Minimum rating narrow the albums and people, never Memories. With a minimum set, unrated photos don't show.</p><button class=\"btn-primary\">Save photos</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

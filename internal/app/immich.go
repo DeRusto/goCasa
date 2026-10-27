@@ -55,11 +55,6 @@ type immichConfig struct {
 	MemoriesNote   string   `json:"memories_note"` // why Memories show nothing, from the last sync
 }
 
-// keep says as passes the favorites and rating filters.
-func (cfg immichConfig) keep(as immichAsset) bool {
-	return (!cfg.Favorites || as.Favorite) && (cfg.MinRating == 0 || as.Exif.Rating >= cfg.MinRating)
-}
-
 type immichNamed struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -118,7 +113,6 @@ func (immich) Sync(ctx context.Context, a *App, in integrationRow) error {
 		}
 		assets = append(assets, mem...)
 	}
-	assets = slices.DeleteFunc(assets, func(as immichAsset) bool { return !cfg.keep(as) })
 	if _, err := a.DB.ExecContext(ctx, "UPDATE integrations SET config_json = json_set(config_json, '$.memories_note', ?) WHERE id = ?", note, in.id); err != nil {
 		return err
 	}
@@ -167,12 +161,10 @@ type immichAsset struct {
 	TakenAt       time.Time `json:"fileCreatedAt"`
 	Local         time.Time `json:"localDateTime"` // when taken, in the photographer's zone, written as UTC
 	Width, Height int       // upright, else 0
-	Favorite      bool      `json:"isFavorite"`
 	Type          string    `json:"type"`
 	Visibility    string    `json:"visibility"`
 	Trashed       bool      `json:"isTrashed"`
 	Exif          struct {
-		Rating               int             `json:"rating"`
 		City, State, Country string          // json matches these case-blind
 		Width                int             `json:"exifImageWidth"`
 		Height               int             `json:"exifImageHeight"`
@@ -214,6 +206,7 @@ func (as immichAsset) place() string {
 
 // search lists the photos in any of the picked albums or showing any of the
 // picked people, but in no excluded album and showing no excluded person,
+// only favorites or rated at least the minimum if set,
 // leaving out trashed, archived, hidden and non-image assets: v3.2's filter
 // shape excludes none of them by default.
 func (c immichConn) search(ctx context.Context, cfg immichConfig) ([]immichAsset, error) {
@@ -235,6 +228,12 @@ func (c immichConn) search(ctx context.Context, cfg immichConfig) ([]immichAsset
 	}
 	if len(cfg.ExcludedPeople) > 0 {
 		filter["personIds"] = map[string]any{"none": cfg.ExcludedPeople}
+	}
+	if cfg.Favorites {
+		filter["isFavorite"] = map[string]any{"eq": true}
+	}
+	if cfg.MinRating > 0 { // unrated photos drop out
+		filter["rating"] = map[string]any{"gte": cfg.MinRating}
 	}
 	body := map[string]any{"filter": filter, "size": 1000, "withExif": true}
 	var all []immichAsset

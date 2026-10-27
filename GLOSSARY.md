@@ -160,7 +160,7 @@ A folder of the Household's own images that the screensaver shows only when Immi
 _Avoid_: Local photos, default images, backup folder
 
 **Memories**:
-Immich's "on this day" photos from past years. Picked like an album, today's join the screensaver's rotation.
+Immich's "on this day" photos from past years. Picked like an album, today's join the screensaver's rotation. Hide, Favorites only and Minimum rating never narrow them.
 _Avoid_: Flashbacks, on this day
 
 **Photo pair**:
