@@ -221,6 +221,7 @@ func listByName(t *testing.T, h *apptest.Harness, name string) []string {
 }
 
 func TestMealieConnectMirrorsEveryListWithMealiesDisplay(t *testing.T) {
+	t.Parallel()
 	_, d, m := mealieHousehold(t)
 	if got := strings.Join(listByName(t, d, "Groceries"), ","); got != "2 Milk,[x] Eggs" {
 		t.Errorf("Groceries = %q", got)
@@ -238,6 +239,7 @@ func TestMealieConnectMirrorsEveryListWithMealiesDisplay(t *testing.T) {
 }
 
 func TestMealieRefusesOldVersionsAndBadAddresses(t *testing.T) {
+	t.Parallel()
 	m := newMealie(t)
 	m.version = "v1.12.0"
 	m.addList("l1", "Groceries")
@@ -285,6 +287,7 @@ func ids(t *testing.T, h *apptest.Harness, list, item string) (string, string) {
 }
 
 func TestMealieCheckPutsBackTheWholeFreshItem(t *testing.T) {
+	t.Parallel()
 	_, d, m := mealieHousehold(t)
 	l, i := ids(t, d, "Groceries", "2 Milk")
 	m.mu.Lock()
@@ -312,6 +315,7 @@ func TestMealieCheckPutsBackTheWholeFreshItem(t *testing.T) {
 }
 
 func TestMealieCheckOfAnItemGoneInMealieRepulls(t *testing.T) {
+	t.Parallel()
 	_, d, m := mealieHousehold(t)
 	l, i := ids(t, d, "Groceries", "2 Milk")
 	m.remove("I1")
@@ -325,6 +329,7 @@ func TestMealieCheckOfAnItemGoneInMealieRepulls(t *testing.T) {
 }
 
 func TestMealieAddAcceptsMealiesMerge(t *testing.T) {
+	t.Parallel()
 	_, d, m := mealieHousehold(t)
 	l, _ := ids(t, d, "Groceries", "2 Milk")
 	post(t, d, "/lists/"+l+"/items", url.Values{"note": {"Bread"}})
@@ -344,6 +349,7 @@ func TestMealieAddAcceptsMealiesMerge(t *testing.T) {
 }
 
 func TestMealieDeleteAndClearChecked(t *testing.T) {
+	t.Parallel()
 	h, d, m := mealieHousehold(t)
 	l, milk := ids(t, d, "Groceries", "2 Milk")
 	_, eggs := ids(t, d, "Groceries", "Eggs")
@@ -374,6 +380,7 @@ func TestMealieDeleteAndClearChecked(t *testing.T) {
 }
 
 func TestMealiePollsEveryMinuteAndOnListOpen(t *testing.T) {
+	t.Parallel()
 	h, d, m := mealieHousehold(t)
 	m.addItem("L2", "I9", "Batteries", false)
 	m.addList("L3", "Party")
@@ -398,6 +405,7 @@ func TestMealiePollsEveryMinuteAndOnListOpen(t *testing.T) {
 }
 
 func TestMealieLiveRefreshOfListsDoesNotPoll(t *testing.T) {
+	t.Parallel()
 	h, d, m := mealieHousehold(t)
 	h.RunDue() // the poll a list open made due
 	m.addItem("L2", "I9", "Batteries", false)
@@ -416,6 +424,7 @@ func TestMealieLiveRefreshOfListsDoesNotPoll(t *testing.T) {
 }
 
 func TestMealieListsCanBeHidden(t *testing.T) {
+	t.Parallel()
 	h, d, _ := mealieHousehold(t)
 	costco, _ := ids(t, d, "Costco", "Paper towels")
 	post(t, h, "/settings/mealie-lists/"+costco, url.Values{"hidden": {"on"}})
@@ -436,6 +445,7 @@ func TestMealieListsCanBeHidden(t *testing.T) {
 const mealieDown = "reach Mealie"
 
 func TestMealieFailedWriteMakesListsReadOnlyUntilAGoodPoll(t *testing.T) {
+	t.Parallel()
 	h, d, m := mealieHousehold(t)
 	l, i := ids(t, d, "Groceries", "2 Milk")
 	m.setDown(true)
@@ -458,6 +468,7 @@ func TestMealieFailedWriteMakesListsReadOnlyUntilAGoodPoll(t *testing.T) {
 }
 
 func TestMealieThreeFailedPollsMakeListsReadOnly(t *testing.T) {
+	t.Parallel()
 	h, d, m := mealieHousehold(t)
 	m.setDown(true)
 	for n := 1; n <= 3; n++ {
@@ -494,6 +505,7 @@ func TestMealieGarbledAnswerBacksOff(t *testing.T) {
 }
 
 func TestLocalItemsCanBeDeletedAndCleared(t *testing.T) {
+	t.Parallel()
 	h := shopper(t)
 	post(t, h, "/lists", url.Values{"name": {"Groceries"}})
 	for _, n := range []string{"Milk", "Eggs", "Bread"} {

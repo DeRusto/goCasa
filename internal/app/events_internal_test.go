@@ -130,6 +130,7 @@ func refused(t *testing.T, err error) *refusal {
 }
 
 func TestThisEventEditsAndDeletesOneOccurrence(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	changes := a.Bus.subscribe()
 	defer a.Bus.unsubscribe(changes)
@@ -166,6 +167,7 @@ func TestThisEventEditsAndDeletesOneOccurrence(t *testing.T) {
 }
 
 func TestSplitResetsLaterOneOffEditsOnceConfirmed(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1, 2), "FREQ=DAILY", nil, nil))
 	write(t, a, id, key(at(16, 9)), scopeThis, timedAt("Early walk", at(16, 6), 1)) // before the Split: kept
@@ -191,6 +193,7 @@ func TestSplitResetsLaterOneOffEditsOnceConfirmed(t *testing.T) {
 }
 
 func TestSplitOnTheFirstOccurrenceCoversEverything(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(allDayOn("Bins", "2026-03-15"), "FREQ=WEEKLY", nil, nil))
 	first := key(time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC))
@@ -202,6 +205,7 @@ func TestSplitOnTheFirstOccurrenceCoversEverything(t *testing.T) {
 }
 
 func TestAllEventsEditKeepsOneOffEditsOwnChanges(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1, 2), "FREQ=DAILY", nil, nil))
 	write(t, a, id, key(at(16, 9)), scopeThis, timedAt("Long walk", at(16, 9), 1, 2)) // own title
@@ -218,6 +222,7 @@ func TestAllEventsEditKeepsOneOffEditsOwnChanges(t *testing.T) {
 }
 
 func TestAllEventsFromAOneOffEditAppliesOnlyWhatChanged(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1, 2), "FREQ=DAILY", nil, nil))
 	write(t, a, id, key(at(16, 9)), scopeThis, timedAt("Long walk", at(16, 9), 1, 3))
@@ -231,6 +236,7 @@ func TestAllEventsFromAOneOffEditAppliesOnlyWhatChanged(t *testing.T) {
 }
 
 func TestSplitKeepsCountAndRDatesOnTheirOwnHalf(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	// Five days from the 15th, plus an extra at 18:00 on the 16th, before the Split.
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1), "FREQ=DAILY;COUNT=5", nil, []string{"2026-03-16T18:00"}))
@@ -240,6 +246,7 @@ func TestSplitKeepsCountAndRDatesOnTheirOwnHalf(t *testing.T) {
 }
 
 func TestSplitCountsOccurrencesBeyondTheDisplayCap(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	start := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Pill", start, 1), "FREQ=DAILY;COUNT=2000", nil, nil))
@@ -251,6 +258,7 @@ func TestSplitCountsOccurrencesBeyondTheDisplayCap(t *testing.T) {
 }
 
 func TestThisAndFollowingDeleteEndsTheSeries(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1), "FREQ=DAILY", nil, nil))
 	write(t, a, id, key(at(19, 9)), scopeThis, timedAt("Late walk", at(19, 18), 1))
@@ -264,6 +272,7 @@ func TestThisAndFollowingDeleteEndsTheSeries(t *testing.T) {
 }
 
 func TestDeletedFirstOccurrencesDontCountAsBefore(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(15, 9), 1), "FREQ=DAILY", nil, nil))
 	remove(t, a, id, key(at(15, 9)), scopeThis)
@@ -274,6 +283,7 @@ func TestDeletedFirstOccurrencesDontCountAsBefore(t *testing.T) {
 }
 
 func TestAllEventsDeleteRemovesTheSeries(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	id := write(t, a, 0, "", scopeThis, repeat(allDayOn("Bins", "2026-03-15"), "FREQ=WEEKLY", nil, nil))
 	remove(t, a, id, key(time.Date(2026, 3, 22, 0, 0, 0, 0, time.UTC)), scopeAll)
@@ -283,6 +293,7 @@ func TestAllEventsDeleteRemovesTheSeries(t *testing.T) {
 }
 
 func TestEndingASeriesAtAnRDateKeepsItsEarlierEnd(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	// 1–3 March, plus an extra on the 10th.
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Walk", at(1, 9), 1), "FREQ=DAILY;COUNT=3", nil, []string{"2026-03-10T09:00"}))
@@ -291,6 +302,7 @@ func TestEndingASeriesAtAnRDateKeepsItsEarlierEnd(t *testing.T) {
 }
 
 func TestSplitToAllDayKeepsExDatesAndRDates(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	// Sundays from the 15th, plus Wednesday the 25th, but not Sunday the 29th.
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Market", at(15, 9), 1), "FREQ=WEEKLY", []string{"2026-03-29T09:00"}, []string{"2026-03-25T09:00"}))
@@ -299,6 +311,7 @@ func TestSplitToAllDayKeepsExDatesAndRDates(t *testing.T) {
 }
 
 func TestWritesOnlyGoToLocalCalendars(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	c := timedAt("Walk", at(15, 9), 1)
 	c.calendarID = 99
@@ -308,6 +321,7 @@ func TestWritesOnlyGoToLocalCalendars(t *testing.T) {
 }
 
 func TestAllEventsTitleEditAcrossTheFallBackHour(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	z := zone(t, "America/New_York")
 	start, _ := parseLocal("2026-10-31T00:30", z)
@@ -325,6 +339,7 @@ func TestAllEventsTitleEditAcrossTheFallBackHour(t *testing.T) {
 }
 
 func TestMemberFilterAlwaysShowsHouseholdEventsAndColoursFollowMembers(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	write(t, a, 0, "", scopeThis, timedAt("Dinner", at(15, 18), 1))      // Household
 	write(t, a, 0, "", scopeThis, timedAt("Football", at(15, 10), 1, 2)) // Bob
@@ -354,6 +369,7 @@ func TestMemberFilterAlwaysShowsHouseholdEventsAndColoursFollowMembers(t *testin
 }
 
 func TestOccurrenceMovedBeforeItsSeriesStillShows(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	first := time.Date(2026, 12, 7, 19, 0, 0, 0, time.UTC)
 	id := write(t, a, 0, "", scopeThis, repeat(timedAt("Choir", first, 1), "FREQ=WEEKLY", nil, nil))
@@ -362,6 +378,7 @@ func TestOccurrenceMovedBeforeItsSeriesStillShows(t *testing.T) {
 }
 
 func TestAllDayEventsCoverTheirDatesInclusive(t *testing.T) {
+	t.Parallel()
 	a := household(t)
 	c := allDayOn("Camping", "2026-03-14")
 	c.endDate = "2026-03-17" // the 14th to the 16th

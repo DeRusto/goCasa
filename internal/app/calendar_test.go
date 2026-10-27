@@ -55,6 +55,7 @@ func day(t *testing.T, page, date string) string {
 func text(s string) string { return regexp.MustCompile(`<[^>]*>`).ReplaceAllString(s, "") }
 
 func TestCreateEditDeleteTimedEvent(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed("Dentist", "2026-03-15T09:00", "2026-03-15T10:00", "UTC"))
 	_, page := h.Get(t, "/calendar?view=day&date=2026-03-15")
@@ -85,6 +86,7 @@ func TestCreateEditDeleteTimedEvent(t *testing.T) {
 }
 
 func TestAllDayEventsAreStoredExclusiveAndShownInclusive(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, allDay("Camping", "2026-03-14", "2026-03-16"))
 	var date, end string
@@ -107,6 +109,7 @@ func TestAllDayEventsAreStoredExclusiveAndShownInclusive(t *testing.T) {
 }
 
 func TestEventsAtMidnightStayOnTheirDay(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed("Early", "2026-03-16T00:00", "2026-03-16T01:00", "UTC"))
 	addEvent(t, h, timed("Late", "2026-03-16T23:59", "2026-03-17T00:00", "UTC"))
@@ -128,6 +131,7 @@ func TestEventsAtMidnightStayOnTheirDay(t *testing.T) {
 }
 
 func TestTimesUseTheEventsZone(t *testing.T) {
+	t.Parallel()
 	h := household(t) // Household zone is UTC
 	// New York is on EDT (UTC-4) from 8 March 2026; 23:30 there is 03:30 UTC the next day.
 	addEvent(t, h, timed("Call", "2026-03-15T23:30", "2026-03-16T00:30", "America/New_York"))
@@ -148,6 +152,7 @@ func TestTimesUseTheEventsZone(t *testing.T) {
 
 // The filter and colour rules are tested on eventsIn; this checks the page passes ?users on and keeps it.
 func TestMemberFilterReachesThePageAndItsLinks(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed("Dinner", "2026-03-15T18:00", "2026-03-15T19:00", "UTC"))        // Household
 	addEvent(t, h, timed("Football", "2026-03-15T10:00", "2026-03-15T11:00", "UTC", "2")) // Bob
@@ -167,6 +172,7 @@ func TestMemberFilterReachesThePageAndItsLinks(t *testing.T) {
 }
 
 func TestMonthAndAgendaViewsAndDeepLinks(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed("Haircut", "2026-04-30T09:00", "2026-04-30T10:00", "UTC"))
 	addEvent(t, h, allDay("Holiday", "2026-05-01", "2026-05-03"))
@@ -197,6 +203,7 @@ func TestMonthAndAgendaViewsAndDeepLinks(t *testing.T) {
 }
 
 func TestArchivedMembersStayOnEventsTheyAreHiddenFrom(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed("Vet", "2026-03-15T09:00", "2026-03-15T10:00", "UTC", "2", "3"))
 	h.Post(t, "/settings/members/3/archive", nil)
@@ -214,6 +221,7 @@ func TestArchivedMembersStayOnEventsTheyAreHiddenFrom(t *testing.T) {
 }
 
 func TestDSTGapIsRefusedAndOverlapTakesTheFirstOffset(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	// Los Angeles springs forward 02:00→03:00 on 8 March 2026 and falls back 02:00→01:00 on 1 November.
 	if code, _ := h.Post(t, "/calendar/event", timed("Gap", "2026-03-08T02:30", "2026-03-08T03:30", "America/Los_Angeles")); code != http.StatusBadRequest {
@@ -237,6 +245,7 @@ func TestDSTGapIsRefusedAndOverlapTakesTheFirstOffset(t *testing.T) {
 }
 
 func TestIncompleteEventRowsAreRefused(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	for _, q := range []string{
 		"INSERT INTO events (calendar_id, title, all_day, updated_at) VALUES (1, 'x', 1, 0)",
@@ -249,6 +258,7 @@ func TestIncompleteEventRowsAreRefused(t *testing.T) {
 }
 
 func TestTitleLengthCap(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed(strings.Repeat("é", 200), "2026-03-15T09:00", "2026-03-15T10:00", "UTC"))
 	for _, title := range []string{strings.Repeat("é", 201), "  "} {
@@ -272,6 +282,7 @@ func occurrence(id int, original time.Time, action string) string {
 }
 
 func TestPresetSeriesRepeat(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	// Sunday 15 March 2026; weekly on Mondays and Wednesdays, every other week.
 	addEvent(t, h, repeating(timed("Swim", "2026-03-16T07:00", "2026-03-16T08:00", "UTC"), "weekly", "interval", "2", "byday", "MO", "byday", "WE"))
@@ -302,6 +313,7 @@ func TestPresetSeriesRepeat(t *testing.T) {
 }
 
 func TestCustomRule(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	// Second Tuesday of each month, not in April, plus an extra on Thursday 19 March.
 	addEvent(t, h, repeating(timed("Book club", "2026-03-10T19:00", "2026-03-10T21:00", "Europe/London"), "custom",
@@ -328,6 +340,7 @@ func TestCustomRule(t *testing.T) {
 }
 
 func TestThisEventEditAndDelete(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC", "2"), "daily"))
 	at := func(d int) time.Time { return time.Date(2026, 3, d, 9, 0, 0, 0, time.UTC) }
@@ -384,6 +397,7 @@ func TestThisEventEditAndDelete(t *testing.T) {
 }
 
 func TestSeriesWhoseFirstDayIsNotAnOccurrence(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	// Starts on Sunday 15 March but repeats on Mondays: the first Occurrence is the 16th.
 	addEvent(t, h, repeating(timed("Gym", "2026-03-15T07:00", "2026-03-15T08:00", "UTC"), "weekly", "byday", "MO"))
@@ -397,6 +411,7 @@ func TestSeriesWhoseFirstDayIsNotAnOccurrence(t *testing.T) {
 }
 
 func TestFormErrorKeepsTheRepeat(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	f := repeating(timed("", "2026-03-10T19:00", "2026-03-10T20:00", "UTC"), "custom", "rrule", "RRULE:FREQ=MONTHLY;BYDAY=2TU")
 	code, body := h.Post(t, "/calendar/event", f)
@@ -407,6 +422,7 @@ func TestFormErrorKeepsTheRepeat(t *testing.T) {
 
 // The Edit scope rules are tested on writeEvent; this checks the dialog maps them to HTTP.
 func TestEditScopesOverHTTP(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	text := "RRULE:FREQ=DAILY;COUNT=5\nRDATE:20260316T180000"
 	addEvent(t, h, repeating(timed("Walk", "2026-03-15T09:00", "2026-03-15T10:00", "UTC"), "custom", "rrule", text))
@@ -440,6 +456,7 @@ func TestEditScopesOverHTTP(t *testing.T) {
 
 // A monthly preset on the 31st falls on a short month's last day (spec §8).
 func TestMonthlyPresetClampsToTheMonthsLastDay(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, repeating(timed("Rent", "2026-01-31T09:00", "2026-01-31T10:00", "UTC"), "monthly"))
 	for d, m := range map[string]string{"2026-02-28": "2026-02-15", "2026-03-31": "2026-03-15", "2026-04-30": "2026-04-15"} {
@@ -462,6 +479,7 @@ func shows(t *testing.T, h *apptest.Harness, title string, days map[string]bool)
 // The dialog posts a Series' rule back as custom text; moving the 31st's
 // Series to the 15th re-anchors its month-end rule, as a new preset would.
 func TestMovingAMonthEndSeriesReanchorsItsRule(t *testing.T) {
+	t.Parallel()
 	const anchored = "RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1"
 	at := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 9, 0, 0, 0, time.UTC) }
 	move := func(start string) url.Values {

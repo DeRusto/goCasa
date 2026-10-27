@@ -13,6 +13,7 @@ func firstIs(first bool) (func() (bool, error), *int) {
 }
 
 func TestPlanEdit(t *testing.T) {
+	t.Parallel()
 	was := timedAt("Walk", at(16, 9), 1, 1)
 	retimed := timedAt("Walk", at(16, 10), 1, 1)
 	renamed := timedAt("Hike", at(16, 9), 1, 1)
@@ -68,6 +69,7 @@ func TestPlanEdit(t *testing.T) {
 }
 
 func TestPlanEditFirstFails(t *testing.T) {
+	t.Parallel()
 	boom := errors.New("boom")
 	_, err := planEdit(scopeFollowing, true, func() (bool, error) { return false, boom }, timedAt("Walk", at(16, 9), 1), timedAt("Walk", at(16, 9), 1), true)
 	if !errors.Is(err, boom) {
@@ -76,6 +78,7 @@ func TestPlanEditFirstFails(t *testing.T) {
 }
 
 func TestPlanEditChanges(t *testing.T) {
+	t.Parallel()
 	was := timedAt("Walk", at(16, 9), 1, 1, 2)
 	was.location, was.description = "Park", "Bring water"
 	for _, tc := range []struct {
@@ -113,6 +116,7 @@ func TestPlanEditChanges(t *testing.T) {
 }
 
 func TestPlanRemove(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		sc       scope

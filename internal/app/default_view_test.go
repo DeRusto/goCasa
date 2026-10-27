@@ -19,6 +19,7 @@ func opens(t *testing.T, get func(testing.TB, string) (int, string), path string
 }
 
 func TestANewHouseholdOpensOnToday(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	if got := opens(t, h.Get, "/"); got != "Today" {
 		t.Fatalf("/ opened %q, want Today", got)
@@ -38,6 +39,7 @@ func setDefault(t *testing.T, h *apptest.Harness, page string) {
 }
 
 func TestADeviceOpensOnItsOwnDefaultViewAtToday(t *testing.T) {
+	t.Parallel()
 	h := household(t) // today is Sunday 15 March 2026
 	other := h.Device()
 	setDefault(t, other, "/calendar?view=week&date=2026-04-01&users=2")
@@ -68,6 +70,7 @@ func TestADeviceOpensOnItsOwnDefaultViewAtToday(t *testing.T) {
 }
 
 func TestThisDeviceShowsItsDefaultViewAndClearsIt(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	_, body := h.Get(t, "/settings")
 	if !strings.Contains(body, "This device") || !strings.Contains(body, "Household default") {
@@ -84,6 +87,7 @@ func TestThisDeviceShowsItsDefaultViewAndClearsIt(t *testing.T) {
 }
 
 func TestThemeIsAutoUntilThisDevicePicksOne(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	if _, body := h.Get(t, "/today"); !strings.Contains(body, `<meta name="color-scheme" content="light dark">`) {
 		t.Fatalf("default theme isn't Auto: %q", body)
@@ -101,6 +105,7 @@ func TestThemeIsAutoUntilThisDevicePicksOne(t *testing.T) {
 }
 
 func TestHouseholdClockAndWeekStartApplyEverywhere(t *testing.T) {
+	t.Parallel()
 	h := household(t) // now is Sunday 15 March 2026 09:00 UTC
 	addEvent(t, h, timed("Dentist", "2026-03-15T15:00", "2026-03-15T16:30", "UTC"))
 	if _, body := h.Get(t, "/calendar?view=week"); !strings.Contains(body, "Week of 15 March 2026") || !strings.Contains(text(body), "15:00–16:30") {
@@ -124,6 +129,7 @@ func TestHouseholdClockAndWeekStartApplyEverywhere(t *testing.T) {
 }
 
 func TestHouseholdDefaultViewIsTheFallback(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/settings/household", url.Values{"default_view": {"lists"}, "week_start": {"0"}, "clock_24h": {"on"}})
 	if got := opens(t, h.Device().Get, "/"); got != "Lists" {

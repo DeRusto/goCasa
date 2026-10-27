@@ -7,6 +7,7 @@ import (
 )
 
 func TestBusDropsASubscriberThatFallsBehind(t *testing.T) {
+	t.Parallel()
 	b := newBus()
 	slow, live := b.subscribe(), b.subscribe()
 	for range 17 { // one past the buffer

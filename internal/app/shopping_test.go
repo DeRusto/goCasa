@@ -36,6 +36,7 @@ func items(t *testing.T, h *apptest.Harness, list string) []string {
 }
 
 func TestClearingAMissingListIsNotFound(t *testing.T) {
+	t.Parallel()
 	h := shopper(t)
 	if code, _ := h.Post(t, "/lists/99/clear", nil); code != http.StatusNotFound {
 		t.Fatalf("clearing a missing list = %d, want 404", code)
@@ -43,6 +44,7 @@ func TestClearingAMissingListIsNotFound(t *testing.T) {
 }
 
 func TestCreateListsAndItemsWithoutAPIN(t *testing.T) {
+	t.Parallel()
 	h := shopper(t)
 	post(t, h, "/lists", url.Values{"name": {"Groceries"}})
 	post(t, h, "/lists", url.Values{"name": {"Hardware"}})
@@ -68,6 +70,7 @@ func TestCreateListsAndItemsWithoutAPIN(t *testing.T) {
 }
 
 func TestCheckAndUncheckItems(t *testing.T) {
+	t.Parallel()
 	h := shopper(t)
 	post(t, h, "/lists", url.Values{"name": {"Groceries"}})
 	post(t, h, "/lists/1/items", url.Values{"note": {"Milk"}})
@@ -100,6 +103,7 @@ func TestCheckAndUncheckItems(t *testing.T) {
 }
 
 func TestReorderPersists(t *testing.T) {
+	t.Parallel()
 	h := shopper(t)
 	post(t, h, "/lists", url.Values{"name": {"Groceries"}})
 	for _, n := range []string{"Milk", "Eggs", "Bread", "Jam"} {
@@ -133,6 +137,7 @@ func TestReorderPersists(t *testing.T) {
 }
 
 func TestListsPageFollowsLiveUpdates(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	if _, page := h.Get(t, "/lists"); !strings.Contains(page, `id="live"`) || !strings.Contains(page, "/events/stream") {
 		t.Fatalf("Lists has no live region: %q", page)

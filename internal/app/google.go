@@ -354,16 +354,7 @@ func (a *App) updateGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 			r.PostForm.Get("enabled") != "", id, googleType); err != nil {
 			return err
 		}
-		// The form lists only active Members: an archived one's default stays for their return.
-		if _, err := tx.ExecContext(r.Context(), "DELETE FROM source_calendar_members WHERE calendar_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", id); err != nil {
-			return err
-		}
-		for _, m := range parseIDs(r.PostForm["member"]) {
-			if _, err := tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO source_calendar_members SELECT ?, id FROM members WHERE id = ? AND NOT archived", id, m); err != nil {
-				return err
-			}
-		}
-		return applyDefaultMembers(r.Context(), tx, id, nil)
+		return setDefaultMembers(r.Context(), tx, id, parseIDs(r.PostForm["member"]))
 	}, web.KindEvent)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -384,7 +375,7 @@ func (googleSync) Section(ctx context.Context, a *App, st map[int64]integrationH
 func (a *App) googleSettings(ctx context.Context, st map[int64]integrationHealth) (web.Google, error) {
 	g := web.Google{Configured: a.Config.GoogleClientID != "", RedirectURI: a.Config.GoogleRedirectURI}
 	rows, err := a.DB.QueryContext(ctx, `SELECT i.id, i.name, c.id, c.name, c.color, c.enabled, c.read_only,
-			(SELECT json_group_array(member_id) FROM source_calendar_members WHERE calendar_id = c.id)
+			`+defaultMembersJSON+`
 		FROM integrations i LEFT JOIN source_calendars c ON c.integration_id = i.id
 		WHERE i.type = ? ORDER BY i.name, i.id, c.name, c.id`, googleType)
 	if err != nil {

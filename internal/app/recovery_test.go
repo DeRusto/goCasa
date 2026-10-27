@@ -11,6 +11,7 @@ import (
 )
 
 func TestFiveWrongPINsBlockThatAdminForFiveMinutesOnEveryDevice(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "admin", "5678")) // id 2
@@ -38,6 +39,7 @@ func TestFiveWrongPINsBlockThatAdminForFiveMinutesOnEveryDevice(t *testing.T) {
 }
 
 func TestAnAdminResetsAnotherAdminsPINAndClearsTheBlock(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "admin", "5678")) // id 2
@@ -51,6 +53,7 @@ func TestAnAdminResetsAnotherAdminsPINAndClearsTheBlock(t *testing.T) {
 }
 
 func TestArchivedAdminLeavesThePickerAndCantUnlock(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	if code, body := h.Post(t, "/settings/members/1/archive", nil); code != http.StatusConflict || !strings.Contains(body, "at least one Admin") {
@@ -85,6 +88,7 @@ func TestArchivedAdminLeavesThePickerAndCantUnlock(t *testing.T) {
 }
 
 func TestOnlyAMemberWithNoHistoryCanBeDeleted(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Rex", "#22c55e", "member", "")) // id 2
@@ -102,6 +106,7 @@ func TestOnlyAMemberWithNoHistoryCanBeDeleted(t *testing.T) {
 }
 
 func TestResetPINFromTheCommandLine(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Rex", "#22c55e", "member", ""))
@@ -126,6 +131,7 @@ func TestResetPINFromTheCommandLine(t *testing.T) {
 }
 
 func TestResetPINPrefersAnExactID(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members/1", member("2", "#3b82f6", "admin", ""))

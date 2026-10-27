@@ -23,6 +23,7 @@ func todayAgendaItem(t *testing.T, section, title string) string {
 }
 
 func TestTodayShowsWeatherAgendaAndDueToDosForEveryone(t *testing.T) {
+	t.Parallel()
 	h, m := weatherHousehold(t) // now is 2026-03-15 09:00 UTC
 	h.Post(t, "/settings/members", member("Bob", "#22c55e", "member", ""))
 	post(t, h, "/calendar/calendars", url.Values{"name": {"Family"}, "color": {"#a855f7"}})
@@ -104,6 +105,7 @@ func TestTodayShowsWeatherAgendaAndDueToDosForEveryone(t *testing.T) {
 }
 
 func TestTodayWithoutWeatherStillRenders(t *testing.T) {
+	t.Parallel()
 	h, _ := weatherHousehold(t)
 	code, page := h.Get(t, "/today")
 	if code != http.StatusOK || !strings.Contains(page, "Sunday 15 March") || !strings.Contains(page, "Nothing due") {
@@ -112,6 +114,7 @@ func TestTodayWithoutWeatherStillRenders(t *testing.T) {
 }
 
 func TestEveryPageLinksToTheOthersButNotTheScreensaver(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	for _, path := range []string{"/today", "/calendar", "/todos", "/lists", "/chores", "/settings"} {
 		_, body := h.Get(t, path)
@@ -127,6 +130,7 @@ func TestEveryPageLinksToTheOthersButNotTheScreensaver(t *testing.T) {
 }
 
 func TestHouseholdTimezoneSetsTheDay(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	h.Clock.Advance(3 * time.Hour) // 12:00 UTC on 15 March is 02:00 on the 16th in Kiritimati (UTC+14)
 	if _, page := h.Get(t, "/today"); !strings.Contains(page, "Sunday 15 March") {
@@ -152,6 +156,7 @@ func TestHouseholdTimezoneSetsTheDay(t *testing.T) {
 // Today turns its day at the Household's midnight with no timed refetch
 // before it, and each timed event carries its end so the browser greys it.
 func TestTodayTurnsAtTheHouseholdsMidnightAndEventsCarryTheirEnd(t *testing.T) {
+	t.Parallel()
 	h := household(t, auckland)
 	h.Clock.Set(aucklandMonday) // 01:00 Monday in Auckland
 	addEvent(t, h, timed("Dentist", "2026-03-16T09:00", "2026-03-16T10:00", "Pacific/Auckland"))

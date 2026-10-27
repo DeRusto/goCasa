@@ -20,6 +20,7 @@ func date(s string) time.Time {
 }
 
 func TestEveryPresetRoundTripsThroughItsRule(t *testing.T) {
+	t.Parallel()
 	for _, p := range []todoRepeat{
 		{Freq: "daily", Interval: 1},
 		{Freq: "daily", Interval: 3},
@@ -46,6 +47,7 @@ func TestEveryPresetRoundTripsThroughItsRule(t *testing.T) {
 }
 
 func TestEncodeAnchorsMonthEnds(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		p    todoRepeat
 		due  string
@@ -64,6 +66,7 @@ func TestEncodeAnchorsMonthEnds(t *testing.T) {
 }
 
 func TestNext(t *testing.T) {
+	t.Parallel()
 	monthly, yearly := todoRepeat{Freq: "monthly", Interval: 1}, todoRepeat{Freq: "yearly", Interval: 1}
 	for _, c := range []struct {
 		name            string
@@ -142,6 +145,7 @@ func complete(t *testing.T, m todos, id int64) int64 {
 }
 
 func TestCompletingARecurringToDoOpensExactlyOneNextCopy(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	id := weekly(t, m, "Bins", "2026-03-15")
 	next := complete(t, m, id)
@@ -161,6 +165,7 @@ func TestCompletingARecurringToDoOpensExactlyOneNextCopy(t *testing.T) {
 }
 
 func TestReopeningRemovesTheOpenNextCopyOrIsRefused(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	id := weekly(t, m, "Bins", "2026-03-15")
 	next := complete(t, m, id)
@@ -181,6 +186,7 @@ func TestReopeningRemovesTheOpenNextCopyOrIsRefused(t *testing.T) {
 }
 
 func TestAChainedCopyCannotBeDeletedOrEdited(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	id := weekly(t, m, "Bins", "2026-03-15")
 	next := complete(t, m, id)
@@ -210,6 +216,7 @@ func TestAChainedCopyCannotBeDeletedOrEdited(t *testing.T) {
 // An edit that keeps a clamped copy's due date and repeat keeps its month-end
 // anchor; one that moves the due date anchors there instead.
 func TestEditingAClampedCopyKeepsItsAnchor(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	monthly := todoRepeat{Freq: "monthly", Interval: 1} // as the form sends it
 	id, _ := m.Create(ctx, web.Todo{ColumnID: 1, Title: "Rent", Due: "2026-03-31"}, monthly)
@@ -231,6 +238,7 @@ func TestEditingAClampedCopyKeepsItsAnchor(t *testing.T) {
 }
 
 func TestOperationsOnAMissingToDo(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	_, complete := m.Complete(ctx, 99)
 	_, reopen := m.Reopen(ctx, 99)
@@ -249,6 +257,7 @@ func TestOperationsOnAMissingToDo(t *testing.T) {
 }
 
 func TestGetDecodesTheRepeatForTheForm(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	id, _ := m.Create(ctx, web.Todo{ColumnID: 1, Title: "Rent", Due: "2026-01-31", FromCompletion: true}, todoRepeat{Freq: "monthly", Interval: 2})
 	got, err := m.Get(ctx, id)
@@ -258,6 +267,7 @@ func TestGetDecodesTheRepeatForTheForm(t *testing.T) {
 }
 
 func TestTheDueFilter(t *testing.T) {
+	t.Parallel()
 	m, ctx := board(t), context.Background()
 	for _, due := range []string{"2026-03-14", "2026-03-15", "2026-03-16", ""} {
 		if _, err := m.Create(ctx, web.Todo{ColumnID: 1, Title: "t" + due, Due: due}, todoRepeat{}); err != nil {

@@ -35,6 +35,7 @@ func recurringTodo(title, due, repeat string, extra url.Values) url.Values {
 }
 
 func TestRepeatFromScheduleSkipsMissedDatesAndIsNotConsumedByEarlyCompletion(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t) // today is Sunday 2026-03-15
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", recurringTodo("Bins", "2026-03-02", "weekly", nil)) // Mondays, two missed
@@ -51,6 +52,7 @@ func TestRepeatFromScheduleSkipsMissedDatesAndIsNotConsumedByEarlyCompletion(t *
 }
 
 func TestRepeatFromCompletionAndTheDefaultDueDate(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t) // today is Sunday 2026-03-15
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", recurringTodo("Gym", "", "weekly", url.Values{"byday": {"WE", "FR"}}))
@@ -70,6 +72,7 @@ func TestRepeatFromCompletionAndTheDefaultDueDate(t *testing.T) {
 }
 
 func TestCompletingTwiceCreatesTheNextCopyOnce(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", recurringTodo("Bins", "2026-03-16", "weekly", nil))
@@ -84,6 +87,7 @@ func TestCompletingTwiceCreatesTheNextCopyOnce(t *testing.T) {
 }
 
 func TestUncompletingDeletesAnOpenNextCopyAndRefusesACompletedOne(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", recurringTodo("Bins", "2026-03-16", "weekly", nil))
@@ -106,6 +110,7 @@ func TestUncompletingDeletesAnOpenNextCopyAndRefusesACompletedOne(t *testing.T) 
 }
 
 func TestEditsCarryForwardAndCompletedCopiesAreKept(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", recurringTodo("Bins", "2026-03-16", "weekly", nil))
@@ -126,6 +131,7 @@ func TestEditsCarryForwardAndCompletedCopiesAreKept(t *testing.T) {
 
 // A month from January 31 is February's last day, not early March.
 func TestRepeatFromCompletionClampsToTheMonthsLastDay(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	h.Clock.Set(time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC))
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
@@ -143,6 +149,7 @@ func TestRepeatFromCompletionClampsToTheMonthsLastDay(t *testing.T) {
 // Deleting a copy whose completion made the next one would cut the chain and
 // let re-opening its predecessor leave two open copies.
 func TestACompletedCopyWithANextCopyCannotBeDeleted(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", recurringTodo("Bins", "2026-03-16", "weekly", nil))
@@ -161,6 +168,7 @@ func TestACompletedCopyWithANextCopyCannotBeDeleted(t *testing.T) {
 // A to-do due monthly on the 31st falls on the last day of shorter months,
 // and goes back to the 31st after them.
 func TestMonthlyAndYearlyRepeatsClampToTheMonthsLastDay(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	h.Clock.Set(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)) // every completion is early
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
@@ -198,6 +206,7 @@ func TestMonthlyAndYearlyRepeatsClampToTheMonthsLastDay(t *testing.T) {
 // Repeat from completion anchors to the completion day, so a to-do done on
 // the 31st lands on a short month's last day and back on the 31st after it.
 func TestRepeatFromCompletionAnchorsToTheCompletionDay(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	h.Clock.Set(time.Date(2026, 12, 31, 12, 0, 0, 0, time.UTC))
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
@@ -218,6 +227,7 @@ func TestRepeatFromCompletionAnchorsToTheCompletionDay(t *testing.T) {
 
 // A chain made before the anchor existed gains it from its due day.
 func TestAChainWithoutTheAnchorGainsItOnItsNextCompletion(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	h.Clock.Set(time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC))
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})

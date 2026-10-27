@@ -3,6 +3,7 @@ package app
 import "testing"
 
 func TestSafeNext(t *testing.T) {
+	t.Parallel()
 	for next, want := range map[string]string{
 		"/calendar?view=week":  "/calendar?view=week",
 		"/todos":               "/todos",

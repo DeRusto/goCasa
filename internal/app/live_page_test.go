@@ -29,6 +29,7 @@ func attr(tag, name string) string {
 }
 
 func TestPagesRefetchOnlyForTheKindsTheyShow(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	for path, kinds := range map[string][]string{
 		"/calendar":    {"event", "member", "household", "integration"},
@@ -67,6 +68,7 @@ func TestPagesRefetchOnlyForTheKindsTheyShow(t *testing.T) {
 
 // Night mode's reload rides the page's one htmx stream, which must deliver household.
 func TestNightPagesWatchHouseholdOnTheirOneStream(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	nightMode(t, h, "dim_clock")
 	for at, night := range map[time.Time]bool{
@@ -90,6 +92,7 @@ func TestNightPagesWatchHouseholdOnTheirOneStream(t *testing.T) {
 
 // To-dos and local lists reorder by drag with vendored SortableJS, not a hand-rolled script.
 func TestDragPagesLoadVendoredSortable(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	for _, path := range []string{"/todos", "/lists"} {
 		_, page := h.Get(t, path)
@@ -107,6 +110,7 @@ func TestDragPagesLoadVendoredSortable(t *testing.T) {
 }
 
 func TestPagesLoadVendoredHtmxFromGoCasa(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	src := regexp.MustCompile(`<script src="([^"]+)"`)
 	for _, path := range []string{"/calendar", "/screensaver"} {

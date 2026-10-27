@@ -318,12 +318,9 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	var all *editChanges       // set for All events
 	if ss.s.rule != "" {
 		was, err := a.occurrenceNow(ctx, fo)
+		var picked bool
 		if err == nil && sc == scopeAll { // only All events reads whether the Members changed
-			var active []int64
-			if active, err = a.activeMemberIDs(ctx); err == nil { // archived Members can't be picked
-				notActive := func(m int64) bool { return !slices.Contains(active, m) }
-				was.members, c.members = slices.DeleteFunc(was.members, notActive), slices.DeleteFunc(slices.Clone(c.members), notActive)
-			}
+			picked, err = a.membersChanged(ctx, c.members, was.members)
 		}
 		if err != nil {
 			return 0, err
@@ -344,6 +341,7 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 		if err != nil {
 			return 0, err
 		}
+		p.changes.members = picked // compared on active Members only
 		switch p.outcome {
 		case editOneOff:
 			row, editOf, original = fo.editID, id, occ.original
@@ -466,10 +464,8 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	if err != nil {
 		return 0, err
 	}
-	for _, row := range rows {
-		if err := setMembers(ctx, tx, row, c.members); err != nil {
-			return 0, err
-		}
+	if err := pickMembers(ctx, tx, rows, c.members); err != nil {
+		return 0, err
 	}
 	if err := a.commit(tx, web.KindEvent); err != nil {
 		return 0, err
@@ -515,24 +511,6 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 			start, end, date, endDate, occ.original, a.Now().Unix(), id)
 	}
 	return err
-}
-
-// activeMemberIDs is the ids of the Members who aren't archived.
-func (a *App) activeMemberIDs(ctx context.Context) ([]int64, error) {
-	rows, err := a.DB.QueryContext(ctx, "SELECT id FROM members WHERE NOT archived")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }
 
 // shownTimes is c's dates, or its zone and wall times, as the dialog shows

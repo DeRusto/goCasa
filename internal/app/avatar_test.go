@@ -35,6 +35,7 @@ func uploadAvatar(t *testing.T, h *apptest.Harness, id string, file []byte) int 
 }
 
 func TestUploadedAvatarIsA256PixelSquareElseInitials(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	h.Post(t, "/settings/members", member("Rex", "#22c55e", "member", "")) // id 2
@@ -80,6 +81,7 @@ func TestUploadedAvatarIsA256PixelSquareElseInitials(t *testing.T) {
 }
 
 func TestPhoneJPEGAvatarIsTurnedUpright(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	// Stored sideways: red left half, blue right half. EXIF orientation 6 says
@@ -121,6 +123,7 @@ func TestPhoneJPEGAvatarIsTurnedUpright(t *testing.T) {
 }
 
 func TestWebPAvatarUploads(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	pic, err := os.ReadFile("testdata/blue-purple-pink.lossy.webp") // from golang.org/x/image/testdata

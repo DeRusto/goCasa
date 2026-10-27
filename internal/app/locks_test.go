@@ -27,6 +27,7 @@ func asksForPIN(t *testing.T, h *apptest.Harness, path string, f url.Values) boo
 }
 
 func TestLocksAreOffByDefaultAndOnlyAnAdminTurnsThemOn(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", todo("1", "Fix tap", ""))
@@ -51,6 +52,7 @@ func TestLocksAreOffByDefaultAndOnlyAnAdminTurnsThemOn(t *testing.T) {
 }
 
 func TestCalendarLockGatesChangesButNotViewing(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	addEvent(t, h, timed("Dentist", "2026-03-16T09:00", "2026-03-16T10:00", "UTC"))
 	post(t, h, "/settings/locks", url.Values{"lock_calendar": {"on"}})
@@ -83,6 +85,7 @@ func TestCalendarLockGatesChangesButNotViewing(t *testing.T) {
 }
 
 func TestToDoLockGatesCompletingOnly(t *testing.T) {
+	t.Parallel()
 	h := apptest.New(t)
 	setup(t, h)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
@@ -110,6 +113,7 @@ func TestToDoLockGatesCompletingOnly(t *testing.T) {
 }
 
 func TestOneUnlockCoversEveryLockUntilFiveIdleMinutes(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", todo("1", "Fix tap", ""))
@@ -156,6 +160,7 @@ func postFrom(t *testing.T, h *apptest.Harness, referer, path string, f url.Valu
 }
 
 func TestUnlockingReturnsToThePageYouWereOn(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	post(t, h, "/todo-columns", url.Values{"name": {"House"}})
 	post(t, h, "/todos", todo("1", "Fix tap", ""))
@@ -173,6 +178,7 @@ func TestUnlockingReturnsToThePageYouWereOn(t *testing.T) {
 }
 
 func TestUnlockNeverRedirectsOffSite(t *testing.T) {
+	t.Parallel()
 	h := household(t)
 	other := h.Device()
 	other.Client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
