@@ -152,13 +152,13 @@ templ Screensaver(p TodayPage, s Slides, nightSeconds int) {
 				};
 				for (const f of box.querySelectorAll(".frame")) drift(f, Number(document.currentScript.dataset.photoSeconds) || 30);
 				const next = async () => {
-					let wait = 60;
+					let due = Date.now() + 60 * 1000;
 					try {
 						const p = await (await fetch("/screensaver/photo" + (portrait.matches ? "?portrait=1" : ""), { headers: { "X-Background": "1" } })).json();
+						due = Date.now() + (p.seconds || 60) * 1000; // the step's end, however long its photos take to load
 						await show(p.photos || [], p.seconds);
-						wait = p.seconds || 60;
 					} catch {}
-					setTimeout(next, wait * 1000);
+					setTimeout(next, Math.max(0, due - Date.now()));
 				};
 				// The page renders for a landscape screen; a portrait one asks for its own step now.
 				setTimeout(next, portrait.matches ? 0 : (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);

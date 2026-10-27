@@ -54,6 +54,16 @@ func TestPortraitsPairAndLandscapesShowAlone(t *testing.T) {
 	}
 }
 
+func TestACachedPortraitNeverPairsWithAnUncachedOne(t *testing.T) {
+	cands := []photoCandidate{{id: 1, cached: true, portrait: true}, {id: 2, cached: true}, {id: 3, portrait: true}}
+	for seed := range uint64(20) {
+		steps := deal(cands, rand.New(rand.NewPCG(seed, 0)))
+		if len(steps) != 3 || len(steps[2]) != 1 || steps[2][0] != 3 {
+			t.Fatalf("seed %d dealt %v, want the uncached portrait 3 alone after the cached photos", seed, steps)
+		}
+	}
+}
+
 func TestAdvanceSkipsPhotosGoneMidRound(t *testing.T) {
 	steps := [][]int64{{1}, {2}, {3, 4}, {5}}
 	present := map[int64]bool{1: true, 4: true, 5: true}

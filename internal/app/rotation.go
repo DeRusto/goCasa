@@ -36,7 +36,8 @@ type photoCandidate struct {
 
 // deal is a new round: each candidate once, cached ones first, each part
 // shuffled with rnd. A portrait waits for the next portrait to pair with,
-// so a round never skips or repeats one; an odd one out shows alone.
+// within its part, so a round never skips or repeats one; an odd one out
+// shows alone.
 func deal(cands []photoCandidate, rnd *rand.Rand) [][]int64 {
 	c := slices.Clone(cands)
 	rnd.Shuffle(len(c), func(i, j int) { c[i], c[j] = c[j], c[i] })
@@ -51,7 +52,10 @@ func deal(cands []photoCandidate, rnd *rand.Rand) [][]int64 {
 	})
 	var steps [][]int64
 	waiting := -1 // the step holding an unpaired portrait
-	for _, p := range c {
+	for i, p := range c {
+		if i > 0 && c[i-1].cached && !p.cached {
+			waiting = -1 // a cached portrait never waits on an uncached one
+		}
 		switch {
 		case !p.portrait:
 			steps = append(steps, []int64{p.id})
@@ -152,9 +156,14 @@ func (a *App) upcoming(n int) []int64 {
 	defer d.mu.Unlock()
 	var next []int64
 	if d.pos > 0 {
-		next = d.steps[d.pos-1][1:]
+		next = slices.Clone(d.steps[d.pos-1][1:])
 	}
-	next = slices.Concat(next, slices.Concat(d.steps[d.pos:]...))
+	for _, st := range d.steps[d.pos:] {
+		if len(next) >= n {
+			break
+		}
+		next = append(next, st...)
+	}
 	return next[:min(n, len(next))]
 }
 
