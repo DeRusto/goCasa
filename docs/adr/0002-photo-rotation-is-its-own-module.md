@@ -7,7 +7,7 @@ status: accepted
 The screensaver's photo rotation gets a module of its own, which partly supersedes ADR 0001. In October 2026 triage, Photo pairs (#96) and captions (#94) made each rotation step one or two photos, each with a caption. With the rotation spread across immich.go, fallback.go and device.go, each of those features would be split over all three files. Their main promises ("every photo exactly once per round", "only portraits pair") could then be tested only through HTTP with a fake Immich server.
 
 - **The interface:**
-  - `screensaverStep(now, household) → (step, left)`, where a step is one or two photos, each with its address and caption.
+  - `screensaverStep(now, household, portrait) → (step, left)`, where a step is one or two photos, each with its address and caption. The shared deck serves every Wall display, so the screen says whether it is portrait: a portrait screen shows a Photo pair one photo after the other.
   - `upcoming(n)` for the prefetcher.
   - The screensaver page, `/screensaver/photo` and the prefetcher call only these.
 - **What it hides:**

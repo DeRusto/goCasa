@@ -1,6 +1,9 @@
 package web
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // Immich is the Immich section of Settings.
 type Immich struct {
@@ -11,33 +14,48 @@ type Immich struct {
 	Albums        []ImmichPick
 	People        []ImmichPick
 	NothingPicked bool
-	Photos        int // in the rotation list
+	Photos        int    // in the rotation list
+	Memories      bool   // today's Memories are picked
+	MemoriesNote  string // why Memories show nothing; "" when they work
+	Favorites     bool   // only favorites show
+	MinRating     int    // stars, 0 for any
 }
 
-// ImmichPick is an album or person that can be picked for the screensaver.
+// ImmichPick is an album or person that can be picked for the screensaver,
+// or excluded from it.
 type ImmichPick struct {
-	ID, Name string
-	Picked   bool
+	ID, Name         string
+	Picked, Excluded bool
+}
+
+func ratingLabel(n int) string {
+	if n == 0 {
+		return "Any"
+	}
+	return strings.Repeat("★", n)
 }
 
 templ ImmichSection(m *Immich) {
 	<section class="card flex flex-col gap-3">
 		<h2>Immich photos</h2>
 		if m == nil {
-			<p class="text-muted">No Immich photos show: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read and person.read.</p>
+			<p class="text-muted">No Immich photos show: Immich isn't connected. Connect Immich v3.2 or later with an API key from the account that owns the photos, made in Immich under Account Settings > API Keys with asset.read, asset.view, album.read, person.read and memory.read.</p>
 			<form method="post" action="/settings/immich">
 				<label>Address <input name="url" type="text" inputmode="url" required placeholder="https://photos.example.com"/></label>
 				<label>API key <input name="key" type="password" required autocomplete="off"/></label>
 				<button class="btn-primary">Connect Immich</button>
 			</form>
 		} else {
-			<p class="text-muted break-words">Connected to { m.URL }. The screensaver shows photos from any album or person picked here.</p>
+			<p class="text-muted break-words">Connected to { m.URL }. The screensaver shows photos from any album or person picked here, and today's Memories if picked.</p>
 			@syncStatus(m.LastSuccess, m.Failures, m.LastError)
+			if m.MemoriesNote != "" {
+				<p role="alert">{ m.MemoriesNote }</p>
+			}
 			switch  {
 				case m.NothingPicked:
-					<p role="status">No Immich photos show: pick at least one album or person.</p>
+					<p role="status">No Immich photos show: pick at least one album or person to show, or Memories.</p>
 				case m.Photos == 0:
-					<p role="status">No Immich photos show: the picked albums and people have no photos.</p>
+					<p role="status">No Immich photos show: the shown albums and people have no photos, or the hidden ones, Favorites only and Minimum rating left none.</p>
 				default:
 					<p role="status">{ strconv.Itoa(m.Photos) } photos in the rotation.</p>
 			}
@@ -45,15 +63,27 @@ templ ImmichSection(m *Immich) {
 				<fieldset>
 					<legend>Albums</legend>
 					for _, p := range m.Albums {
-						<label class="pick"><input type="checkbox" name="album" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+						@immichPick("album", p)
 					}
 				</fieldset>
 				<fieldset>
 					<legend>People</legend>
 					for _, p := range m.People {
-						<label class="pick"><input type="checkbox" name="person" value={ p.ID } checked?={ p.Picked }/> { p.Name }</label>
+						@immichPick("person", p)
 					}
 				</fieldset>
+				<p class="text-muted">A photo in a hidden album, or showing a hidden person, never shows, even if a shown one has it.</p>
+				<label><input type="checkbox" name="memories" checked?={ m.Memories }/> Memories: today's "on this day" photos</label>
+				<label><input type="checkbox" name="favorites" checked?={ m.Favorites }/> Favorites only</label>
+				<label>
+					Minimum rating
+					<select name="min_rating" aria-describedby="immich-rating-note">
+						for n := range 6 {
+							@option(strconv.Itoa(n), ratingLabel(n), strconv.Itoa(m.MinRating))
+						}
+					</select>
+				</label>
+				<p id="immich-rating-note" class="text-muted">Favorites only and Minimum rating narrow the albums and people, never Memories. With a minimum set, unrated photos don't show.</p>
 				<button class="btn-primary">Save photos</button>
 			</form>
 			@integrationActions() {
@@ -66,4 +96,15 @@ templ ImmichSection(m *Immich) {
 			}
 		}
 	</section>
+}
+
+// immichPick is album or person p's Show / Hide / neither choice.
+templ immichPick(kind string, p ImmichPick) {
+	<fieldset class="flex flex-wrap items-center gap-2">
+		<legend class="sr-only">{ p.Name }</legend>
+		<span aria-hidden="true">{ p.Name }</span>
+		<label class="pick"><input type="radio" name={ kind + ":" + p.ID } value="show" checked?={ p.Picked && !p.Excluded }/> Show</label>
+		<label class="pick"><input type="radio" name={ kind + ":" + p.ID } value="hide" checked?={ p.Excluded }/> Hide</label>
+		<label class="pick"><input type="radio" name={ kind + ":" + p.ID } value="" checked?={ !p.Picked && !p.Excluded }/> Neither</label>
+	</fieldset>
 }

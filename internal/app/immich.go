@@ -1,20 +1,20 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -22,8 +22,9 @@ import (
 )
 
 // immich lists the photos of the albums and people an Admin picked (spec
-// §10) into photos_cache for the screensaver. Its credentials are the API key,
-// its config_json the address, what can be picked and what is.
+// §10), and today's Memories if picked, into photos_cache for the
+// screensaver. Its credentials are the API key, its config_json the address,
+// what can be picked and what is.
 type immich struct{}
 
 const (
@@ -45,6 +46,13 @@ type immichConfig struct {
 	People       []immichNamed `json:"people"`
 	PickedAlbums []string      `json:"picked_albums"`
 	PickedPeople []string      `json:"picked_people"`
+	Memories     bool          `json:"memories"` // today's "on this day" photos join the picks
+	// A photo in an excluded album or showing an excluded person never shows.
+	ExcludedAlbums []string `json:"excluded_albums"`
+	ExcludedPeople []string `json:"excluded_people"`
+	Favorites      bool     `json:"favorites_only"`
+	MinRating      int      `json:"min_rating"`    // stars, 0 for any
+	MemoriesNote   string   `json:"memories_note"` // why Memories show nothing, from the last sync
 }
 
 type immichNamed struct {
@@ -58,7 +66,7 @@ type immichConn struct {
 }
 
 func newImmichConn(base, key string) immichConn {
-	refused := errors.New("Immich refused the API key: it needs asset.read, asset.view, album.read and person.read")
+	refused := errors.New("Immich refused the API key: it needs asset.read, asset.view, album.read, person.read and memory.read")
 	return immichConn{base, syncClient{name: "Immich", client: immichClient,
 		header: http.Header{"X-Api-Key": {key}, "Accept": {"application/json"}}, // never ?apiKey=, which ends up in logs
 		limit:  50 << 20, overrides: map[int]error{http.StatusUnauthorized: refused, http.StatusForbidden: refused}}}
@@ -90,9 +98,23 @@ func (immich) Sync(ctx context.Context, a *App, in integrationRow) error {
 	}
 	var assets []immichAsset
 	if len(cfg.PickedAlbums)+len(cfg.PickedPeople) > 0 { // nothing picked = no Immich photos, never the whole library
-		if assets, err = c.search(ctx, cfg.PickedAlbums, cfg.PickedPeople); err != nil {
+		if assets, err = c.search(ctx, cfg); err != nil {
 			return err
 		}
+	}
+	var note string
+	if cfg.Memories {
+		mem, err := c.memories(ctx, a.Now())
+		switch {
+		case errors.As(err, new(transientError)):
+			return err
+		case err != nil: // a key without memory.read: the other picks still show
+			note = "Memories show nothing: Immich refused the API key's memory.read permission. Make a new key with it, then disconnect and connect again."
+		}
+		assets = append(assets, mem...)
+	}
+	if _, err := a.DB.ExecContext(ctx, "UPDATE integrations SET config_json = json_set(config_json, '$.memories_note', ?) WHERE id = ?", note, in.id); err != nil {
+		return err
 	}
 	return a.replacePhotos(ctx, photoSourceImmich, assets)
 }
@@ -132,31 +154,88 @@ func (c immichConn) pickable(ctx context.Context) (albums, people []immichNamed,
 	}
 }
 
+// immichAsset is a photo as Immich lists it; the Fallback folder fills in
+// ID, TakenAt and the size.
 type immichAsset struct {
-	ID      string    `json:"id"`
-	TakenAt time.Time `json:"fileCreatedAt"`
+	ID            string    `json:"id"`
+	TakenAt       time.Time `json:"fileCreatedAt"`
+	Local         time.Time `json:"localDateTime"` // when taken, in the photographer's zone, written as UTC
+	Width, Height int       // upright, else 0
+	Type          string    `json:"type"`
+	Visibility    string    `json:"visibility"`
+	Trashed       bool      `json:"isTrashed"`
+	Exif          struct {
+		City, State, Country string          // json matches these case-blind
+		Width                int             `json:"exifImageWidth"`
+		Height               int             `json:"exifImageHeight"`
+		Orientation          json.RawMessage `json:"orientation"` // "6", or a number in some versions
+	} `json:"exifInfo"`
 }
 
-// search lists the photos in any of albums or showing any of people,
+// taken is when as was taken, for its caption.
+func (as immichAsset) taken() time.Time {
+	if !as.Local.IsZero() {
+		return as.Local
+	}
+	return as.TakenAt
+}
+
+// size is as's upright width and height: Immich's own, else its EXIF size
+// turned by its orientation; 0 when unknown.
+func (as immichAsset) size() (int, int) {
+	if as.Width > 0 && as.Height > 0 {
+		return as.Width, as.Height
+	}
+	switch strings.Trim(string(as.Exif.Orientation), `"`) {
+	case "5", "6", "7", "8": // turned a quarter
+		return as.Exif.Height, as.Exif.Width
+	}
+	return as.Exif.Width, as.Exif.Height
+}
+
+// place is where as was taken, e.g. "Lisbon, Portugal"; "" when unknown.
+func (as immichAsset) place() string {
+	var p []string
+	for _, s := range []string{cmp.Or(as.Exif.City, as.Exif.State), as.Exif.Country} {
+		if s != "" {
+			p = append(p, s)
+		}
+	}
+	return strings.Join(p, ", ")
+}
+
+// search lists the photos in any of the picked albums or showing any of the
+// picked people, but in no excluded album and showing no excluded person,
+// only favorites or rated at least the minimum if set,
 // leaving out trashed, archived, hidden and non-image assets: v3.2's filter
 // shape excludes none of them by default.
-func (c immichConn) search(ctx context.Context, albums, people []string) ([]immichAsset, error) {
+func (c immichConn) search(ctx context.Context, cfg immichConfig) ([]immichAsset, error) {
 	var or []any
-	if len(albums) > 0 {
-		or = append(or, map[string]any{"albumIds": map[string]any{"any": albums}})
+	if len(cfg.PickedAlbums) > 0 {
+		or = append(or, map[string]any{"albumIds": map[string]any{"any": cfg.PickedAlbums}})
 	}
-	if len(people) > 0 {
-		or = append(or, map[string]any{"personIds": map[string]any{"any": people}})
+	if len(cfg.PickedPeople) > 0 {
+		or = append(or, map[string]any{"personIds": map[string]any{"any": cfg.PickedPeople}})
 	}
-	body := map[string]any{
-		"filter": map[string]any{
-			"or":         or,
-			"trashedAt":  map[string]any{"eq": nil},
-			"visibility": map[string]any{"eq": "timeline"},
-			"type":       map[string]any{"eq": "IMAGE"},
-		},
-		"size": 1000,
+	filter := map[string]any{
+		"or":         or,
+		"trashedAt":  map[string]any{"eq": nil},
+		"visibility": map[string]any{"eq": "timeline"},
+		"type":       map[string]any{"eq": "IMAGE"},
 	}
+	if len(cfg.ExcludedAlbums) > 0 { // top-level filters AND with the or
+		filter["albumIds"] = map[string]any{"none": cfg.ExcludedAlbums}
+	}
+	if len(cfg.ExcludedPeople) > 0 {
+		filter["personIds"] = map[string]any{"none": cfg.ExcludedPeople}
+	}
+	if cfg.Favorites {
+		filter["isFavorite"] = map[string]any{"eq": true}
+	}
+	if cfg.MinRating > 0 { // unrated photos drop out
+		filter["rating"] = map[string]any{"gte": cfg.MinRating}
+	}
+	body := map[string]any{"filter": filter, "size": 1000, "withExif": true}
 	var all []immichAsset
 	for range 1000 { // at most a million photos
 		var res struct {
@@ -177,6 +256,25 @@ func (c immichConn) search(ctx context.Context, albums, people []string) ([]immi
 	return all, nil
 }
 
+// memories is the photos of today's Immich Memories ("on this day").
+func (c immichConn) memories(ctx context.Context, now time.Time) ([]immichAsset, error) {
+	var ms []struct {
+		Assets []immichAsset `json:"assets"`
+	}
+	if err := c.call(ctx, http.MethodGet, "/api/memories?for="+url.QueryEscape(now.UTC().Format(time.RFC3339)), nil, &ms); err != nil {
+		return nil, err
+	}
+	var out []immichAsset
+	for _, m := range ms {
+		for _, as := range m.Assets {
+			if as.Type == "IMAGE" && !as.Trashed && (as.Visibility == "" || as.Visibility == "timeline") {
+				out = append(out, as)
+			}
+		}
+	}
+	return out, nil
+}
+
 // replacePhotos makes source's rotation list exactly assets, keeping the
 // cached bytes of those still in it.
 func (a *App) replacePhotos(ctx context.Context, source string, assets []immichAsset) error {
@@ -185,8 +283,10 @@ func (a *App) replacePhotos(ctx context.Context, source string, assets []immichA
 		keep := map[string]bool{}
 		for _, as := range assets {
 			keep[as.ID] = true
-			if _, err := tx.ExecContext(ctx, `INSERT INTO photos_cache (source, external_id_or_path, taken_at) VALUES (?, ?, ?)
-				ON CONFLICT (source, external_id_or_path) DO UPDATE SET taken_at = excluded.taken_at`, source, as.ID, as.TakenAt.Unix()); err != nil {
+			w, h := as.size()
+			if _, err := tx.ExecContext(ctx, `INSERT INTO photos_cache (source, external_id_or_path, taken_at, width, height, place) VALUES (?, ?, ?, ?, ?, ?)
+				ON CONFLICT (source, external_id_or_path) DO UPDATE SET taken_at = excluded.taken_at, width = excluded.width, height = excluded.height, place = excluded.place`,
+				source, as.ID, as.taken().Unix(), w, h, as.place()); err != nil {
 				return err
 			}
 		}
@@ -284,6 +384,9 @@ func (a *App) connectImmich(w http.ResponseWriter, r *http.Request) {
 			if _, _, err := c.pickable(ctx); err != nil {
 				return "Immich didn't take that API key: " + err.Error()
 			}
+			if _, err := c.memories(ctx, a.Now()); err != nil {
+				return "Immich didn't take that API key: " + err.Error()
+			}
 			return ""
 		}})
 	a.connected(w, r, msg, err)
@@ -302,13 +405,41 @@ func (a *App) disconnectImmich(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-// saveImmichPicks sets the picked albums and people, then re-lists.
+// saveImmichPicks sets the picked and excluded albums and people, Memories
+// and the favorites and rating filters, then re-lists.
 func (a *App) saveImmichPicks(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	albums, _ := json.Marshal(append([]string{}, r.PostForm["album"]...))
-	people, _ := json.Marshal(append([]string{}, r.PostForm["person"]...))
-	if _, err := a.exec(r.Context(), web.KindIntegration, "UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?)) WHERE type = ?",
-		string(albums), string(people), immichType); err != nil {
+	// Each album and person is "album:<id>" or "person:<id>", set to show, hide or neither.
+	picks := map[string][]string{}
+	for k, v := range r.PostForm {
+		kind, id, ok := strings.Cut(k, ":")
+		if !ok || (kind != "album" && kind != "person") || id == "" {
+			continue
+		}
+		switch v[0] {
+		case "show":
+			picks[kind] = append(picks[kind], id)
+		case "hide":
+			picks["exclude_"+kind] = append(picks["exclude_"+kind], id)
+		case "":
+		default:
+			a.settingsPage(w, r, http.StatusBadRequest, "Each album and person is Show, Hide or neither.")
+			return
+		}
+	}
+	ids := func(name string) string {
+		b, _ := json.Marshal(append([]string{}, slices.Sorted(slices.Values(picks[name]))...))
+		return string(b)
+	}
+	rating, err := strconv.Atoi(cmp.Or(r.PostFormValue("min_rating"), "0"))
+	if err != nil || rating < 0 || rating > 5 {
+		a.settingsPage(w, r, http.StatusBadRequest, "The minimum rating is 0 to 5 stars.")
+		return
+	}
+	if _, err := a.exec(r.Context(), web.KindIntegration, `UPDATE integrations SET config_json = json_set(config_json, '$.picked_albums', json(?), '$.picked_people', json(?),
+		'$.excluded_albums', json(?), '$.excluded_people', json(?), '$.memories', json(?), '$.favorites_only', json(?), '$.min_rating', ?) WHERE type = ?`,
+		ids("album"), ids("person"), ids("exclude_album"), ids("exclude_person"),
+		strconv.FormatBool(r.PostForm.Has("memories")), strconv.FormatBool(r.PostForm.Has("favorites")), rating, immichType); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -352,104 +483,28 @@ func (a *App) immichSettings(ctx context.Context, st map[int64]integrationHealth
 	json.Unmarshal([]byte(raw), &cfg)
 	x := st[id]
 	m.URL, m.Failures, m.LastError, m.LastSuccess = cfg.URL, x.Failures, x.LastError, x.LastSuccess
-	picked := map[string]bool{}
+	picked, excluded := map[string]bool{}, map[string]bool{}
 	for _, id := range append(cfg.PickedAlbums, cfg.PickedPeople...) {
 		picked[id] = true
 	}
+	for _, id := range append(cfg.ExcludedAlbums, cfg.ExcludedPeople...) {
+		excluded[id] = true
+	}
 	for _, x := range cfg.Albums {
-		m.Albums = append(m.Albums, web.ImmichPick{ID: x.ID, Name: x.Name, Picked: picked[x.ID]})
+		m.Albums = append(m.Albums, web.ImmichPick{ID: x.ID, Name: x.Name, Picked: picked[x.ID], Excluded: excluded[x.ID]})
 	}
 	for _, x := range cfg.People {
-		m.People = append(m.People, web.ImmichPick{ID: x.ID, Name: x.Name, Picked: picked[x.ID]})
+		m.People = append(m.People, web.ImmichPick{ID: x.ID, Name: x.Name, Picked: picked[x.ID], Excluded: excluded[x.ID]})
 	}
-	m.NothingPicked = len(picked) == 0
+	m.NothingPicked = len(picked) == 0 && !cfg.Memories
+	m.Memories, m.MemoriesNote, m.Favorites, m.MinRating = cfg.Memories, cfg.MemoriesNote, cfg.Favorites, cfg.MinRating
 	err = a.DB.QueryRowContext(ctx, "SELECT count(*) FROM photos_cache WHERE source = 'immich'").Scan(&m.Photos)
 	return &m, err
 }
 
-// photoDeck is the screensaver's no-repeat shuffle of its photos,
-// shared by every Wall display: each shows the photo current at the time.
-type photoDeck struct {
-	mu      sync.Mutex
-	order   []int64 // photos_cache ids
-	pos     int     // order[pos-1] is showing
-	shownAt time.Time
-}
-
-// currentPhoto is the photo the screensaver shows now, moving on once it
-// has shown for every seconds, and how long it still shows; 0 for none. It
-// prefers a cached photo, so rotation continues from the cache while Immich
-// is down. The photos are Immich's, else the Fallback folder's.
-func (a *App) currentPhoto(ctx context.Context, now time.Time, every time.Duration) (int64, time.Duration, error) {
-	d := &a.photos
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	cached, err := a.screensaverPhotos(ctx)
-	if err != nil {
-		return 0, 0, err
-	}
-	if d.pos > 0 && now.Sub(d.shownAt) < every {
-		if _, ok := cached[d.order[d.pos-1]]; ok {
-			return d.order[d.pos-1], every - now.Sub(d.shownAt), nil
-		}
-	}
-	for range 2 {
-		if d.pos >= len(d.order) {
-			d.order = d.order[:0]
-			for id := range cached {
-				d.order = append(d.order, id)
-			}
-			rand.Shuffle(len(d.order), func(i, j int) { d.order[i], d.order[j] = d.order[j], d.order[i] })
-			d.pos = 0
-		}
-		next := -1
-		for i := d.pos; i < len(d.order); i++ {
-			c, ok := cached[d.order[i]]
-			if !ok {
-				continue // gone since the shuffle
-			}
-			if c {
-				next = i
-				break
-			}
-			if next < 0 {
-				next = i
-			}
-		}
-		if next >= 0 {
-			d.pos, d.shownAt = next+1, now
-			return d.order[next], every, nil
-		}
-		d.pos = len(d.order)
-	}
-	return 0, 0, nil
-}
-
-// photoList is every id in source's list and whether its bytes are cached.
-func (a *App) photoList(ctx context.Context, source string) (map[int64]bool, error) {
-	rows, err := a.DB.QueryContext(ctx, "SELECT id, cache_path IS NOT NULL FROM photos_cache WHERE source = ?", source)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	m := map[int64]bool{}
-	for rows.Next() {
-		var id int64
-		var c bool
-		if err := rows.Scan(&id, &c); err != nil {
-			return nil, err
-		}
-		m[id] = c
-	}
-	return m, rows.Err()
-}
-
 // prefetchPhotos caches the next photos the screensaver will show.
 func (a *App) prefetchPhotos(ctx context.Context, _ time.Time) error {
-	a.photos.mu.Lock()
-	next := append([]int64(nil), a.photos.order[a.photos.pos:min(a.photos.pos+immichPrefetch, len(a.photos.order))]...)
-	a.photos.mu.Unlock()
-	for _, id := range next {
+	for _, id := range a.upcoming(immichPrefetch) {
 		if _, err := a.cachedPhoto(ctx, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			a.Log.Warn("prefetching a photo from Immich", "photo", id, "err", err) // the re-list records outages
 			return nil

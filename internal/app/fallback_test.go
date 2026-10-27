@@ -1,6 +1,9 @@
 package app_test
 
 import (
+	"bytes"
+	"image"
+	"image/jpeg"
 	"net/http"
 	"net/url"
 	"os"
@@ -89,7 +92,7 @@ func TestTheFallbackFolderIsNeverMixedWithImmich(t *testing.T) {
 	h, _ := immichHousehold(t)
 	wall := h.Device()
 	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	h.RunDue()
 	for range 6 {
 		_, img := wall.Get(t, photo(t, wall))
@@ -110,7 +113,7 @@ func TestTheFallbackFolderShowsWhileImmichIsDownWithNothingCached(t *testing.T) 
 	h, f := immichHousehold(t)
 	wall := h.Device()
 	addFolderPhoto(t, h, "beach.jpg", "jpeg:beach")
-	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	post(t, h, "/settings/immich/picks", url.Values{"album:alb-summer": {"show"}})
 	f.setDown(true)
 	h.Clock.Advance(time.Hour)
 	h.RunDue() // the re-list fails with nothing cached
@@ -176,4 +179,61 @@ func TestWithNeitherSourceTheClockAndAgendaShowOnDark(t *testing.T) {
 	if p := photo(t, wall); p == "" {
 		t.Errorf("the Fallback folder is back on, yet no photo shows")
 	}
+}
+
+func TestSidewaysFolderJPEGsPairAsPortraits(t *testing.T) {
+	t.Parallel()
+	h := apptest.New(t)
+	setup(t, h)
+	wall := h.Device()
+	// Stored 400×200 with EXIF orientation 6: upright, a 200×400 portrait.
+	pic := sidewaysJPEG(400, 200)
+	addFolderPhoto(t, h, "a.jpg", pic)
+	addFolderPhoto(t, h, "b.jpg", pic)
+	addFolderPhoto(t, h, "broken.jpg", "not a jpeg") // no size: shows alone
+	h.RunDue()
+
+	sizes := map[int]int{}
+	for range 2 {
+		sizes[len(step(t, wall, ""))]++
+		h.Clock.Advance(30 * time.Second)
+	}
+	if sizes[2] != 1 || sizes[1] != 1 {
+		t.Fatalf("steps by photo count = %v, want the two sideways JPEGs paired and the broken one alone", sizes)
+	}
+}
+
+func TestLargeFolderPhotosShowAsScreenSizedCopies(t *testing.T) {
+	t.Parallel()
+	h := apptest.New(t)
+	setup(t, h)
+	wall := h.Device()
+	addFolderPhoto(t, h, "tall.jpg", sidewaysJPEG(4000, 1000)) // upright 1000×4000
+	h.RunDue()
+
+	ps := step(t, wall, "")
+	if len(ps) != 1 {
+		t.Fatalf("step = %v", ps)
+	}
+	_, body := wall.Get(t, ps[0].Src)
+	cfg, err := jpeg.DecodeConfig(strings.NewReader(body))
+	if err != nil || cfg.Width != 480 || cfg.Height != 1920 {
+		t.Fatalf("a sideways 4000x1000 photo shows as %dx%d (%v), want upright 480x1920", cfg.Width, cfg.Height, err)
+	}
+
+	os.Remove(filepath.Join(h.App.Config.DataDir, "photos", "tall.jpg"))
+	post(t, h, "/settings/fallback-folder/refresh", nil)
+	if left, _ := os.ReadDir(filepath.Join(h.App.Config.DataDir, "photos-screen")); len(left) != 0 {
+		t.Errorf("copies of removed photos stay: %v", left)
+	}
+}
+
+// sidewaysJPEG is a w×h JPEG whose EXIF orientation 6 says to view it turned
+// a quarter clockwise, as a phone stores a portrait.
+func sidewaysJPEG(w, h int) string {
+	var raw bytes.Buffer
+	jpeg.Encode(&raw, image.NewGray(image.Rect(0, 0, w, h)), nil)
+	exif := []byte("Exif\x00\x00MM\x00\x2a\x00\x00\x00\x08\x00\x01\x01\x12\x00\x03\x00\x00\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00")
+	pic := append([]byte{0xff, 0xd8, 0xff, 0xe1, 0, byte(len(exif) + 2)}, exif...)
+	return string(append(pic, raw.Bytes()[2:]...))
 }

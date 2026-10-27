@@ -159,6 +159,10 @@ _Avoid_: Sleep, do not disturb, off hours
 A folder of the Household's own images that the screensaver shows only when Immich has no photos to show.
 _Avoid_: Local photos, default images, backup folder
 
+**Memories**:
+Immich's "on this day" photos from past years. Picked like an album, today's join the screensaver's rotation. Hide, Favorites only and Minimum rating never narrow them.
+_Avoid_: Flashbacks, on this day
+
 **Photo pair**:
-Two portrait Immich photos the screensaver shows side by side, as one step of its rotation, so neither is cropped to fill a landscape Wall display.
+Two portrait photos the screensaver shows side by side, as one step of its rotation, so neither is cropped to fill a landscape Wall display.
 _Avoid_: Split view, diptych, double
