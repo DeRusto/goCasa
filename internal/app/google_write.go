@@ -44,8 +44,8 @@ type googleRow struct {
 // googleResult is what a write leaves for the sync after it: the Google id
 // whose event or series rows the change's Members go on (only those from
 // event row from on, if set), whether target is a Series (its later
-// occurrences keep the choice), whether those rows are new (their Members start
-// as the calendar's defaults), whether a series' rule changed, so its
+// occurrences keep the choice), whether those rows are new (so the Members to
+// compare with are those the sync gave them), whether a series' rule changed, so its
 // calendar re-imports in full, and whether Google was left alone (local), so
 // there is nothing to sync.
 type googleResult struct {
@@ -551,7 +551,8 @@ func (a *App) removeGoogle(ctx context.Context, row googleRow, sc scope) (google
 }
 
 // landGoogle runs the sync after a write to calendar cal of account, giving
-// res' rows Members members unless they already have them (base) — and
+// res' rows Members members unless they already have them (base, or for fresh
+// rows what the sync gave them) — and
 // returns once it's done, so the page that follows shows the change.
 // It is errNotLanded if that sync failed.
 func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResult, members, base []int64) (err error) {
@@ -579,67 +580,28 @@ func (a *App) landGoogle(ctx context.Context, account, cal int64, res googleResu
 	if res.target == "" {
 		return nil
 	}
-	active, err := a.activeMemberIDs(ctx)
-	if err != nil {
-		return err
-	}
-	if !slices.ContainsFunc(active, func(m int64) bool { return slices.Contains(members, m) != slices.Contains(base, m) }) {
-		return nil
-	}
-	var ids []int64
 	changed := false
 	return a.inTxIf(ctx, &changed, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `UPDATE events SET local_override = 1 WHERE calendar_id = ?1 AND (external_id = ?2 OR external_series_id = ?2)
-				AND (?3 = 0 OR `+startKey+` >= (SELECT `+startKey+` FROM events WHERE id = ?3))
-			RETURNING id`, cal, res.target, res.from)
+		rows, err := googleRows(ctx, tx, cal, res.target, res.from)
 		if err != nil {
 			return err
 		}
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
+		if res.fresh && len(rows) > 0 { // what the sync just gave them
+			var got string
+			if err := tx.QueryRowContext(ctx, "SELECT json_group_array(member_id) FROM event_members WHERE event_id = ?", rows[0]).Scan(&got); err != nil {
 				return err
 			}
-			ids = append(ids, id)
+			base = nil
+			json.Unmarshal([]byte(got), &base)
 		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
+		if changed, err = a.membersChanged(ctx, members, base); err != nil || !changed {
 			return err
 		}
-		changed = len(ids) > 0
-		for _, id := range ids {
-			if err := setMembers(ctx, tx, id, members); err != nil {
-				return err
-			}
+		if res.series {
+			return pickSeriesMembers(ctx, tx, cal, res.target, res.from, members)
 		}
-		if !res.series {
-			return nil
-		}
-		// Kept for the Series' occurrences that sync later, even with none in the window yet.
-		if _, err := tx.ExecContext(ctx, `DELETE FROM google_series_members WHERE calendar_id = ?1 AND series_id = ?2
-			AND (?3 = 0 OR from_key >= (SELECT `+startKey+` FROM events WHERE id = ?3))`, cal, res.target, res.from); err != nil {
-			return err
-		}
-		list, _ := json.Marshal(members)
-		_, err = tx.ExecContext(ctx, `INSERT INTO google_series_members (calendar_id, series_id, from_key, members)
-			VALUES (?1, ?2, (SELECT `+startKey+` FROM events WHERE id = ?3), ?4)`, cal, res.target, res.from, string(list))
-		return err
+		return pickMembers(ctx, tx, rows, members)
 	}, web.KindEvent)
-}
-
-// setMembers gives event id Members members. The form lists only active
-// Members, so an archived one stays on the event.
-func setMembers(ctx context.Context, tx *sql.Tx, id int64, members []int64) error {
-	if _, err := tx.ExecContext(ctx, "DELETE FROM event_members WHERE event_id = ? AND member_id IN (SELECT id FROM members WHERE NOT archived)", id); err != nil {
-		return err
-	}
-	for _, m := range members {
-		if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO event_members (event_id, member_id) SELECT ?, id FROM members WHERE id = ? AND NOT archived", id, m); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // googlePage shows Google event id in the event dialog as GoCasa has it now.
@@ -729,14 +691,7 @@ func (a *App) saveGoogle(w http.ResponseWriter, r *http.Request) {
 		a.googleAnswer(w, r, row, f, err)
 		return
 	}
-	base := was.members
-	if res.fresh {
-		if base, err = a.defaultMembers(r.Context(), row.calendarID); err != nil {
-			a.serverError(w, r, err)
-			return
-		}
-	}
-	if err := a.landGoogle(r.Context(), row.account, row.calendarID, res, c.members, base); err != nil {
+	if err := a.landGoogle(r.Context(), row.account, row.calendarID, res, c.members, was.members); err != nil {
 		a.landFailed(w, r, err)
 		return
 	}
@@ -803,12 +758,9 @@ func (a *App) createGoogle(w http.ResponseWriter, r *http.Request, f web.EventFo
 			}
 		}
 	}
-	var base []int64 // none picked: the dialog doesn't know the defaults, so they apply
-	if err == nil && len(c.members) > 0 {
-		base, err = a.defaultMembers(r.Context(), c.calendarID)
-	}
 	if err == nil {
-		err = a.landGoogle(r.Context(), account, c.calendarID, googleResult{target: made.ID, series: googleRecurrence(c) != nil, fresh: true}, c.members, base)
+		// None picked: the dialog doesn't know the defaults, so they apply.
+		err = a.landGoogle(r.Context(), account, c.calendarID, googleResult{target: made.ID, series: googleRecurrence(c) != nil, fresh: len(c.members) > 0}, c.members, nil)
 		if err != nil {
 			a.landFailed(w, r, err)
 			return true
@@ -818,22 +770,4 @@ func (a *App) createGoogle(w http.ResponseWriter, r *http.Request, f web.EventFo
 	}
 	a.googleAnswer(w, r, row, f, err)
 	return true
-}
-
-// defaultMembers is calendar cal's default Members.
-func (a *App) defaultMembers(ctx context.Context, cal int64) ([]int64, error) {
-	rows, err := a.DB.QueryContext(ctx, "SELECT member_id FROM source_calendar_members WHERE calendar_id = ?", cal)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }

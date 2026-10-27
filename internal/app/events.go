@@ -466,10 +466,8 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	if err != nil {
 		return 0, err
 	}
-	for _, row := range rows {
-		if err := setMembers(ctx, tx, row, c.members); err != nil {
-			return 0, err
-		}
+	if err := pickMembers(ctx, tx, rows, c.members); err != nil {
+		return 0, err
 	}
 	if err := a.commit(tx, web.KindEvent); err != nil {
 		return 0, err
