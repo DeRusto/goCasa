@@ -23,7 +23,7 @@ An optional household rule that makes one kind of action (changing the calendar,
 _Avoid_: PIN protection, household PIN
 
 **Archived Member**:
-A Member who has left the Household. Hidden from filters, pickers and chore boards, but still credited with their past events, completions and points.
+A Member who has left the Household. Hidden from filters, pickers and chore boards, but still credited with their past events, completions and points. Never removed from an event they're on; added to new events only by an earlier pick, never by Default Members.
 _Avoid_: Deleted member, inactive user
 
 ### Calendar
@@ -51,6 +51,10 @@ _Avoid_: Fork, branch, truncate
 **Edit scope**:
 Which Occurrences of a Series a change or deletion applies to: *This event*, *This and following*, or *All events*.
 _Avoid_: Mode, range, recurrence option
+
+**Default Members**:
+The Members a Google calendar's events get unless someone picks theirs in GoCasa, for the event or its Series.
+_Avoid_: Calendar owners, auto-assign
 
 **Google account**:
 One Google login an Admin has connected to GoCasa. Its calendars sync into GoCasa; connecting another login adds another Google account.

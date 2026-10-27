@@ -517,24 +517,6 @@ func (a *App) removeEvent(ctx context.Context, id int64, occurrence string, sc s
 	return err
 }
 
-// activeMemberIDs is the ids of the Members who aren't archived.
-func (a *App) activeMemberIDs(ctx context.Context) ([]int64, error) {
-	rows, err := a.DB.QueryContext(ctx, "SELECT id FROM members WHERE NOT archived")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
 // shownTimes is c's dates, or its zone and wall times, as the dialog shows
 // them. Unlike the instants, they don't change when an end in a fall-back
 // hour reads back as its first offset.
