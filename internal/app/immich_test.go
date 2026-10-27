@@ -3,10 +3,12 @@ package app_test
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -21,9 +23,12 @@ import (
 type fakeImmich struct {
 	mu       sync.Mutex
 	version  [3]int
-	albums   [][2]string         // id, name
-	people   [][2]string         // id, name
-	assets   map[string][]string // album or person id → asset ids
+	albums   [][2]string               // id, name
+	people   [][2]string               // id, name
+	assets   map[string][]string       // album or person id → asset ids
+	meta     map[string]map[string]any // asset id → extra fields it's listed with
+	memories []string                  // today's Memories' asset ids
+	noMemory bool                      // the key lacks memory.read
 	pageSize int
 	down     bool
 	searches []map[string]any // each search body
@@ -35,7 +40,7 @@ type fakeImmich struct {
 const immichKey = "immich-key-123"
 
 func newImmich(t *testing.T) *fakeImmich {
-	f := &fakeImmich{version: [3]int{3, 3, 3}, assets: map[string][]string{}, thumbs: map[string]int{}, pageSize: 2}
+	f := &fakeImmich{version: [3]int{3, 3, 3}, assets: map[string][]string{}, meta: map[string]map[string]any{}, thumbs: map[string]int{}, pageSize: 2}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.Close)
 	return f
@@ -77,7 +82,28 @@ func (f *fakeImmich) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
+	asset := func(id string) map[string]any {
+		m := map[string]any{"id": id, "type": "IMAGE", "fileCreatedAt": "2025-07-01T10:00:00.000Z"}
+		for k, v := range f.meta[id] {
+			m[k] = v
+		}
+		return m
+	}
 	switch p := r.URL.Path; {
+	case p == "/api/memories":
+		if f.noMemory {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		if _, err := time.Parse(time.RFC3339, r.URL.Query().Get("for")); err != nil {
+			http.Error(w, "want for=<date>", http.StatusBadRequest)
+			return
+		}
+		items := []any{}
+		for _, id := range f.memories {
+			items = append(items, asset(id))
+		}
+		reply([]any{map[string]any{"id": "mem-1", "assets": items}})
 	case p == "/api/albums":
 		out := []any{}
 		for _, a := range f.albums {
@@ -113,6 +139,15 @@ func (f *fakeImmich) serve(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		for _, key := range []string{"albumIds", "personIds"} { // a top-level none excludes
+			m, _ := filter[key].(map[string]any)
+			none, _ := m["none"].([]any)
+			for _, owner := range none {
+				for _, id := range f.assets[owner.(string)] {
+					ids = slices.DeleteFunc(ids, func(x string) bool { return x == id })
+				}
+			}
+		}
 		start := 0
 		if c, ok := body["cursor"].(string); ok {
 			fmt.Sscan(c, &start)
@@ -124,7 +159,7 @@ func (f *fakeImmich) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		items := []any{}
 		for _, id := range ids[start:end] {
-			items = append(items, map[string]any{"id": id, "type": "IMAGE", "fileCreatedAt": "2025-07-01T10:00:00.000Z"})
+			items = append(items, asset(id))
 		}
 		reply(map[string]any{"assets": map[string]any{"items": items, "count": len(items), "total": len(items), "nextCursor": next}})
 	case strings.HasPrefix(p, "/api/assets/") && strings.HasSuffix(p, "/thumbnail"):
@@ -158,7 +193,7 @@ func immichHousehold(t *testing.T) (*apptest.Harness, *fakeImmich) {
 	return h, f
 }
 
-var photoRE = regexp.MustCompile(`<img id="photo" src="(/screensaver/photos/\d+)"`)
+var photoRE = regexp.MustCompile(`<img class="photo" src="(/screensaver/photos/\d+)"`)
 
 // photo is the screensaver's photo address on device h, or "" for none.
 // Entering the screensaver ends an unlock, so tests look from another device.
@@ -401,19 +436,221 @@ func TestScreensaverRotatesPhotosWithoutReloading(t *testing.T) {
 	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
 	first := photo(t, wall)
 	var p struct {
-		Src     string `json:"src"`
-		Seconds int    `json:"seconds"`
+		Photos []struct {
+			Src string `json:"src"`
+		} `json:"photos"`
+		Seconds int `json:"seconds"`
 	}
 	_, body := wall.Get(t, "/screensaver/photo")
-	if err := json.Unmarshal([]byte(body), &p); err != nil || p.Src != first || p.Seconds < 1 {
+	if err := json.Unmarshal([]byte(body), &p); err != nil || len(p.Photos) != 1 || p.Photos[0].Src != first || p.Seconds < 1 {
 		t.Fatalf("current photo = %q (%v), want %s", body, err, first)
 	}
 	h.Clock.Advance(30 * time.Second)
 	_, body = wall.Get(t, "/screensaver/photo")
-	if err := json.Unmarshal([]byte(body), &p); err != nil || p.Src == first || p.Src == "" {
+	if err := json.Unmarshal([]byte(body), &p); err != nil || len(p.Photos) != 1 || p.Photos[0].Src == first {
 		t.Fatalf("next photo = %q, want a new one", body)
 	}
 	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `fetch("/screensaver/photo"`) {
 		t.Fatal("the screensaver does not swap photos in place")
+	}
+}
+
+type stepPhoto struct {
+	Src     string `json:"src"`
+	Caption string `json:"caption"`
+}
+
+// step is the photos /screensaver/photo shows now on device h, with query q.
+func step(t *testing.T, h *apptest.Harness, q string) []stepPhoto {
+	t.Helper()
+	var p struct {
+		Photos []stepPhoto `json:"photos"`
+	}
+	if _, body := h.Get(t, "/screensaver/photo"+q); json.Unmarshal([]byte(body), &p) != nil {
+		t.Fatalf("/screensaver/photo%s = %q", q, body)
+	}
+	return p.Photos
+}
+
+// shown is the Immich asset ids the screensaver on wall shows over n steps.
+func shown(t *testing.T, h, wall *apptest.Harness, n int) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	for range n {
+		for _, p := range step(t, wall, "") {
+			_, img := wall.Get(t, p.Src)
+			out[strings.TrimPrefix(img, "img:")] = true
+		}
+		h.Clock.Advance(30 * time.Second)
+	}
+	return out
+}
+
+func TestImmichFavoritesRatingAndExclusionsNarrowThePicks(t *testing.T) {
+	t.Parallel()
+	h, f := immichHousehold(t)
+	wall := h.Device()
+	f.meta["a1"] = map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 5}}
+	f.meta["a2"] = map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 2}}
+	f.meta["p1"] = map[string]any{"isFavorite": true, "exifInfo": map[string]any{"rating": 4}}
+
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "person": {"per-ada"}, "exclude_person": {"per-ada"}})
+	b, _ := json.Marshal(f.lastSearch())
+	for _, want := range []string{`"personIds":{"none":["per-ada"]}`, `"personIds":{"any":["per-ada"]}`, `"withExif":true`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("search %s has no %s", b, want)
+		}
+	}
+	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"a1": true, "a2": true}) {
+		t.Errorf("excluding Ada showed %v, want a1 and a2", got) // a3 is in Summer but shows Ada
+	}
+
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}, "exclude_album": {"alb-pets"}, "person": {"per-ada"}, "favorites": {"on"}, "min_rating": {"3"}})
+	b, _ = json.Marshal(f.lastSearch())
+	if !strings.Contains(string(b), `"albumIds":{"none":["alb-pets"]}`) {
+		t.Errorf("search %s doesn't exclude Pets", b)
+	}
+	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"a1": true, "p1": true}) {
+		t.Errorf("favorites rated 3+ showed %v, want a1 and p1", got)
+	}
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `name="favorites" checked`) || !strings.Contains(page, `<option value="3" selected`) || !strings.Contains(page, `name="exclude_album" value="alb-pets" checked`) {
+		t.Errorf("Settings doesn't show the filters: %q", page)
+	}
+
+	post(t, h, "/settings/immich/picks", url.Values{"favorites": {"on"}})
+	if got := shown(t, h, wall, 2); len(got) != 0 {
+		t.Errorf("favorites only with nothing picked showed %v", got)
+	}
+	if code, _ := h.Post(t, "/settings/immich/picks", url.Values{"min_rating": {"6"}}); code != http.StatusBadRequest {
+		t.Errorf("a 6-star minimum = %d", code)
+	}
+}
+
+func TestTodaysImmichMemoriesJoinTheRotation(t *testing.T) {
+	t.Parallel()
+	h, f := immichHousehold(t)
+	wall := h.Device()
+	f.mu.Lock()
+	f.memories = []string{"m1", "a1", "m2"}
+	f.meta["m2"] = map[string]any{"type": "VIDEO"}
+	f.mu.Unlock()
+	post(t, h, "/settings/immich/picks", url.Values{"memories": {"on"}, "person": {"per-ada"}})
+	if got := shown(t, h, wall, 4); !maps.Equal(got, map[string]bool{"m1": true, "a1": true, "a3": true, "p1": true}) {
+		t.Errorf("Memories with Ada showed %v", got)
+	}
+
+	f.mu.Lock()
+	f.noMemory = true
+	f.mu.Unlock()
+	post(t, h, "/settings/immich/refresh", nil)
+	if got := shown(t, h, wall, 2); !maps.Equal(got, map[string]bool{"a3": true, "p1": true}) {
+		t.Errorf("with memory.read refused showed %v, want Ada's photos", got)
+	}
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, "memory.read permission") || strings.Contains(page, "Immich refused the API key:") {
+		t.Errorf("Settings doesn't say Memories need memory.read, or shows the sync failing: %q", page)
+	}
+}
+
+func TestImmichNeedsMemoryReadToConnect(t *testing.T) {
+	t.Parallel()
+	f := newImmich(t)
+	f.noMemory = true
+	h := apptest.New(t)
+	setup(t, h)
+	if code, page := h.Post(t, "/settings/immich", url.Values{"url": {f.URL}, "key": {immichKey}}); code != http.StatusBadRequest || !strings.Contains(page, "memory.read") {
+		t.Errorf("a key without memory.read = %d %q", code, page)
+	}
+}
+
+func TestEachPhotoHasACaptionOfItsDateAndPlace(t *testing.T) {
+	t.Parallel()
+	h, f := immichHousehold(t)
+	wall := h.Device()
+	f.meta["a1"] = map[string]any{"localDateTime": "2019-06-30T23:30:00.000Z", "fileCreatedAt": "2019-07-01T06:30:00.000Z", "exifInfo": map[string]any{"city": "Lisbon", "state": "Lisboa", "country": "Portugal"}}
+	f.meta["a2"] = map[string]any{"localDateTime": "2021-03-02T10:00:00.000Z", "exifInfo": map[string]any{"state": "Bavaria", "country": "Germany"}}
+	f.meta["a3"] = map[string]any{"localDateTime": "2022-12-25T10:00:00.000Z", "exifInfo": map[string]any{}}
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	captions := map[string]bool{}
+	for range 3 {
+		for _, p := range step(t, wall, "") {
+			captions[p.Caption] = true
+		}
+		h.Clock.Advance(30 * time.Second)
+	}
+	want := map[string]bool{"June 2019 · Lisbon, Portugal": true, "March 2021 · Bavaria, Germany": true, "December 2022": true}
+	if !maps.Equal(captions, want) {
+		t.Errorf("captions %v, want %v", captions, want)
+	}
+	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `class="caption"`) {
+		t.Errorf("the screensaver shows no caption: %q", page)
+	}
+
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "photo_captions": {"off"}})
+	if ps := step(t, wall, ""); len(ps) != 1 || ps[0].Caption != "" {
+		t.Errorf("captions off still shows %v", ps)
+	}
+}
+
+func TestPortraitPhotosShowInPairsOnLandscapeScreens(t *testing.T) {
+	t.Parallel()
+	h, f := immichHousehold(t)
+	wall := h.Device()
+	f.set("alb-summer", "l1", "t1", "t2", "t3", "t4", "s1")
+	f.meta["l1"] = map[string]any{"width": 4000, "height": 3000}
+	for _, id := range []string{"t1", "t2", "t3"} {
+		f.meta[id] = map[string]any{"width": 3000, "height": 4000}
+	}
+	f.meta["t4"] = map[string]any{"exifInfo": map[string]any{"exifImageWidth": 4000, "exifImageHeight": 3000, "orientation": "6"}} // stored sideways
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	portraits := map[string]bool{"t1": true, "t2": true, "t3": true, "t4": true}
+	seen := map[string]bool{}
+	for range 4 { // l1, s1 and two pairs
+		ps := step(t, wall, "")
+		for _, p := range ps {
+			_, img := wall.Get(t, p.Src)
+			id := strings.TrimPrefix(img, "img:")
+			if seen[id] {
+				t.Fatalf("%s repeated in a round", id)
+			}
+			seen[id] = true
+			if portraits[id] != (len(ps) == 2) {
+				t.Errorf("step %v: portraits pair, landscapes show alone", ps)
+			}
+		}
+		if len(ps) != 2 {
+			h.Clock.Advance(30 * time.Second)
+			continue
+		}
+		if p := step(t, wall, "?portrait=1"); len(p) != 1 || p[0].Src != ps[0].Src {
+			t.Errorf("a portrait screen's first half shows %v, want %s", p, ps[0].Src)
+		}
+		h.Clock.Advance(15 * time.Second)
+		if p := step(t, wall, "?portrait=1"); len(p) != 1 || p[0].Src != ps[1].Src {
+			t.Errorf("a portrait screen's second half shows %v, want %s", p, ps[1].Src)
+		}
+		h.Clock.Advance(15 * time.Second)
+	}
+	if len(seen) != 6 {
+		t.Errorf("a round showed %v, want all six", seen)
+	}
+}
+
+func TestScreensaverPhotoFitAndZoomSettings(t *testing.T) {
+	t.Parallel()
+	h, _ := immichHousehold(t)
+	wall := h.Device()
+	post(t, h, "/settings/immich/picks", url.Values{"album": {"alb-summer"}})
+	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `data-fit="fill" data-zoom`) || strings.Contains(page, `class="bg"`) {
+		t.Errorf("by default photos fill the screen and zoom: %q", page)
+	}
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "photo_fit": {"blur"}, "photo_zoom": {"off"}})
+	if _, page := wall.Get(t, "/screensaver"); !strings.Contains(page, `data-fit="blur">`) || !strings.Contains(page, `class="bg"`) {
+		t.Errorf("Fit with blurred background, zoom off: %q", page)
+	}
+	if _, page := h.Get(t, "/settings"); !strings.Contains(page, `<option value="blur" selected`) {
+		t.Errorf("Settings doesn't show the fit")
+	}
+	if code, _ := h.Post(t, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "photo_fit": {"stretch"}}); code != http.StatusBadRequest {
+		t.Errorf("an unknown fit = %d", code)
 	}
 }

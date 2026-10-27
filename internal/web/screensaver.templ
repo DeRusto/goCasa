@@ -2,15 +2,47 @@ package web
 
 import "strconv"
 
-// Screensaver is what an idle Wall display shows: the clock and today's
-// agenda over photo (a proxied address; "" for plain dark), which changes in
-// place after photoSeconds, so the page and its camera stay up. The whole
-// screen is one link to "/", so the first touch only wakes it, back to the
-// Default view at today.
+// Photo is one photo of a screensaver step: its proxied address and caption ("" for none).
+type Photo struct {
+	Src     string `json:"src"`
+	Caption string `json:"caption"`
+}
+
+// Slides is what the screensaver's photos show: the step showing now (no
+// photos for plain dark) and the seconds it still shows, under the
+// Household's fit ("fill" crops to the screen, "blur" fits the photo over a
+// blurred copy) and slow zoom.
+type Slides struct {
+	Photos  []Photo
+	Seconds int
+	Fit     string
+	Zoom    bool
+}
+
 // frosted is a screensaver panel: dark glass that blurs the photo behind it.
 const frosted templ.SafeCSS = "background:rgba(20,20,20,.35);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(255,255,255,.18);border-radius:28px;padding:1.5rem 2rem;box-shadow:0 8px 32px rgba(0,0,0,.25);"
 
-templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
+// slideCSS lays out #slides: each step is a .slide of one or two .frames
+// (a Photo pair) side by side, the newest on top fading in over the last.
+// The slow zoom animates only transform, so the clock above doesn't stutter.
+const slideCSS = `
+#slides .slide{position:fixed;inset:0;display:flex;gap:6px;background:#000;animation:fade 1s}
+#slides .frame{position:relative;flex:1;overflow:hidden}
+#slides img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#slides[data-fit=blur] .photo{object-fit:contain}
+#slides .bg{filter:blur(40px) brightness(.75);transform:scale(1.2)}
+#slides[data-zoom] .photo{animation:drift var(--s,30s) linear both}
+#slides .caption{position:absolute;left:1rem;bottom:1rem;font-size:1.25rem;padding:.5rem 1rem;border-radius:16px;background:rgba(20,20,20,.45);border:1px solid rgba(255,255,255,.18)}
+@keyframes fade{from{opacity:0}}
+@keyframes drift{to{transform:scale(1.1) translate(var(--x,0),var(--y,0))}}
+@media (prefers-reduced-motion:reduce){#slides .slide,#slides[data-zoom] .photo{animation:none}}
+`
+
+// Screensaver is what an idle Wall display shows: the clock and today's
+// agenda over the current step's photos, which change in place, so the page
+// and its camera stay up. The whole screen is one link to "/", so the first
+// touch only wakes it, back to the Default view at today.
+templ Screensaver(p TodayPage, s Slides, nightSeconds int) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -19,9 +51,24 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 			<meta name="color-scheme" content="dark"/>
 			<title>Screensaver</title>
 			@htmx()
+			@templ.Raw("<style>" + slideCSS + "</style>")
 		</head>
 		<body style="margin:0;background:#000;color:#ddd;font-family:system-ui,sans-serif">
-			<img id="photo" src={ photo } hidden?={ photo == "" } alt="" onerror="this.hidden=true" onload="this.hidden=false" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover"/>
+			<div id="slides" data-fit={ s.Fit } data-zoom?={ s.Zoom }>
+				<div class="slide" style="animation:none">
+					for _, ph := range s.Photos {
+						<div class="frame">
+							if s.Fit == "blur" {
+								<img class="bg" src={ ph.Src } alt=""/>
+							}
+							<img class="photo" src={ ph.Src } alt="" onerror="this.parentNode.hidden=true"/>
+							if ph.Caption != "" {
+								<span class="caption">{ ph.Caption }</span>
+							}
+						</div>
+					}
+				</div>
+			</div>
 			<a id="wake" href="/" aria-label="Wake" style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none;text-shadow:0 0 .3em #000">
 				<div id="live" { live(KindEvent, KindHousehold, KindIntegration)... } style="display:flex;justify-content:space-between;align-items:flex-start;gap:2rem">
 					<div style={ frosted + "max-width:min(40rem,60vw)" }>
@@ -57,20 +104,64 @@ templ Screensaver(p TodayPage, photo string, photoSeconds, nightSeconds int) {
 			if device(ctx).MotionWake {
 				@motionWake()
 			}
-			<script data-photo-seconds={ strconv.Itoa(photoSeconds) }>
+			<script data-photo-seconds={ strconv.Itoa(s.Seconds) }>
 			(() => {
-				const img = document.getElementById("photo");
+				const box = document.getElementById("slides"), blur = box.dataset.fit === "blur";
+				const portrait = matchMedia("(orientation: portrait)");
+				const drift = (f, seconds) => { // a random direction per photo
+					f.style.setProperty("--s", seconds + "s");
+					f.style.setProperty("--x", (Math.random() * 8 - 4).toFixed(1) + "%");
+					f.style.setProperty("--y", (Math.random() * 8 - 4).toFixed(1) + "%");
+				};
+				const srcs = el => [...el.querySelectorAll(".photo")].map(i => i.getAttribute("src")).join(" ");
+				// show fades in step's photos over the current ones once they have
+				// loaded, so no partly drawn photo shows; a broken one is left out.
+				const show = async (photos, seconds) => {
+					const cur = box.lastElementChild;
+					if (srcs(cur) === photos.map(p => p.src).join(" ")) return;
+					const slide = document.createElement("div");
+					slide.className = "slide";
+					const frames = photos.map(p => {
+						const f = document.createElement("div");
+						f.className = "frame";
+						drift(f, seconds);
+						if (blur) {
+							const bg = new Image();
+							bg.className = "bg";
+							bg.alt = "";
+							bg.src = p.src;
+							f.append(bg);
+						}
+						const img = new Image();
+						img.className = "photo";
+						img.alt = "";
+						img.src = p.src;
+						f.append(img);
+						if (p.caption) {
+							const c = document.createElement("span");
+							c.className = "caption";
+							c.textContent = p.caption;
+							f.append(c);
+						}
+						return f;
+					});
+					const ok = await Promise.all(frames.map(f => f.querySelector(".photo").decode().then(() => true, () => false)));
+					slide.append(...frames.filter((_, i) => ok[i]));
+					box.append(slide);
+					setTimeout(() => { while (box.firstElementChild !== slide) box.firstElementChild.remove(); }, 1100); // after the fade
+				};
+				for (const f of box.querySelectorAll(".frame")) drift(f, Number(document.currentScript.dataset.photoSeconds) || 30);
 				const next = async () => {
 					let wait = 60;
 					try {
-						const p = await (await fetch("/screensaver/photo", { headers: { "X-Background": "1" } })).json();
-						if (!p.src) img.hidden = true;
-						else if (img.getAttribute("src") !== p.src) img.src = p.src;
+						const p = await (await fetch("/screensaver/photo" + (portrait.matches ? "?portrait=1" : ""), { headers: { "X-Background": "1" } })).json();
+						await show(p.photos || [], p.seconds);
 						wait = p.seconds || 60;
 					} catch {}
 					setTimeout(next, wait * 1000);
 				};
-				setTimeout(next, (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);
+				// The page renders for a landscape screen; a portrait one asks for its own step now.
+				setTimeout(next, portrait.matches ? 0 : (Number(document.currentScript.dataset.photoSeconds) || 60) * 1000);
 			})();
 			</script>
 		</body>

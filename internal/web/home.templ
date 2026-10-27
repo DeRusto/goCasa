@@ -24,6 +24,9 @@ type Household struct {
 	WeekStart       int    // 0 = Sunday
 	IdleSeconds     int    // a Wall display's screensaver after this long with no input
 	SecondsPerPhoto int    // each screensaver photo shows this long
+	PhotoFit        string // "fill" crops photos to the screen; "blur" fits them over a blurred copy
+	PhotoCaptions   bool   // each photo's date and place show
+	PhotoZoom       bool   // each photo slowly zooms while it shows
 	NightMode       string // "off", "black" or "dim_clock"
 	NightStart      int    // hour 0-23
 	NightEnd        int    // hour 0-23
@@ -153,6 +156,13 @@ templ defaultViewButton(view string) {
 	</form>
 }
 
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
 templ householdSection(h Household) {
 	<section class="card flex flex-col gap-3">
 		<h2>Household</h2>
@@ -185,6 +195,29 @@ templ householdSection(h Household) {
 				Seconds per photo
 				<input type="number" name="seconds_per_photo" value={ strconv.Itoa(h.SecondsPerPhoto) } min="5" max="86400" required/>
 			</label>
+			<div class="flex flex-wrap items-center gap-3">
+				<label>
+					Photos
+					<select name="photo_fit">
+						@option("fill", "Fill the screen (crops)", h.PhotoFit)
+						@option("blur", "Fit with blurred background", h.PhotoFit)
+					</select>
+				</label>
+				<label>
+					Captions
+					<select name="photo_captions">
+						@option("on", "Date and place", onOff(h.PhotoCaptions))
+						@option("off", "Off", onOff(h.PhotoCaptions))
+					</select>
+				</label>
+				<label>
+					Slow zoom
+					<select name="photo_zoom">
+						@option("on", "On", onOff(h.PhotoZoom))
+						@option("off", "Off", onOff(h.PhotoZoom))
+					</select>
+				</label>
+			</div>
 			<div class="flex flex-wrap items-center gap-3">
 				<label>
 					Night mode (Wall displays)

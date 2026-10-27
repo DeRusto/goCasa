@@ -2,10 +2,10 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"errors"
+	"image"
+	"io"
 	"io/fs"
-	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -63,7 +63,9 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 		if err != nil {
 			return err
 		}
-		found = append(found, immichAsset{ID: filepath.ToSlash(rel), TakenAt: info.ModTime()})
+		as := immichAsset{ID: filepath.ToSlash(rel), TakenAt: info.ModTime()}
+		as.Width, as.Height = imageSize(p)
+		found = append(found, as)
 		return nil
 	})
 	if err != nil {
@@ -78,35 +80,27 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-// screensaverPhotos is the photos the screensaver rotates through, each with
-// whether its bytes are at hand: Immich's, else the Fallback folder's when it
-// is on. Immich has nothing to show when not connected, its list is empty,
-// or it is failing with none of its photos cached. Never both.
-func (a *App) screensaverPhotos(ctx context.Context) (map[int64]bool, error) {
-	im, err := a.photoList(ctx, photoSourceImmich)
+// imageSize is image file p's upright width and height from its header
+// (EXIF orientation for a JPEG); 0 when unreadable.
+func imageSize(p string) (int, int) {
+	f, err := os.Open(p)
 	if err != nil {
-		return nil, err
+		return 0, 0
 	}
-	if len(im) > 0 {
-		var failing bool
-		if err := a.DB.QueryRowContext(ctx, "SELECT "+failingSQL("integrations")+" FROM integrations WHERE type = ?", immichType).Scan(&failing); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
-		if failing { // only cached bytes can show, so rotate through just those
-			maps.DeleteFunc(im, func(_ int64, c bool) bool { return !c })
-		}
-		if len(im) > 0 {
-			return im, nil
-		}
+	defer f.Close()
+	head := make([]byte, 64<<10) // the EXIF segment is at most 64 KB, near the start
+	n, _ := io.ReadFull(f, head)
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return 0, 0
 	}
-	if hh, err := a.household(ctx); err != nil || !hh.FallbackFolder {
-		return nil, err
+	cfg, _, err := image.DecodeConfig(f) // reads only up to the size, which may sit past head
+	if err != nil {
+		return 0, 0
 	}
-	folder, err := a.photoList(ctx, photoSourceFolder)
-	for id := range folder {
-		folder[id] = true // on disk already
+	if o := exifOrientation(head[:n]); o >= 5 { // turned a quarter
+		return cfg.Height, cfg.Width
 	}
-	return folder, err
+	return cfg.Width, cfg.Height
 }
 
 // folderPhoto is Fallback folder photo id's path inside the folder.
