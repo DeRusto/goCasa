@@ -318,12 +318,9 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 	var all *editChanges       // set for All events
 	if ss.s.rule != "" {
 		was, err := a.occurrenceNow(ctx, fo)
+		var picked bool
 		if err == nil && sc == scopeAll { // only All events reads whether the Members changed
-			var active []int64
-			if active, err = a.activeMemberIDs(ctx); err == nil { // archived Members can't be picked
-				notActive := func(m int64) bool { return !slices.Contains(active, m) }
-				was.members, c.members = slices.DeleteFunc(was.members, notActive), slices.DeleteFunc(slices.Clone(c.members), notActive)
-			}
+			picked, err = a.membersChanged(ctx, c.members, was.members)
 		}
 		if err != nil {
 			return 0, err
@@ -344,6 +341,7 @@ func (a *App) writeEvent(ctx context.Context, id int64, occurrence string, sc sc
 		if err != nil {
 			return 0, err
 		}
+		p.changes.members = picked // compared on active Members only
 		switch p.outcome {
 		case editOneOff:
 			row, editOf, original = fo.editID, id, occ.original
