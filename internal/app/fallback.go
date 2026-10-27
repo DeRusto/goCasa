@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"image"
+	"image/jpeg"
 	"io"
 	"io/fs"
 	"net/http"
@@ -13,14 +16,29 @@ import (
 	"time"
 
 	"github.com/DeRusto/goCasa/internal/web"
+	"golang.org/x/image/draw"
 )
 
 // The Fallback folder (spec §10): the Household's own images at
 // DATA_DIR/photos, shown only when Immich has nothing to show.
 
-const folderRescan = time.Hour
+const (
+	folderRescan = time.Hour
+	// folderPx is the longest side of the copy a large photo is shown as: a camera original is many times a screen, and zooming one
+	// judders. Immich's previews are smaller still.
+	folderPx        = 1920
+	maxFolderPixels = 150_000_000 // larger isn't decoded, and shows as-is
+)
 
 func (a *App) folderDir() string { return filepath.Join(a.Config.DataDir, "photos") }
+
+// folderCopyDir holds the screen-sized copies, each named for its photo's path.
+func (a *App) folderCopyDir() string { return filepath.Join(a.Config.DataDir, "photos-screen") }
+
+func (a *App) folderCopy(rel string) string {
+	sum := sha256.Sum256([]byte(rel))
+	return filepath.Join(a.folderCopyDir(), hex.EncodeToString(sum[:16])+".jpg")
+}
 
 // folderScanDue says the hourly rescan is due.
 func (a *App) folderScanDue(now time.Time) bool {
@@ -55,7 +73,11 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 		return err
 	}
 	loc := a.location(ctx)
-	var found []immichAsset // ID is the slash-separated path inside the folder
+	if err := os.MkdirAll(a.folderCopyDir(), 0o750); err != nil {
+		return err
+	}
+	copies := map[string]bool{} // the copies photos still in the folder may have
+	var found []immichAsset     // ID is the slash-separated path inside the folder
 	err = filepath.WalkDir(a.folderDir(), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -89,11 +111,12 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 		// Local, as Immich has it: the mod time's wall clock in the Household's zone, written as UTC.
 		mod := info.ModTime().In(loc)
 		as := immichAsset{ID: filepath.ToSlash(rel), Local: time.Date(mod.Year(), mod.Month(), mod.Day(), mod.Hour(), mod.Minute(), mod.Second(), 0, time.UTC)}
-		if k, ok := seen[as.ID]; ok && k.taken == as.Local.Unix() && k.w > 0 {
+		if k, ok := seen[as.ID]; ok && k.taken == as.Local.Unix() && k.w > 0 && (max(k.w, k.h) <= folderPx || exists(a.folderCopy(as.ID))) {
 			as.Width, as.Height = k.w, k.h
 		} else {
-			as.Width, as.Height = imageSize(p)
+			as.Width, as.Height = screenCopy(p, a.folderCopy(as.ID))
 		}
+		copies[filepath.Base(a.folderCopy(as.ID))] = true
 		found = append(found, as)
 		return nil
 	})
@@ -103,15 +126,24 @@ func (a *App) scanFolder(ctx context.Context, now time.Time) error {
 	if err := a.replacePhotos(ctx, photoSourceFolder, found); err != nil {
 		return err
 	}
+	if old, err := os.ReadDir(a.folderCopyDir()); err == nil {
+		for _, e := range old {
+			if !copies[e.Name()] {
+				os.Remove(filepath.Join(a.folderCopyDir(), e.Name())) // its photo is gone or changed
+			}
+		}
+	}
 	a.folderMu.Lock()
 	a.folderScanned = now
 	a.folderMu.Unlock()
 	return nil
 }
 
-// imageSize is image file p's upright width and height from its header
-// (EXIF orientation for a JPEG); 0 when unreadable.
-func imageSize(p string) (int, int) {
+// screenCopy is image file p's upright width and height, 0 when unreadable.
+// A photo larger than folderPx is also written to dst upright and scaled to
+// fit folderPx, as a JPEG; a smaller one has no copy (browsers turn it).
+func screenCopy(p, dst string) (int, int) {
+	os.Remove(dst)
 	f, err := os.Open(p)
 	if err != nil {
 		return 0, 0
@@ -126,10 +158,74 @@ func imageSize(p string) (int, int) {
 	if err != nil {
 		return 0, 0
 	}
-	if o := exifOrientation(head[:n]); o >= 5 { // turned a quarter
-		return cfg.Height, cfg.Width
+	o := exifOrientation(head[:n])
+	w, h := cfg.Width, cfg.Height
+	if o >= 5 { // turned a quarter
+		w, h = h, w
 	}
-	return cfg.Width, cfg.Height
+	if max(w, h) <= folderPx || cfg.Width*cfg.Height > maxFolderPixels {
+		return w, h
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return w, h
+	}
+	src, _, err := image.Decode(f)
+	if err != nil {
+		return w, h
+	}
+	scale := float64(folderPx) / float64(max(w, h))
+	sw, sh := max(1, int(float64(cfg.Width)*scale+.5)), max(1, int(float64(cfg.Height)*scale+.5))
+	small := image.NewRGBA(image.Rect(0, 0, sw, sh))
+	draw.BiLinear.Scale(small, small.Bounds(), src, src.Bounds(), draw.Src, nil)
+	out := upright(small, o)
+	tmp := dst + ".tmp"
+	g, err := os.Create(tmp)
+	if err != nil {
+		return w, h
+	}
+	err = jpeg.Encode(g, out, &jpeg.Options{Quality: 88})
+	if cerr := g.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, dst)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return w, h
+}
+
+func exists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// upright is img turned per EXIF orientation o (as in avatarJPEG), which a
+// re-encoded copy no longer carries.
+func upright(img *image.RGBA, o int) *image.RGBA {
+	if o <= 1 || o > 8 {
+		return img
+	}
+	sw, sh := img.Bounds().Dx(), img.Bounds().Dy()
+	w, h, ew, eh := sw, sh, sw-1, sh-1
+	if o >= 5 {
+		w, h = sh, sw
+	}
+	stored := map[int]func(u, v int) (int, int){
+		2: func(u, v int) (int, int) { return ew - u, v },
+		3: func(u, v int) (int, int) { return ew - u, eh - v },
+		4: func(u, v int) (int, int) { return u, eh - v },
+		5: func(u, v int) (int, int) { return v, u },
+		6: func(u, v int) (int, int) { return v, eh - u },
+		7: func(u, v int) (int, int) { return ew - v, eh - u },
+		8: func(u, v int) (int, int) { return ew - v, u },
+	}[o]
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	for v := range h {
+		for u := range w {
+			x, y := stored(u, v)
+			out.SetRGBA(u, v, img.RGBAAt(x, y))
+		}
+	}
+	return out
 }
 
 // folderPhoto is Fallback folder photo id's path inside the folder.
@@ -141,8 +237,19 @@ func (a *App) folderPhoto(ctx context.Context, id int64) (string, error) {
 	return rel, nil
 }
 
-// serveFolderPhoto serves rel from the Fallback folder, never outside it.
+// serveFolderPhoto serves rel's screen-sized copy, else rel itself from the
+// Fallback folder, never outside it.
 func (a *App) serveFolderPhoto(w http.ResponseWriter, r *http.Request, rel string) {
+	if c, err := os.Open(a.folderCopy(rel)); err == nil { // its screen-sized copy
+		defer c.Close()
+		var mod time.Time
+		if info, err := c.Stat(); err == nil {
+			mod = info.ModTime()
+		}
+		w.Header().Set("Cache-Control", "private, no-cache")
+		http.ServeContent(w, r, "photo.jpg", mod, c)
+		return
+	}
 	root, err := os.OpenRoot(a.folderDir())
 	if err != nil {
 		http.NotFound(w, r)

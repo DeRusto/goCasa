@@ -43,8 +43,8 @@ const slideCSS = `
 @keyframes fade{from{opacity:0}}
 @keyframes drift{to{transform:scale(1.1) translate(var(--x,0),var(--y,0))}}
 @media (prefers-reduced-motion:reduce){#slides .slide,#slides[data-zoom] .photo{animation:none}}
-#wake{text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 .4em rgba(0,0,0,.8),0 0 1em rgba(0,0,0,.6)}
-#wake svg{filter:drop-shadow(0 0 .3rem rgba(0,0,0,.8))}
+#wake{font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 .5em rgba(0,0,0,.85),0 0 1.3em rgba(0,0,0,.7)}
+#wake svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.95)) drop-shadow(0 0 .5rem rgba(0,0,0,.85))}
 `
 
 // Screensaver is what an idle Wall display shows: the clock and today's
@@ -184,7 +184,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, " style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:2rem\"><div style=\"max-width:min(40rem,60vw)\"><p style=\"font-size:6rem;margin:0;line-height:1.1;font-weight:300\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, " style=\"display:flex;justify-content:space-between;align-items:flex-start;gap:2rem\"><div style=\"max-width:min(40rem,60vw)\"><p style=\"font-size:6rem;margin:0;line-height:1.1;font-weight:700\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -303,7 +303,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span> <span style=\"font-size:6rem;line-height:1;font-weight:300\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span> <span style=\"font-size:6rem;line-height:1;font-weight:700\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
