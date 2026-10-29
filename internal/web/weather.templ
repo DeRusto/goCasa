@@ -3,7 +3,9 @@ package web
 import (
 	"context"
 	"fmt"
+	"html"
 	"strconv"
+	"strings"
 )
 
 // WeatherPill is the cached weather the slim pill shows (spec §8).
@@ -50,7 +52,7 @@ func deg(n int) string { return strconv.Itoa(n) + "°" }
 templ weatherPill() {
 	if p, _ := ctx.Value(pillKey{}).(*WeatherPill); p != nil {
 		<aside aria-label="Weather" class="ml-auto flex items-center gap-1.5 rounded-full bg-soft px-3 py-1 tabular-nums min-[760px]:px-4 min-[760px]:py-1.5 min-[760px]:text-lg">
-			@wxIcon(p.Conditions, p.Day, "size-5 flex-none text-accent min-[760px]:size-6")
+			@wxIcon(p.Conditions, p.Day, "size-5 flex-none min-[760px]:size-6")
 			<span class="sr-only">{ p.Conditions }</span>
 			{ deg(p.Current) + p.Unit }
 			if p.HasToday {
@@ -182,39 +184,50 @@ type WeatherDayRange struct {
 	Left, Width float64
 }
 
-// weatherIcon is the inner markup of the 24x24 Lucide icon (ISC licence) for
-// conditions, by day or night.
-func weatherIcon(conditions string, day bool) string {
-	const cloud = `<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>`
-	switch conditions {
-	case "Clear":
-		if !day {
-			return `<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`
+// wxIconFile names the Meteocons icon for conditions, by day or night.
+var wxIconFile = map[string][2]string{
+	"Clear":                  {"clear-day", "clear-night"},
+	"Mostly clear":           {"mostly-clear-day", "mostly-clear-night"},
+	"Partly cloudy":          {"partly-cloudy-day", "partly-cloudy-night"},
+	"Overcast":               {"overcast", "overcast"},
+	"Fog":                    {"fog-day", "fog-night"},
+	"Drizzle":                {"drizzle", "drizzle"},
+	"Freezing drizzle":       {"sleet", "sleet"},
+	"Rain":                   {"rain", "rain"},
+	"Heavy rain":             {"extreme-rain", "extreme-rain"},
+	"Freezing rain":          {"sleet", "sleet"},
+	"Snow":                   {"snow", "snow"},
+	"Heavy snow":             {"extreme-snow", "extreme-snow"},
+	"Rain showers":           {"partly-cloudy-day-rain", "partly-cloudy-night-rain"},
+	"Snow showers":           {"partly-cloudy-day-snow", "partly-cloudy-night-snow"},
+	"Thunderstorm":           {"thunderstorms-rain", "thunderstorms-rain"},
+	"Thunderstorm with hail": {"thunderstorms-hail", "thunderstorms-hail"},
+}
+
+// The icons' near-white clouds and fog lines vanish on a light page, so they
+// take currentColor, which wxIcon sets to follow the colour scheme.
+var wxPale = strings.NewReplacer(`"#E6EFFC"`, `"currentColor"`, `"#E2E8F0"`, `"currentColor"`)
+
+// weatherIcon is the whole <svg> of the icon for conditions, by day or night;
+// "not-available" for an unknown one. The art sits inside a 128 box with a
+// wide margin, so the viewBox is cropped to keep sizes like the old icons.
+func weatherIcon(conditions string, day bool, class string) string {
+	name := "not-available"
+	if f, ok := wxIconFile[conditions]; ok {
+		name = f[1]
+		if day {
+			name = f[0]
 		}
-		return `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`
-	case "Partly cloudy":
-		if !day {
-			return `<path d="M10.083 9A6.002 6.002 0 0 1 16 4a4.243 4.243 0 0 0 6 6c0 2.22-1.206 4.16-3 5.197"/><path d="M3 20a5 5 0 1 1 8.9-4H13a3 3 0 0 1 2 5.24"/><path d="M11 20v2"/><path d="M7 19v2"/>`
-		}
-		return `<path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>`
-	case "Fog":
-		return cloud + `<path d="M16 17H7"/><path d="M17 21H9"/>`
-	case "Drizzle":
-		return cloud + `<path d="M8 19v1"/><path d="M8 14v1"/><path d="M16 19v1"/><path d="M16 14v1"/><path d="M12 21v1"/><path d="M12 16v1"/>`
-	case "Rain":
-		return cloud + `<path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/>`
-	case "Snow":
-		return cloud + `<path d="M8 15h.01"/><path d="M8 19h.01"/><path d="M12 17h.01"/><path d="M12 21h.01"/><path d="M16 15h.01"/><path d="M16 19h.01"/>`
-	case "Thunderstorm":
-		return `<path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973"/><path d="m13 12-3 5h4l-3 5"/>`
 	}
-	return `<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>` // overcast, or unknown
+	b, err := wxIcons.ReadFile("wxicons/" + name + ".svg")
+	if err != nil {
+		panic(err)
+	}
+	return strings.Replace(wxPale.Replace(string(b)), `<svg viewBox="0 0 128 128"`, `<svg viewBox="12 12 104 104" class="`+html.EscapeString(class)+`" style="color:light-dark(#64748b,#e6effc)" aria-hidden="true"`, 1)
 }
 
 templ wxIcon(conditions string, day bool, class string) {
-	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class={ class } aria-hidden="true">
-		@templ.Raw(weatherIcon(conditions, day))
-	</svg>
+	@templ.Raw(weatherIcon(conditions, day, class))
 }
 
 func rangeBar(d WeatherDayRange) templ.SafeCSS {
@@ -258,7 +271,7 @@ templ WeatherFull(p WeatherPage) {
 templ weatherBody(n WeatherNow) {
 	<section class="card grid gap-6 bg-linear-to-br from-accent-soft to-card min-[1100px]:grid-cols-[auto_1fr] min-[1100px]:items-center">
 		<div class="flex items-center gap-6">
-			@wxIcon(n.Conditions, n.Day, "size-24 flex-none text-accent min-[760px]:size-40")
+			@wxIcon(n.Conditions, n.Day, "size-24 flex-none min-[760px]:size-40")
 			<div class="flex flex-col">
 				<span class="text-7xl leading-none font-light tabular-nums min-[760px]:text-[9rem]">{ deg(n.Temp) }<span class="align-top text-3xl text-muted min-[760px]:text-5xl">{ n.Unit }</span></span>
 				<span class="text-2xl min-[760px]:text-3xl">{ n.Conditions }</span>

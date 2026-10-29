@@ -14,6 +14,11 @@ import (
 //go:embed static
 var Static embed.FS
 
+// wxIcons are animated Meteocons line icons (MIT, @meteocons/svg 0.1.0 from npm), inlined by wxIcon.
+//
+//go:embed wxicons/*.svg
+var wxIcons embed.FS
+
 // Rebuild app.css after changing classes: needs the Tailwind standalone CLI on PATH (see README).
 //go:generate go tool templ generate -path ../..
 //go:generate tailwindcss -i input.css -o static/app.css --minify
