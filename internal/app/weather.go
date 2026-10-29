@@ -163,23 +163,39 @@ func (a *App) weatherHeader(ctx context.Context) (*web.WeatherHeader, error) {
 
 // conditions names a WMO weather code as Open-Meteo reports it.
 func conditions(code int) string {
-	switch {
-	case code == 0:
+	switch code {
+	case 0:
 		return "Clear"
-	case code <= 2:
+	case 1:
+		return "Mostly clear"
+	case 2:
 		return "Partly cloudy"
-	case code == 3:
+	case 3:
 		return "Overcast"
-	case code <= 48:
+	case 45, 48:
 		return "Fog"
-	case code <= 57:
+	case 51, 53, 55:
 		return "Drizzle"
-	case code <= 67, code >= 80 && code <= 82:
+	case 56, 57:
+		return "Freezing drizzle"
+	case 61, 63:
 		return "Rain"
-	case code <= 77, code == 85, code == 86:
+	case 65:
+		return "Heavy rain"
+	case 66, 67:
+		return "Freezing rain"
+	case 71, 73, 77:
 		return "Snow"
-	case code >= 95:
+	case 75:
+		return "Heavy snow"
+	case 80, 81, 82:
+		return "Rain showers"
+	case 85, 86:
+		return "Snow showers"
+	case 95, 97:
 		return "Thunderstorm"
+	case 96, 99:
+		return "Thunderstorm with hail"
 	}
 	return ""
 }

@@ -97,7 +97,7 @@ func Today(p TodayPage) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = wxIcon(w.Conditions, w.Day, "size-16 flex-none text-accent").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = wxIcon(w.Conditions, w.Day, "size-16 flex-none").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -194,7 +194,7 @@ func Today(p TodayPage) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = wxIcon(d.Conditions, true, "my-1 size-7 text-muted").Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = wxIcon(d.Conditions, true, "my-1 size-7").Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

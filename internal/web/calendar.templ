@@ -586,10 +586,15 @@ func live(kinds ...Kind) templ.Attributes {
 	}
 }
 
-// htmx loads the vendored htmx and its SSE extension (see Static).
+// htmx loads the vendored htmx and its SSE extension (see Static). Its style
+// shows each weather icon's still twin instead under reduced motion.
 templ htmx() {
 	<script src="/static/htmx-2.0.11.min.js"></script>
 	<script src="/static/htmx-ext-sse-2.2.4.js"></script>
+	<style>
+		@media not (prefers-reduced-motion: reduce) { svg[data-wx="still"] { display: none } }
+		@media (prefers-reduced-motion: reduce) { svg[data-wx="move"] { display: none } }
+	</style>
 }
 
 // sortable lets an item in #live be dragged by its handle, with the vendored
