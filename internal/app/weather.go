@@ -192,7 +192,7 @@ func conditions(code int) string {
 		return "Rain showers"
 	case 85, 86:
 		return "Snow showers"
-	case 95:
+	case 95, 97:
 		return "Thunderstorm"
 	case 96, 99:
 		return "Thunderstorm with hail"

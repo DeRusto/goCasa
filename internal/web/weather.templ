@@ -204,9 +204,10 @@ var wxIconFile = map[string][2]string{
 	"Thunderstorm with hail": {"thunderstorms-hail", "thunderstorms-hail"},
 }
 
-// The icons' near-white clouds and fog lines vanish on a light page, so they
-// take currentColor, which wxIcon sets to follow the colour scheme.
-var wxPale = strings.NewReplacer(`"#E6EFFC"`, `"currentColor"`, `"#E2E8F0"`, `"currentColor"`)
+// The icons' near-white clouds and fog lines vanish on a light page, and the
+// not-available text on a dark one, so they take currentColor, which wxIcon
+// sets to follow the colour scheme.
+var wxPale = strings.NewReplacer(`"#E6EFFC"`, `"currentColor"`, `"#E2E8F0"`, `"currentColor"`, `"#202939"`, `"currentColor"`)
 
 // weatherIcon is the whole <svg> of the icon for conditions, by day or night;
 // "not-available" for an unknown one. The art sits inside a 128 box with a
@@ -223,7 +224,7 @@ func weatherIcon(conditions string, day bool, class string) string {
 	if err != nil {
 		panic(err)
 	}
-	return strings.Replace(wxPale.Replace(string(b)), `<svg viewBox="0 0 128 128"`, `<svg viewBox="12 12 104 104" class="`+html.EscapeString(class)+`" style="color:light-dark(#64748b,#e6effc)" aria-hidden="true"`, 1)
+	return strings.Replace(wxPale.Replace(string(b)), `<svg viewBox="0 0 128 128"`, `<svg viewBox="12 12 104 104" class="`+html.EscapeString(class)+`" style="color:light-dark(#64748b,#e6effc)" aria-hidden="true" data-wx`, 1)
 }
 
 templ wxIcon(conditions string, day bool, class string) {

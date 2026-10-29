@@ -6,7 +6,10 @@ import (
 )
 
 func TestWeatherIconFiles(t *testing.T) {
-	for c := range wxIconFile {
+	for c, f := range wxIconFile {
+		if (f[0] != f[1]) == (weatherIcon(c, true, "") == weatherIcon(c, false, "")) {
+			t.Errorf("%s: day and night icons should differ exactly when their files do", c)
+		}
 		for _, day := range []bool{true, false} {
 			if svg := weatherIcon(c, day, "size-8"); !strings.HasPrefix(svg, `<svg viewBox="12 12 104 104" class="size-8"`) {
 				t.Errorf("%s (day %v): %.80s", c, day, svg)
