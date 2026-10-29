@@ -209,9 +209,10 @@ var wxIconFile = map[string][2]string{
 // sets to follow the colour scheme.
 var wxPale = strings.NewReplacer(`"#E6EFFC"`, `"currentColor"`, `"#E2E8F0"`, `"currentColor"`, `"#202939"`, `"currentColor"`)
 
-// weatherIcon is the whole <svg> of the icon for conditions, by day or night;
-// "not-available" for an unknown one. The art sits inside a 128 box with a
-// wide margin, so the viewBox is cropped to keep sizes like the old icons.
+// weatherIcon is the icon for conditions, by day or night; "not-available" for
+// an unknown one. It is two <svg>s, the animated one and its still twin, and
+// htmx's style shows one by the reduced-motion setting. The art sits inside a
+// 128 box with a wide margin, so the viewBox is cropped to keep sizes like the old icons.
 func weatherIcon(conditions string, day bool, class string) string {
 	name := "not-available"
 	if f, ok := wxIconFile[conditions]; ok {
@@ -220,11 +221,14 @@ func weatherIcon(conditions string, day bool, class string) string {
 			name = f[0]
 		}
 	}
-	b, err := wxIcons.ReadFile("wxicons/" + name + ".svg")
-	if err != nil {
-		panic(err)
+	svg := func(path, motion string) string {
+		b, err := wxIcons.ReadFile(path)
+		if err != nil {
+			panic(err)
+		}
+		return strings.Replace(wxPale.Replace(string(b)), `<svg viewBox="0 0 128 128"`, `<svg viewBox="12 12 104 104" class="`+html.EscapeString(class)+`" style="color:light-dark(#64748b,#e6effc)" aria-hidden="true" data-wx="`+motion+`"`, 1)
 	}
-	return strings.Replace(wxPale.Replace(string(b)), `<svg viewBox="0 0 128 128"`, `<svg viewBox="12 12 104 104" class="`+html.EscapeString(class)+`" style="color:light-dark(#64748b,#e6effc)" aria-hidden="true" data-wx`, 1)
+	return svg("wxicons/"+name+".svg", "move") + svg("wxicons/static/"+name+".svg", "still")
 }
 
 templ wxIcon(conditions string, day bool, class string) {

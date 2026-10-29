@@ -11,7 +11,9 @@ func TestWeatherIconFiles(t *testing.T) {
 			t.Errorf("%s: day and night icons should differ exactly when their files do", c)
 		}
 		for _, day := range []bool{true, false} {
-			if svg := weatherIcon(c, day, "size-8"); !strings.HasPrefix(svg, `<svg viewBox="12 12 104 104" class="size-8"`) {
+			svg := weatherIcon(c, day, "size-8")
+			if !strings.HasPrefix(svg, `<svg viewBox="12 12 104 104" class="size-8"`) || strings.Count(svg, `<svg viewBox="12 12 104 104"`) != 2 ||
+				!strings.Contains(svg, `data-wx="move"`) || !strings.Contains(svg, `data-wx="still"`) {
 				t.Errorf("%s (day %v): %.80s", c, day, svg)
 			}
 		}

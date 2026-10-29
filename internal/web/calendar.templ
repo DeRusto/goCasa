@@ -586,19 +586,15 @@ func live(kinds ...Kind) templ.Attributes {
 	}
 }
 
-// htmx loads the vendored htmx and its SSE extension (see Static). It also
-// holds the weather icons still under reduced motion: their SMIL animations
-// ignore CSS, so each is paused a second in, once its art has drawn.
+// htmx loads the vendored htmx and its SSE extension (see Static). Its style
+// shows each weather icon's still twin instead under reduced motion.
 templ htmx() {
 	<script src="/static/htmx-2.0.11.min.js"></script>
 	<script src="/static/htmx-ext-sse-2.2.4.js"></script>
-	<script>
-		if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-			const still = () => document.querySelectorAll("svg[data-wx]").forEach(s => { s.pauseAnimations(); s.setCurrentTime(1) });
-			addEventListener("DOMContentLoaded", still);
-			addEventListener("htmx:afterSettle", still);
-		}
-	</script>
+	<style>
+		@media not (prefers-reduced-motion: reduce) { svg[data-wx="still"] { display: none } }
+		@media (prefers-reduced-motion: reduce) { svg[data-wx="move"] { display: none } }
+	</style>
 }
 
 // sortable lets an item in #live be dragged by its handle, with the vendored
