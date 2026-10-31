@@ -6,7 +6,7 @@ Researched 2026-10-31 against `main` at `8e36837`. Builds on `docs/research/kios
 
 - **Home Assistant add-on: feasible, small.** GoCasa is already a single static binary that keeps everything in `/data`, which is exactly where an add-on's persistent storage lives. An add-on is a `config.yaml` plus a tiny entrypoint that turns `/data/options.json` into env vars. Ship it **without Ingress** at first (open port 8080, "Open Web UI" button). Ingress needs path-prefix support GoCasa doesn't have yet (see §1.3).
 - **HA integration (entities):** mostly not needed. HA's built-in **Remote Calendar** integration can subscribe to GoCasa's existing `/calendar.ics` today. Chore and to-do entities would need a small JSON API and a custom component, which is a separate, larger project.
-- **APK, recommended form:** a **thin WebView kiosk shell** (one Activity, about 100 lines of Kotlin) pointed at the GoCasa server. It works on LineageOS and on Chromebooks (as an Android app). It natively keeps the screen on, so the Wall display works **without HTTPS**, which the browser Wake Lock API can't do.
+- **APK, recommended form:** a **thin WebView kiosk shell** (one Activity, about 100 lines of Kotlin) pointed at the GoCasa server. It works on LineageOS, and should work on Chromebooks as an Android app (not yet tested on ARCVM). It natively keeps the screen on, so the Wall display works **without HTTPS**, which the browser Wake Lock API can't do.
 - **APK with the server inside: possible, not recommended.** `CGO_ENABLED=0 GOOS=android GOARCH=arm64` builds cleanly today (verified, 15 MB). But the tablet would become the household server, with Android killing background processes, no Docker, Google connect working only from the tablet itself (over `http://localhost`) unless there's HTTPS, and backups living on the tablet.
 - **Chromebook:** the cheapest path is no APK at all. Install GoCasa as a PWA (needs a web manifest plus HTTPS), or use the existing Chromebase kiosk notes. The WebView APK is the fallback when there's no HTTPS.
 
@@ -71,7 +71,7 @@ The honest comparison: **Fully Kiosk Browser** already does this and more (REST 
 ### 2.2 Option B: server in the APK (feasible, not recommended)
 
 - **Builds:** `CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build ./cmd/gocasa` succeeds today, because modernc SQLite is pure Go. It is not run-tested on a device.
-- **Running it:** Android 10+ forbids executing files from app data. The binary has to be packed as `jniLibs/arm64-v8a/libgocasa.so` and executed from `nativeLibraryDir` (the trick Termux plugins use), then kept alive by a foreground service with a persistent notification. Config would be written to the app's files dir as `.env`.
+- **Running it:** Android 10+ forbids executing files from app data. The binary has to be packed as `jniLibs/arm64-v8a/libgocasa.so` and executed from `nativeLibraryDir` (the trick Termux plugins use), then kept alive by a foreground service with a persistent notification. The launcher must start it with the app's files directory as the working directory (GoCasa reads `.env` from there) and set `DATA_DIR` to that directory. Otherwise GoCasa falls back to `/data`, which isn't writable, and won't start.
 - **Risks:** the pure-Go DNS resolver reads `/etc/resolv.conf`, which Android doesn't have, so Google, Immich, Mealie and weather lookups may fail without a workaround (needs device testing). Doze and OEM battery killers (less of a problem on LineageOS) can stop the service. Google OAuth needs an HTTPS redirect, except that GoCasa already supports `GOOGLE_REDIRECT_URI=http://localhost:8080/...` (see README). That works here because the server is on the tablet, as long as you connect from the tablet's own browser. Nightly backups would sit on the tablet's flash. Other screens would need the tablet's IP.
 - This only fits a **single-screen, no-homelab** household. That's a different product from "self-hosted on your homelab".
 
@@ -80,7 +80,7 @@ The honest comparison: **Fully Kiosk Browser** already does this and more (REST 
 In order of preference:
 
 1. **PWA.** Add `manifest.webmanifest` (name, icons, `display: fullscreen`, `start_url: /`) and a `<link rel="manifest">`. Chrome then offers "Install", which opens a standalone window with no browser chrome. Installing needs HTTPS. Over plain HTTP, "Create shortcut → Open as window" gives most of the effect. About 15 lines and one icon. This is also the best path on Android tablets running Chrome.
-2. **WebView APK from §2.1**, via ChromeOS's Android support (ARCVM). It works, and `FLAG_KEEP_SCREEN_ON` is honoured, which solves the no-HTTPS wake problem on ChromeOS too.
+2. **WebView APK from §2.1**, via ChromeOS's Android support (ARCVM). It should work, and if `FLAG_KEEP_SCREEN_ON` is honoured there it solves the no-HTTPS wake problem on ChromeOS too. Both are unverified until tested on ARCVM.
 3. **Linux (Crostini).** The `linux/amd64` or `arm64` binary runs there unchanged, but Crostini's port forwarding and suspend behaviour make it a poor always-on server.
 4. Managed **kiosk**: covered in the kiosk research doc (needs a licence).
 
