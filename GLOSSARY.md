@@ -158,8 +158,20 @@ The Member page made to appeal to children. Only an Admin chooses which style a 
 _Avoid_: Child mode, Buddy mode, playful view
 
 **Member display**:
-A device switched into showing one Member's page full time, like a Wall display does for the Household. Which Member it shows is chosen on the device.
+A device switched into showing one Member's page full time, like a Wall display does for the Household. Which Member it shows is chosen on the device. It is never also a Wall display: no screensaver, Night mode or camera wake.
 _Avoid_: Buddy, kid tablet, companion
+
+**Bedtime**:
+The time a Member display starts its Night screen, set on that device. A child can start it early; only an Admin can end it before Wake time.
+_Avoid_: Sleep mode, lights out
+
+**Wake time**:
+The time a Member display's Night screen says it's OK to get up, set on that device, optionally with an alarm.
+_Avoid_: Ok-to-Wake, alarm time
+
+**Night screen**:
+What a Member display shows from Bedtime: a dim tinted screen with a small clock, amber until Wake time and green after it. Not Night mode, which belongs to Wall displays.
+_Avoid_: Sleep mode, Night mode, night light screen
 
 **Default view**:
 The page a device opens on and a Wall display returns to when it wakes. Each device can set its own; otherwise it uses the Household's.
