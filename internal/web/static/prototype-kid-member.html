@@ -1,0 +1,224 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Kid style Member page, three variants, for
+  "Prototype: Kid style Member page" (DeRusto/goCasa#111). Never ship; lives on a research branch.
+  Fake data in memory, nothing is saved. Open via /static/prototype-kid-member.html or double-click.
+  Bottom bar: variant (← →), screen (Echo Show 8 1024×600 / Echo Show 5 960×480), time of day, time format.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE Kid style Member page</title>
+<style>
+  :root { --mia: #f97316; --mia-soft: #ffedd5; --ink: #1f2937; --muted: #6b7280; --bg: #fffbf5; --card: #fff; --ok: #16a34a; --sky: #e0f2fe; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #374151; font-family: "Nunito", "Segoe UI", system-ui, sans-serif; color: var(--ink); display: grid; place-items: center; min-height: 100vh; padding-bottom: 80px; }
+  #screen { position: relative; overflow: hidden; background: var(--bg); border-radius: 6px; box-shadow: 0 0 0 10px #111; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  .star { color: #facc15; filter: drop-shadow(0 1px 0 #ca8a04); }
+  .pts { position: absolute; top: 12px; right: 14px; text-align: right; z-index: 5; }
+  .pts .bal { font-size: 34px; font-weight: 900; display: flex; align-items: center; gap: 6px; justify-content: flex-end; background: #fff; padding: 2px 14px; border-radius: 999px; box-shadow: 0 2px 6px #0002; }
+  .pts .bal .star { font-size: 38px; }
+  .pts .next { font-size: 14px; color: var(--muted); margin-top: 4px; font-weight: 700; }
+  .avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--mia); color: #fff; display: grid; place-items: center; font-size: 30px; font-weight: 900; flex: none; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; background: var(--card); border-radius: 16px; padding: 8px 12px; box-shadow: 0 1px 3px #0001; font-weight: 700; }
+  .ev-time { color: var(--mia); font-weight: 900; }
+  .check { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--mia); display: grid; place-items: center; font-size: 22px; font-weight: 900; color: #fff; flex: none; }
+  .done .check { background: var(--ok); border-color: var(--ok); }
+  .done .label { text-decoration: line-through; color: var(--muted); }
+  .emoji { font-size: 34px; line-height: 1; }
+  .clockface { flex: none; }
+  /* celebration */
+  #party { position: absolute; inset: 0; display: none; place-items: center; background: #fff8; z-index: 20; }
+  #party.on { display: grid; }
+  #party .msg { background: #fff; border-radius: 28px; padding: 24px 40px; text-align: center; box-shadow: 0 10px 30px #0003; animation: pop .5s ease; }
+  #party .msg div:first-child { font-size: 64px; }
+  #party .msg div:last-child { font-size: 30px; font-weight: 900; }
+  .confetti { position: absolute; top: -20px; width: 12px; height: 18px; animation: fall 1.8s linear forwards; }
+  @keyframes pop { from { transform: scale(.4); } to { transform: scale(1); } }
+  @keyframes fall { to { transform: translateY(700px) rotate(540deg); } }
+  /* rewards sheet */
+  #sheet { position: absolute; inset: 0; background: #0006; display: none; z-index: 15; }
+  #sheet.on { display: block; }
+  #sheet .panel { position: absolute; right: 0; top: 0; bottom: 0; width: 46%; background: #fff; padding: 18px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+  .reward { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 18px; background: #f9fafb; font-weight: 800; font-size: 20px; }
+  .reward.can { background: #fef9c3; }
+  .reward .cost { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+  .reward button { background: var(--mia); color: #fff; border-radius: 12px; padding: 8px 12px; font-weight: 900; }
+  .reward .wait { color: var(--muted); font-size: 15px; }
+  /* prototype bar: deliberately not part of the design */
+  #bar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: #111; color: #fff; border-radius: 999px; padding: 8px 14px; display: flex; gap: 12px; align-items: center; font: 13px system-ui, sans-serif; box-shadow: 0 4px 16px #0008; z-index: 100; white-space: nowrap; }
+  #bar button { color: #fff; background: #333; border-radius: 999px; padding: 4px 10px; font: inherit; }
+  #bar button.on { background: #f97316; }
+  #bar .sep { width: 1px; height: 18px; background: #555; }
+  #state { color: #9ca3af; }
+</style>
+</head>
+<body>
+<div id="screen"></div>
+<div id="bar"></div>
+<script>
+// ---- fake data (in memory only) ----
+const member = { name: "Mia", initial: "M" };
+const S = {
+  variant: new URLSearchParams(location.search).get("variant") || "A",
+  size: "8", slot: "Morning", times: "plain",
+  balance: 37, pending: new Set(), openGroup: null, sheet: false,
+};
+const routines = {
+  Morning:   { emoji: "🌅", chores: [["🛏️","Make your bed",2],["🪥","Brush teeth",1],["👕","Get dressed",2],["🥣","Clear your bowl",1]] },
+  Afternoon: { emoji: "🎒", chores: [["🎒","Unpack your bag",1],["📚","Homework",3],["🐱","Feed Pepper",1]] },
+  Evening:   { emoji: "🌙", chores: [["🧸","Tidy toys",2],["🛁","Bath",1],["🪥","Brush teeth",1],["📖","Read 15 minutes",2]] },
+  Other:     { emoji: "⭐", chores: [["🪴","Water the plants",2]] },
+};
+for (const r of Object.values(routines)) r.chores = r.chores.map(([e,l,p]) => ({ e, l, p, done: false }));
+const events = [[8,15,"🏫","School"],[15,30,"🏊","Swim lesson"],[18,0,"👵","Dinner at Grandma's"]];
+const todos = [{ e:"📕", l:"Library book back", done:false }, { e:"💌", l:"Card for Grandma", done:false }];
+const rewards = [["🍦","Ice cream",20],["🎬","Movie night",50],["🌜","Stay up late",80]];
+const weather = { icon: "🌦️", hi: 14, lo: 8, word: "Showers" };
+const slotOrder = ["Morning","Afternoon","Evening"];
+
+// ---- helpers ----
+const left = r => r.chores.filter(c => !c.done);
+function nextGoal() {
+  const g = rewards.find(([, , c]) => c > S.balance);
+  return g ? `${g[2] - S.balance} more to ${g[1]}` : "You can get any reward!";
+}
+function fmt(h, m) {
+  if (S.times === "plain") return `${h % 12 || 12}:${String(m).padStart(2,"0")}`;
+  return clock(h, m, 40);
+}
+function clock(h, m, size) {
+  const a = (h % 12 + m / 60) * 30, b = m * 6, c = size / 2;
+  const hand = (deg, len, w) => { const r = (deg - 90) * Math.PI / 180; return `<line x1="${c}" y1="${c}" x2="${c + Math.cos(r) * len}" y2="${c + Math.sin(r) * len}" stroke="#1f2937" stroke-width="${w}" stroke-linecap="round"/>`; };
+  let ticks = ""; for (let i = 0; i < 12; i++) { const r = i * 30 * Math.PI / 180; ticks += `<circle cx="${c + Math.cos(r) * c * .78}" cy="${c + Math.sin(r) * c * .78}" r="${size/40}" fill="#9ca3af"/>`; }
+  return `<svg class="clockface" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${c}" cy="${c}" r="${c-2}" fill="#fff" stroke="var(--mia)" stroke-width="3"/>${ticks}${hand(a, c*.45, size/14)}${hand(b, c*.7, size/22)}</svg>`;
+}
+const pts = () => `<button class="pts" onclick="S.sheet=true;draw()"><div class="bal"><span class="star">★</span>${S.balance}</div><div class="next">${nextGoal()}</div></button>`;
+function tick(group, i) {
+  const c = routines[group].chores[i];
+  c.done = !c.done; S.balance += c.done ? c.p : -c.p;
+  draw();
+  if (c.done && group !== "Other" && left(routines[group]).length === 0) party(group);
+}
+function tickTodo(i) { todos[i].done = !todos[i].done; draw(); }
+function party(group) {
+  const p = document.createElement("div"); p.id = "party"; p.className = "on";
+  p.innerHTML = `<div class="msg"><div>${routines[group].emoji}🎉</div><div>${group} done, ${member.name}!</div></div>`;
+  for (let i = 0; i < 40; i++) { const c = document.createElement("div"); c.className = "confetti"; c.style.left = Math.random()*100 + "%"; c.style.background = `hsl(${Math.random()*360} 90% 60%)`; c.style.animationDelay = Math.random()*.6 + "s"; p.appendChild(c); }
+  p.onclick = () => p.remove(); setTimeout(() => p.remove(), 2600);
+  document.getElementById("screen").appendChild(p);
+}
+function sheet() {
+  if (!S.sheet) return "";
+  return `<div id="sheet" class="on" onclick="if(event.target.id==='sheet'){S.sheet=false;draw()}"><div class="panel">
+    <div style="font-size:26px;font-weight:900;display:flex;align-items:center;gap:8px"><span class="star" style="font-size:32px">★</span>${S.balance} points</div>
+    ${rewards.map(([e,l,c],i) => `<div class="reward ${c <= S.balance ? "can" : ""}"><span class="emoji">${e}</span>${l}
+      <span class="cost"><span class="star">★</span>${c}</span>
+      ${S.pending.has(i) ? `<span class="wait">waiting…</span>` : c <= S.balance ? `<button onclick="S.pending.add(${i});draw()">I want it</button>` : ""}</div>`).join("")}
+    <div style="color:var(--muted);font-size:14px">A grown-up says yes before points are spent.</div></div></div>`;
+}
+const hdr = () => `<div style="display:flex;align-items:center;gap:14px"><div class="avatar">${member.initial}</div>
+  <div><div style="font-size:30px;font-weight:900">Hi ${member.name}!</div><div style="color:var(--muted);font-weight:700">Sunday · ${weather.icon} ${weather.hi}° ${weather.word}</div></div></div>`;
+
+// ---- Variant A: Routine tiles. Three big Routine doors, the current one biggest; tap to open the carousel. ----
+function A() {
+  const g = S.openGroup;
+  if (g) {
+    const r = routines[g], i = r.chores.findIndex(c => !c.done), c = r.chores[i];
+    return `${pts()}<div style="padding:18px;height:100%;display:flex;flex-direction:column;gap:14px">
+      <button onclick="S.openGroup=null;draw()" class="chip" style="align-self:flex-start;font-size:20px">← ${r.emoji} ${g}</button>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:24px">
+        ${r.chores.map((x, j) => j < i || i < 0 ? `<div style="opacity:.4;font-size:40px">${x.e}<div style="font-size:24px;text-align:center">✓</div></div>` : "").join("")}
+        ${c ? `<button onclick="tick('${g}',${i})" style="background:#fff;border-radius:32px;padding:28px 44px;box-shadow:0 6px 18px #0002;display:flex;flex-direction:column;align-items:center;gap:10px;border:6px solid var(--mia)">
+          <span style="font-size:96px">${c.e}</span><span style="font-size:32px;font-weight:900">${c.l}</span><span style="font-weight:800;color:var(--muted)">tap when done · <span class="star">★</span>${c.p}</span></button>` : `<div style="font-size:40px;font-weight:900">All done! 🎉</div>`}
+        ${r.chores.map((x, j) => j > i && i >= 0 ? `<div style="opacity:.6;font-size:40px">${x.e}</div>` : "").join("")}
+      </div></div>`;
+  }
+  const tiles = [...slotOrder, "Other"].map(g => {
+    const r = routines[g], n = r.chores.length, d = n - left(r).length, cur = g === S.slot;
+    return `<button onclick="S.openGroup='${g}';draw()" style="flex:${cur ? 2 : 1};background:${cur ? "var(--mia)" : "#fff"};color:${cur ? "#fff" : "inherit"};border-radius:28px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;box-shadow:0 3px 10px #0002">
+      <span style="font-size:${cur ? 72 : 44}px">${r.emoji}</span><span style="font-size:${cur ? 30 : 20}px;font-weight:900">${g === "Other" ? "Other chores" : g}</span>
+      <span style="display:flex;gap:4px">${r.chores.map(c => `<span style="width:14px;height:14px;border-radius:50%;background:${c.done ? "var(--ok)" : cur ? "#fff8" : "#e5e7eb"}"></span>`).join("")}</span>
+      <span style="font-weight:800;opacity:.85">${d === n ? "All done!" : `${d} of ${n}`}</span></button>`;
+  }).join("");
+  const now = { Morning: "7:42", Afternoon: "3:05", Evening: "7:20" }[S.slot];
+  return `${pts()}<div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:52px;font-weight:900;letter-spacing:1px">${now}</div>
+    <div style="padding:18px;height:100%;display:flex;flex-direction:column;gap:14px">${hdr()}
+    <div style="flex:1;display:flex;gap:14px;min-height:0">${tiles}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">${events.map(([h,m,e,l]) => `<span class="chip">${e} <span class="ev-time">${fmt(h,m)}</span> ${l}</span>`).join("")}
+      ${todos.map((t,i) => `<button class="chip ${t.done ? "done" : ""}" onclick="tickTodo(${i})">${t.done ? "✅" : "⬜"} <span class="label">${t.l}</span></button>`).join("")}</div></div>${sheet()}`;
+}
+
+// ---- Variant B: The day as a road. A left-to-right timeline: events and Routines placed in time order, "now" marked. ----
+function B() {
+  const stops = [
+    { kind: "routine", g: "Morning", h: 7, m: 0 }, { kind: "event", ev: events[0] },
+    { kind: "routine", g: "Afternoon", h: 15, m: 0 }, { kind: "event", ev: events[1] },
+    { kind: "event", ev: events[2] }, { kind: "routine", g: "Evening", h: 19, m: 0 },
+  ];
+  const nowIdx = { Morning: 0, Afternoon: 2, Evening: 5 }[S.slot];
+  const stop = (s, i) => {
+    const here = i === nowIdx;
+    if (s.kind === "event") { const [h,m,e,l] = s.ev; return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:110px;opacity:${i < nowIdx ? .45 : 1}"><div style="font-size:44px">${e}</div><div class="ev-time" style="font-size:18px">${fmt(h,m)}</div><div style="font-weight:800;text-align:center">${l}</div></div>`; }
+    const r = routines[s.g];
+    return `<div style="display:flex;flex-direction:column;gap:8px;background:${here ? "#fff" : "transparent"};border:${here ? "5px solid var(--mia)" : "3px dashed #d1d5db"};border-radius:24px;padding:10px;min-width:${here ? 250 : 120}px;opacity:${i < nowIdx ? .6 : 1}">
+      <div style="font-weight:900;font-size:${here ? 22 : 16}px">${r.emoji} ${s.g}${here ? " · now" : ""}</div>
+      ${here ? r.chores.map((c,j) => `<button class="${c.done ? "done" : ""}" onclick="tick('${s.g}',${j})" style="display:flex;align-items:center;gap:10px;text-align:left;font-size:20px;font-weight:800"><span class="check">${c.done ? "✓" : ""}</span><span>${c.e}</span><span class="label">${c.l}</span></button>`).join("")
+             : `<div style="display:flex;gap:4px;flex-wrap:wrap;font-size:26px">${r.chores.map(c => `<span style="opacity:${c.done ? .35 : 1}">${c.e}</span>`).join("")}</div>`}
+    </div>`;
+  };
+  const o = routines.Other;
+  return `${pts()}<div style="padding:18px;height:100%;display:flex;flex-direction:column;gap:10px">${hdr()}
+    <div style="flex:1;display:flex;align-items:center;gap:12px;overflow-x:auto;background:linear-gradient(transparent 48%,#fde68a 48%,#fde68a 52%,transparent 52%);padding:6px 0">${stops.map(stop).join("")}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${o.chores.map((c,j) => `<button class="chip ${c.done ? "done" : ""}" onclick="tick('Other',${j})">${c.done ? "✅" : "⬜"} ${c.e} <span class="label">${c.l}</span> <span class="star">★</span>${c.p}</button>`).join("")}
+      ${todos.map((t,i) => `<button class="chip ${t.done ? "done" : ""}" onclick="tickTodo(${i})">${t.done ? "✅" : "⬜"} ${t.e} <span class="label">${t.l}</span></button>`).join("")}</div></div>${sheet()}`;
+}
+
+// ---- Variant C: One thing now. A huge "do this next" card for the current Routine; everything else small in a dock. ----
+function C() {
+  const r = routines[S.slot], i = r.chores.findIndex(c => !c.done), c = r.chores[i];
+  const nextEv = events.find(([h]) => h >= { Morning: 0, Afternoon: 12, Evening: 17 }[S.slot]);
+  return `${pts()}<div style="height:100%;display:grid;grid-template-columns:1fr 230px">
+    <div style="padding:18px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;gap:12px"><div class="avatar" style="width:48px;height:48px;font-size:24px">${member.initial}</div><div style="font-size:26px;font-weight:900">${r.emoji} ${S.slot}</div>
+        <div style="display:flex;gap:6px;margin-left:8px">${r.chores.map(x => `<span style="font-size:24px;opacity:${x.done ? 1 : .3}">${x.done ? "✅" : x.e}</span>`).join("")}</div></div>
+      ${c ? `<button onclick="tick('${S.slot}',${i})" style="flex:1;background:var(--mia);color:#fff;border-radius:36px;display:flex;align-items:center;justify-content:center;gap:28px;box-shadow:0 8px 20px #f9731655">
+          <span style="font-size:130px">${c.e}</span><span style="text-align:left"><span style="display:block;font-size:22px;font-weight:800;opacity:.85">Next up</span><span style="display:block;font-size:44px;font-weight:900">${c.l}</span><span style="display:block;font-size:20px;font-weight:800;margin-top:8px">tap when done · ★${c.p}</span></span></button>`
+        : `<div style="flex:1;border-radius:36px;background:#dcfce7;display:grid;place-items:center;font-size:40px;font-weight:900">${S.slot} all done! 🎉</div>`}
+      ${nextEv ? `<div class="chip" style="font-size:20px;align-self:flex-start">Next: ${nextEv[2]} <span class="ev-time">${fmt(nextEv[0], nextEv[1])}</span> ${nextEv[3]}</div>` : ""}
+    </div>
+    <div style="background:var(--mia-soft);padding:84px 12px 12px;display:flex;flex-direction:column;gap:8px;overflow:auto">
+      <div style="font-weight:900;color:var(--muted)">${weather.icon} ${weather.hi}° ${weather.word}</div>
+      ${slotOrder.filter(g => g !== S.slot).concat("Other").map(g => { const x = routines[g]; return `<button class="chip" onclick="S.slot='${g === "Other" ? S.slot : g}';${g === "Other" ? "S.variant='A';S.openGroup='Other';" : ""}draw()">${x.emoji} ${g === "Other" ? "Other chores" : g} <span style="margin-left:auto;color:var(--muted)">${x.chores.length - left(x).length}/${x.chores.length}</span></button>`; }).join("")}
+      <div style="font-weight:900;color:var(--muted);margin-top:6px">To-dos</div>
+      ${todos.map((t,i) => `<button class="chip ${t.done ? "done" : ""}" onclick="tickTodo(${i})">${t.done ? "✅" : "⬜"} <span class="label">${t.l}</span></button>`).join("")}
+      <div style="font-weight:900;color:var(--muted);margin-top:6px">Today</div>
+      ${events.map(([h,m,e,l]) => `<div class="chip">${e} <span class="ev-time">${fmt(h,m)}</span> ${l}</div>`).join("")}
+    </div></div>${sheet()}`;
+}
+
+// ---- wiring + prototype bar ----
+const V = { A: ["Routine tiles", A], B: ["Day road", B], C: ["One thing now", C] };
+function draw() {
+  const scr = document.getElementById("screen");
+  const [w, h] = S.size === "8" ? [1024, 600] : [960, 480];
+  scr.style.width = w + "px"; scr.style.height = h + "px";
+  scr.innerHTML = V[S.variant][1]();
+  const keys = Object.keys(V), btn = (on, js, t) => `<button class="${on ? "on" : ""}" onclick="${js};draw()">${t}</button>`;
+  document.getElementById("bar").innerHTML =
+    `<button onclick="cyc(-1)">←</button><b>${S.variant} (${V[S.variant][0]})</b><button onclick="cyc(1)">→</button><span class="sep"></span>` +
+    btn(S.size === "8", "S.size='8'", "Show 8 1024×600") + btn(S.size === "5", "S.size='5'", "Show 5 960×480") + `<span class="sep"></span>` +
+    slotOrder.map(g => btn(S.slot === g, `S.slot='${g}';S.openGroup=null`, g)).join("") + `<span class="sep"></span>` +
+    btn(S.times === "plain", "S.times='plain'", "3:30") + btn(S.times === "clock", "S.times='clock'", "🕒 face") + `<span class="sep"></span>` +
+    `<span id="state">★${S.balance} · ${slotOrder.map(g => `${g[0]} ${routines[g].chores.length - left(routines[g]).length}/${routines[g].chores.length}`).join(" ")} · waiting ${S.pending.size}</span>`;
+  const u = new URL(location); u.searchParams.set("variant", S.variant); history.replaceState(null, "", u);
+}
+function cyc(d) { const k = Object.keys(V); S.variant = k[(k.indexOf(S.variant) + d + k.length) % k.length]; S.openGroup = null; S.sheet = false; draw(); }
+addEventListener("keydown", e => { if (e.key === "ArrowLeft") cyc(-1); if (e.key === "ArrowRight") cyc(1); });
+draw();
+</script>
+</body>
+</html>
