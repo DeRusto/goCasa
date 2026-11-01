@@ -103,6 +103,10 @@ _Avoid_: Overdue
 A Round that can no longer be claimed. It leaves the chore board.
 _Avoid_: Expired, skipped
 
+**Routine**:
+One of three parts of the day (Morning, Afternoon, Evening) that a Member's daily Each chores can be put under, in a set order. Each Chore stays a Chore and earns its own points; finishing a Routine earns nothing extra. A Chore is in at most one Routine.
+_Avoid_: Checklist, schedule, chore group
+
 **Reward**:
 Something a Member can spend points on, with a fixed points cost.
 _Avoid_: Prize, treat, store item
