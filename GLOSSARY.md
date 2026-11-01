@@ -141,6 +141,22 @@ _Avoid_: Offline, unavailable, dead
 The at-a-glance page for the whole Household: today's and tomorrow's events, today's Chores, to-dos due today and the weather.
 _Avoid_: Home, dashboard, overview
 
+**Member page**:
+The at-a-glance page for one Member: their events, Chores, to-dos and points, and the weather. Any Member but a pet has one, shown in the style remembered for that Member.
+_Avoid_: Kid page, child dashboard, Buddy view, profile page
+
+**Standard style**:
+The Member page laid out like the rest of GoCasa, for grown-ups.
+_Avoid_: Adult view, normal mode
+
+**Kid style**:
+The Member page made to appeal to children. Only an Admin chooses which style a Member gets, and every device shows that Member the same one.
+_Avoid_: Child mode, Buddy mode, playful view
+
+**Member display**:
+A device switched into showing one Member's page full time, like a Wall display does for the Household. Which Member it shows is chosen on the device.
+_Avoid_: Buddy, kid tablet, companion
+
 **Default view**:
 The page a device opens on and a Wall display returns to when it wakes. Each device can set its own; otherwise it uses the Household's.
 _Avoid_: Home page, start page, landing view
