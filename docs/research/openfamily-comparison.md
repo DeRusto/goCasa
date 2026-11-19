@@ -1,6 +1,6 @@
 # Research: OpenFamily compared with GoCasa
 
-Researched 2026-11-19. GoCasa at `main` `90daff5`; [OpenFamily](https://github.com/NexaFlowFrance/OpenFamily) ([openfamily.fr](https://openfamily.fr/)) at `54c3177` (v2.2.0). Both projects are AGPL-3.0, so porting code across is licence-compatible as long as copyright notices are kept. In practice the stacks differ (Go vs TypeScript), so what GoCasa can borrow is mostly design.
+Researched 2026-11-19. GoCasa at `main` `90daff5`; [OpenFamily](https://github.com/NexaFlowFrance/OpenFamily) ([openfamily.fr](https://openfamily.fr/)) at `54c3177` (`main`, a few commits after the v2.2.0 tag `cb49f49`). Both projects are AGPL-3.0, so porting code across is licence-compatible, provided GoCasa keeps the original copyright and licence notices, marks what it changed, and keeps offering its source as it already must. In practice the stacks differ (Go vs TypeScript), so what GoCasa can borrow is mostly design.
 
 ## Short answer
 
@@ -29,7 +29,7 @@ Researched 2026-11-19. GoCasa at `main` `90daff5`; [OpenFamily](https://github.c
 | Identity | No logins. Anyone at the screen views and ticks things off; Admins have a PIN; optional **Locks** per action kind | Email/password accounts (bcrypt, JWT 7 days), invites, OIDC SSO, parent/child roles |
 | Backend | Go, `net/http`, templ, HTMX + SSE, Tailwind (standalone CLI, no Node) | Node 26, Express, `pg`, `ws`, node-cron, nodemailer, web-push, `@anthropic-ai/sdk` |
 | Frontend | Server-rendered HTML | React 19 SPA, Vite, Radix, i18next, PWA with offline cache |
-| Storage | One SQLite file, 24 numbered migrations, `PRAGMA user_version` | PostgreSQL 16; idempotent DDL list in `db.ts` + versioned, checksummed migrations |
+| Storage | One SQLite file, 27 numbered migrations, `PRAGMA user_version` | PostgreSQL 16; idempotent DDL list in `db.ts` + versioned, checksummed migrations |
 | Deploy | One static binary / `FROM scratch` image (amd64, arm64), required secrets in `.env` | All-in-one image (Node + Postgres inside) **or** three-container compose; Windows `.exe` installer; Android APK (Capacitor); catalog entries for HA, Umbrel, CasaOS, Runtipi, Unraid, TrueNAS, Proxmox script |
 | Size | ~32k lines of Go (incl. tests and generated templ) | ~65k lines excluding locales and lockfile |
 | i18n | English only | 8 languages, partial translations fall back to English |
@@ -50,7 +50,7 @@ Researched 2026-11-19. GoCasa at `main` `90daff5`; [OpenFamily](https://github.c
 | ICS export feed | ✅ `/calendar.ics` | ✅ (per-token webcal URL) | |
 | Nextcloud CalDAV | ✗ (works as an iCal feed) | ✅ import with discovery | |
 | Birthdays | ✗ | ✅ derived from dates of birth, shown everywhere, morning notification | **Adopt** (§4.5) |
-| Reminders / notifications | ✗ | ✅ up to 5 per appointment, web push + email | Out of scope for a wall display; phones get reminders by subscribing to `/calendar.ics` |
+| Reminders / notifications | ✗ | ✅ up to 5 per appointment, web push + email | Out of scope for a wall display. Phones subscribed to `/calendar.ics` see the events, and alerts there depend on the phone's calendar app; an ICS feed does not replace push or email |
 | Chores | ✅ Rounds, Each/Anyone, Late/Missed, Routines, per-weekday | ◐ tasks with frequency, points, categories, optional "pending approval" | GoCasa's model is richer |
 | Points & rewards | ✅ balances, Rewards, Redemptions approved by Admin, Adjustments | ✅ ledger, adjust/redeem, **savings goals**, **streaks**, currency (pocket money) | **Borrow goals + streaks** (§4.7) |
 | To-dos | ✅ columns, drag order, due dates, Repeat from schedule/completion | ◐ tasks double as to-dos | |
@@ -198,7 +198,7 @@ The risk is low: only an Admin with the PIN can add a URL. It matters more for a
 - **Accounts, JWT, OIDC, parent/child roles.** GoCasa's PIN, Locks and Admin model is a deliberate product choice for a shared screen. OpenFamily needs accounts because it's multi-family and phone-first.
 - **Recipes, meal planning, pantry, budget, Kakeibo, posts.** These are large modules (budget alone is ~2.8k lines in OpenFamily). GoCasa delegates food to Mealie. Budget and posts don't belong on a wall display.
 - **AI assistant.** It adds providers and keys and costs much more to maintain than the rest of this list.
-- **Web push, email reminders.** These need per-person devices and subscriptions. Phones already get reminders by subscribing to `/calendar.ics`.
+- **Web push, email reminders.** These need per-person devices and subscriptions. Phones subscribed to `/calendar.ics` can set their own alerts, though that is weaker than pushed reminders. Revisit only if users ask.
 - **Postgres or an SPA.** OpenFamily needs an all-in-one image with Postgres inside just to reach "one command", which GoCasa gets for free.
 - **Store aisle mode, price tracking.** These belong to Mealie.
 - **A static in-browser demo.** OpenFamily mocks its whole API in the SPA (`client/src/demo/mockApi.ts`). GoCasa's server-rendered pages would need a hosted instance instead. Not worth it now. The screenshot seed in `docs/screenshots/seed.sql` covers the README.
