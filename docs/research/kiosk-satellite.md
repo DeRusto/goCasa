@@ -99,7 +99,7 @@ Frames still never leave the page. Benefit is *expected*: test on a tablet in a 
 - The faces' centre sits 40% of the way down a vertical crop.
 - Each box grows to head and shoulders first.
 
-([photo_frames.dart#L57-L92](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/photo_frames.dart#L57-L92)).
+([photo_frames.dart#L57-L135](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/photo_frames.dart#L57-L135)).
 
 Face boxes come from `GET /api/faces?id=`, stored as fractions of the image ([immich_manager.dart#L287-L292](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L287-L292)). The answers live in a bounded in-memory cache, which is cleared when the Immich server or key changes, or once it passes 2,000 entries. The lookup tells three outcomes apart:
 - **Failed** (slow or away server): not cached, so it's asked again next lap.
@@ -111,7 +111,11 @@ Face boxes come from `GET /api/faces?id=`, stored as fractions of the image ([im
 **GoCasa today:** the Household's fit is "fill" (centre crop) or "blur" (fit over a blurred copy). The optional slow zoom drifts to a random `--x/--y` (`internal/web/screensaver.templ`, `drift`). Neither knows where people are.
 
 **For GoCasa:** a single focus point is too simple. Kiosk Satellite computes the crop alignment *and* the zoom anchor separately for each frame from three things: the photo's shape, the frame's shape, and the padded face bounds. That's what keeps a group in view. GoCasa shows photos both full-screen and as halves of a Photo pair, so the frame's shape varies too. So:
-- **Store the framing inputs at sync time** in `photos_cache`, beside `taken_at` and `place`: the face bounds, normalised to 0–1, background faces dropped and boxes padded to head and shoulders. One small union box is enough.
+- **Store the framing inputs at sync time** in `photos_cache`, beside `taken_at` and `place`, as two boxes normalised to 0–1. Background faces (under 40% of the tallest) are dropped first. Kiosk Satellite uses the two boxes differently ([photo_frames.dart#L93-L135](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/photo_frames.dart#L93-L135)):
+  - **The unpadded union of the faces:** its centre is the anchor the crop and zoom aim at.
+  - **The padded head-and-shoulders union** (each face grown 30% of its width on each side, 50% of its height above and 70% below, then clipped to the image): the limits the crop must keep in view.
+
+  Store both, because the padding is uneven and clipped, so one box can't give back the other.
 - **Compute in the page, per rendered frame:** the `object-position` for the crop, and the zoom drift's origin, so the zoom holds on the faces.
 
 A centre-of-faces `object-position` alone would be a simpler approximation. It would keep a single face in view but can cut groups.
@@ -119,7 +123,7 @@ A centre-of-faces `object-position` alone would be a simpler approximation. It w
 Full effort:
 - **A migration** for the column(s).
 - **Sync:** fetch faces for new assets. Also add a **backfill** pass over photos already cached, and a **refresh** for photos that had no faces or failed (Immich may scan them later). Keep "failed" apart from "none found", as Kiosk Satellite does, so a slow Immich doesn't freeze photos at the centre.
-- **Delivery:** both the first server render and the `/screensaver/photo` JSON must carry the focus point, because the page builds later slides from that JSON (`internal/web/screensaver.templ`, the slide builder around `drift`).
+- **Delivery:** both the first server render and the `/screensaver/photo` JSON must carry both boxes, because the page builds later slides from that JSON (`internal/web/screensaver.templ`, the slide builder around `drift`).
 - **Permission:** ask for `face.read`. GoCasa's key already needs `person.read` (`internal/app/immich.go` `newImmichConn`).
 
 This adds **no request-time face lookup**. Note that GoCasa already fetches an Immich thumbnail at request time on a photo-cache miss (`internal/app/immich.go` `cachedPhoto`); that path is unchanged.
@@ -133,7 +137,7 @@ The Fallback folder has no faces and keeps the centre. Fit: good.
 **In Kiosk Satellite:**
 - The *shell* watches every main-frame load. A 5xx answer goes to the retry path ([kiosk_screen.dart#L2684-L2693](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/kiosk_screen.dart#L2684-L2693)), because "Chromium commits these as successful navigations — the proxy's 502 when Home Assistant is unreachable, a reverse proxy's 502/504 during an outage — so onReceivedError never fires and, without this path, the error body sat on screen until an app restart".
 - Retries back off "5s → 10 → 20 → 40 → 60 and holding there", reset after a good load, and re-navigate after the network returns.
-- Both behaviours have limits. The retry ladder runs only while the **auto-reload on error** setting is on, which it is by default ([browser_manager.dart#L1774](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1774)). Network recovery waits two seconds "for routes and DNS" before reloading ([browser_manager.dart#L2424-L2436](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L2424-L2436)).
+- Two qualifications. Retries are *scheduled* only when the **auto-reload on error** setting is on, which it is by default; the check happens when the timer is created ([browser_manager.dart#L1774](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1774)). Network-return recovery is a separate path: it re-navigates a failed page after a two-second wait "for routes and DNS" ([browser_manager.dart#L2424-L2436](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L2424-L2436)).
 
 ([browser_manager.dart#L1740-L1790](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1740-L1790)).
 
@@ -162,7 +166,17 @@ Immich's search can't exclude by tag, so `_assetsTagged` does one paginated `POS
 **GoCasa today:** excluded albums and people, Favorites only and Minimum rating (`internal/app/immich.go` `immichConfig`, `search`). There are no tags. Memories come through a separate call (`internal/app/immich.go` `memories`), and the Glossary says Hide, Favorites only and Minimum rating "never narrow them".
 
 **For GoCasa:** an "Exclude tags" picker, with the subtraction done in the sync goroutine. Two things to decide first:
-- **Fail closed when the listing is incomplete** (a cap hit, or an error mid-listing). Keeping the previous photo set isn't safe: a photo tagged `kiosk-hide` since the last sync is still in it. So treat every Immich photo's eligibility as unknown. Show none (the Fallback folder, if on, takes over) and show a note like `memories_note` until a complete listing succeeds. People will use the tag as a privacy filter, so a wrong "show" is worse than a blank screensaver.
+- **Fail closed, with one gate.** Handling a failed tag listing isn't enough, for two reasons:
+  - GoCasa deliberately keeps showing cached Immich photos when a sync fails (`GLOSSARY.md`, **Failing**), and `immich.Sync` can stop early at the album and people listing, the search or Memories (`internal/app/immich.go` `Sync`). A photo tagged `kiosk-hide` since the last good sync would keep showing.
+  - An open screensaver keeps its current photo until the next step.
+
+  So:
+  - Persist an **eligibility gate**, shared by the rotation (`internal/app/rotation.go`) and the photo handler (`cachedPhoto`).
+  - Open the gate only after a sync completes with the full exclusion applied. Close it on any incomplete sync while tags are excluded, and whenever the exclusion settings change.
+  - While it's closed, no Immich photo shows: the Fallback folder takes over if it's on, and a note like `memories_note` says why.
+  - Tell open Wall displays over SSE to drop their Immich slide when the gate closes.
+
+  People will use the tag as a privacy filter, so a wrong "show" is worse than a blank screensaver.
 - **Whether excluded tags apply to Memories.** Unlike Favorites or rating, a hide tag is meant to hide, so probably yes; that needs a Glossary edit to the Memories entry. If so:
   - The tag listing must not reuse the album and people filters. Kiosk Satellite scopes its listing to the playlist's own favourite and date filters ([immich_manager.dart#L1220-L1226](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1220-L1226)), but GoCasa's Memories skip those filters.
   - The exclusion must run after picks and Memories are merged, before `replacePhotos`.
@@ -182,8 +196,9 @@ Effort: medium. A picker, one paginated, unscoped listing per tag per sync, and 
 - Or GoCasa itself at Night mode's end, but only if the page keeps running with the panel off. *Unverified*; Fully's vendor says WebView scripting stops after a while (`kiosk-dimming-and-motion-options.md` §2).
 
 **For GoCasa:** an optional `if (window.kioskSatellite)` branch, the same shape as the `window.fully` branch and the `display` SSE event proposed in `kiosk-dimming-and-motion-options.md` §2 and §5, so one design serves both:
-- **Default: keep GoCasa's black Night page.** Only use real screen-off once a wake path has been proven with the chosen screensaver owner. The likely working setup lets Kiosk Satellite own the night: its screensaver with "Turn screen off after" and "Dismiss on motion", with GoCasa's page standing down (`getScreensaverSuppressed()`).
-- **The permission prompt.** The page bridge sends `screenOff` with no `prompt: false`. When device admin isn't granted, Kiosk Satellite then puts **Android's device-admin grant screen** on the tablet before reporting failure ([screen_manager.dart#L356-L375](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screen/screen_manager.dart#L356-L375), [user_script.dart#L71](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/js_api/user_script.dart#L71)). An unattended Night mode boundary must not trigger that. Check device admin up front (or document granting it) and treat `false` as "stay on the black page".
+- **The concrete integration: let Kiosk Satellite own the night.** Use its own scheduled screensaver, with "Turn screen off after" and "Dismiss on motion", and have GoCasa's page stand down its own screensaver and Night page when `getScreensaverSuppressed()` says so. That's the only route with a documented camera-wake path.
+- **Page-driven `screenOff()` stays off by default,** and GoCasa keeps its black Night page. Turn it on only once device admin has been verified as provisioned (by hand, outside the page) *and* a wake path has been proven separately.
+- **Why the page can't check permission first.** The page bridge exposes no device-admin status and sends `screenOff` with no `prompt: false`. When device admin isn't granted, Kiosk Satellite puts **Android's device-admin grant screen** on the tablet, and the page's `false` arrives only after that prompt ([screen_manager.dart#L356-L375](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screen/screen_manager.dart#L356-L375), [user_script.dart#L71](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/js_api/user_script.dart#L71)). Its own screensaver timer calls the quiet form instead. An unattended Night mode boundary must never raise that prompt.
 
 Needs an end-to-end test: a GoCasa URL as a Custom Page, cookies sticking, SSE in its WebView, `screenOff()` from a non-HA origin, and what wakes it.
 
@@ -231,8 +246,9 @@ Adopting that *shape* for a `window.gocasaDisplay` bridge gives GoCasa a bridge 
 - A **Custom Repository** is any folder holding GitHub's `releases.json` "saved as is" plus the APKs. Plain `http://` works, and Android's signature check means the folder "can only ever serve a real Kiosk Satellite release".
 - Installs are silent where Android allows it:
   - The installer *asks* for `USER_ACTION_NOT_REQUIRED` and handles Android asking for confirmation anyway ([ApkInstaller.kt#L350-L351](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/ApkInstaller.kt#L350-L351)).
-  - Its docs say Android 12+ prompts for the first update only, while **Android 11 and older ask every time** unless the device is provisioned as device owner or a helper is installed.
-  - That matters for older tablets and LineageOS builds on old hardware.
+  - Its docs say Android 12+ prompts for the first update only, while **Android 11 and older ask every time** unless the device is provisioned as device owner or a helper is installed ([docs/updates.md#L83-L95](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L83-L95)).
+  - On Android 12+ the silent path relies on **installer package tracking**: the first in-app update makes the app its own installer of record. A later `adb install` makes `adb` the installer again, so the next update prompts once more ([docs/updates.md#L95](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L95), [#L222](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L222)).
+  - Android has its own eligibility rules for silent installs (target SDK, permissions), which I didn't research. These matter for a sideloaded Display app, especially on old tablets and LineageOS builds on old hardware.
 
 ([docs/updates.md#L5-L63](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L5-L63), [#L83-L92](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L83-L92)).
 
