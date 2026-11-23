@@ -1,152 +1,216 @@
 # Research: what GoCasa can learn from Kiosk Satellite
 
-Researched 2026-11-23 against [jxlarrea/kiosk-satellite](https://github.com/jxlarrea/kiosk-satellite) at `d78aac9` ("Release 2026.11.29"), and GoCasa `main` at `90daff5`. Builds on `docs/research/kiosk-dimming-and-motion-options.md` (display-off, Fully Kiosk, motion sources) and `docs/research/home-assistant-and-android.md` (HA add-on, WebView APK), which are not repeated here. Also checked against the Display app planning in [DeRusto/gocasa-android](https://github.com/DeRusto/gocasa-android) (issues #3, #4, #8, #10, #11, #13).
+Researched 2026-11-23 against [jxlarrea/kiosk-satellite](https://github.com/jxlarrea/kiosk-satellite) at `d78aac9` ("Release 2026.11.29"), and GoCasa `main` at `90daff5`. Builds on `docs/research/kiosk-dimming-and-motion-options.md` (display-off, Fully Kiosk, motion sources, the `display` SSE proposal) and `docs/research/home-assistant-and-android.md` (HA add-on, WebView APK), which are not repeated here. Also checked against the Display app planning in [DeRusto/gocasa-android](https://github.com/DeRusto/gocasa-android) (issues #3, #4, #8, #10, #11, #13).
 
-Sources are the project's own code and docs at that commit. Links use the short form `KS:path#Lnn`, meaning `https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/path#Lnn`. Claims I couldn't tie to a source are marked **unverified**.
+Sources are the project's own code and docs at that commit. Every link to it is pinned to `d78aac9`. Claims I couldn't tie to a source are marked **unverified**, and my own inferences say so.
 
 ## Short answer
 
-- **What it is:** a Flutter Android app (a WebView plus native Kotlin) that turns a tablet into a Home Assistant wall kiosk. It has voice, music, an Immich screensaver, camera motion and face wake, a calendar, alarms, remote admin and fleet sync ([KS:README.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/README.md)). Most of its surface is voice, audio and HA plumbing, which GoCasa doesn't need.
-- **License: CC BY-NC-ND 4.0** ([KS:LICENSE](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/LICENSE)). **Borrow ideas, never code.** GoCasa is AGPLv3, and NoDerivatives plus NonCommercial can't be combined with it. Only the plugin SDK interfaces are Apache-2.0, and GoCasa has no use for them.
-- **Best ideas for GoCasa itself (all fit pure Go, a browser client and no cloud):**
-  1. **Motion-wake that ignores light changes.** GoCasa's in-page detector uses fixed thresholds on raw pixel deltas. Kiosk Satellite subtracts the frame's mean change, vetoes same-signed change as lighting, learns each cell's noise for dark rooms, and ignores motion for a moment after the app changes the room's light itself. This is a small JS change with a large cut in false wakes. **High.**
-  2. **Wall page that recovers when the server or proxy is down.** Kiosk Satellite retries a failed or 5xx page load with backoff (5 s, then up to 60 s). GoCasa's Wall display navigates and reloads blindly, so a reload during an upgrade can strand the tablet on a browser error page. Small. **High.**
-  3. **Immich "crop around faces".** Move the crop to Immich's face boxes instead of the centre. This can be done at sync time, so it keeps GoCasa's "never call upstream at request time" rule. Medium effort. **High.**
-  4. **Immich "exclude tags"** (for example a `kiosk-hide` tag). **Medium.**
-- **Best ideas for the Display app (gocasa-android):** its JS bridge contract (promise-based, never rejects, `CustomEvent` signals), its crash fuse that hands the Home role back, a camera frame watchdog, and a self-update scheme that can point at a folder on your own server. GoCasa could serve that folder itself. Kiosk Satellite independently lands on the same Android design the Display app already chose (Home-app alias, `showWhenLocked`/`turnScreenOn`, camera foreground service, device admin), which is useful confirmation.
-- **Use Kiosk Satellite as GoCasa's shell?** Only for households that already run Home Assistant: setup refuses to continue without a working HA URL and token. A small `window.kioskSatellite` branch in GoCasa would give real screen-off. Note that its analytics are **on by default**. **Medium.**
+- **What it is:** a Flutter Android app (a WebView plus native Kotlin) that turns a tablet into a **Home Assistant** wall kiosk ([README.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/README.md)). Most of it (voice, music, HA plumbing) is outside GoCasa's scope.
+- **License: CC BY-NC-ND 4.0** ([LICENSE](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/LICENSE)). **Borrow ideas, never code.**
+- **Top picks for GoCasa:**
+  1. **Motion-wake that ignores light changes.** A small change to the page script should cut false wakes from slide changes, lamps and TVs, and catch people in dim rooms. This needs a tablet test. **High.**
+  2. **Immich "crop around faces"**, computed at sync time. **High.**
+  3. **A Wall display that comes back after a server outage.** The page alone can only narrow the gap. Full recovery needs the Display app to retry failed loads, as Kiosk Satellite does. **High** for the Display app, **medium** for the page.
+- **For the Display app:** its JS bridge contract, a crash fuse for the Home role, a camera frame watchdog, and updates from a folder GoCasa can serve. Its Android design matches the one the Display app already chose.
+- **Kiosk Satellite as GoCasa's shell:** possible only where Home Assistant already runs, needs device-admin permission for real screen-off, and its analytics are on by default. **Medium.**
 
 ---
 
 ## 1. What Kiosk Satellite is, and its license
 
-- **Stack:** Flutter/Dart UI (`app/lib/`, 454 Dart files), Kotlin native layer (`app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/`), `flutter_inappwebview` for the dashboard, ONNX Runtime for wake word and vision ([KS:README.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/README.md), "Built with these projects").
-- **Needs Home Assistant.** "You need Android 7.0 or newer, a reachable Home Assistant instance and a long-lived access token" ([KS:README.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/README.md), Get started). The setup wizard's step 1 fails without a URL and token that validate ([KS:app/lib/ui/setup_screen.dart#L434-L457](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/setup_screen.dart#L434-L457)).
-- **License:** CC BY-NC-ND 4.0: share verbatim with attribution, no commercial use, and no distributing modified material ([KS:LICENSE](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/LICENSE)). The plugin exception lets independent plugins talk to an *unmodified* app through the SDK. It explicitly does not allow "copying application implementation code" ([KS:PLUGIN-EXCEPTION.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/PLUGIN-EXCEPTION.md)). The SDK interfaces under `app/android/app/src/main/java/me/jxl/kiosk/plugins/` are Apache-2.0.
-- **What that means for GoCasa (AGPLv3, `LICENSE`):** no code, shaders, assets or verbatim text from Kiosk Satellite in GoCasa or gocasa-android. Copyright covers expression, not ideas or algorithms described in prose, so reimplementing a *technique* from this report in our own code is the same clean-room stance the spec takes towards SkyLite-UX (`docs/skylite-go-spec.md` §3.6). Write from this report, not with the Kiosk Satellite source open. This is not legal advice.
+- **Stack:** Flutter/Dart UI (`app/lib/`, 454 Dart files), Kotlin native layer (`app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/`), `flutter_inappwebview` for the dashboard, ONNX Runtime for wake word and vision ([README.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/README.md), "Built with these projects").
+- **Needs Home Assistant.** "You need Android 7.0 or newer, a reachable Home Assistant instance and a long-lived access token" ([README.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/README.md), Get started). The setup wizard's step 1 fails without a URL and token that validate ([setup_screen.dart#L434-L457](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/setup_screen.dart#L434-L457)).
+- **License:** CC BY-NC-ND 4.0 lets you share it verbatim with attribution. It forbids commercial use and forbids distributing modified material ([LICENSE](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/LICENSE)).
+  - The plugin exception lets independent plugins talk to an *unmodified* app through the SDK. It explicitly does not allow "copying application implementation code" ([PLUGIN-EXCEPTION.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/PLUGIN-EXCEPTION.md)).
+  - Only the SDK interfaces under `app/android/app/src/main/java/me/jxl/kiosk/plugins/` are Apache-2.0, and GoCasa has no use for them.
+- **What that means for GoCasa (AGPLv3, `LICENSE`):**
+  - No code, shaders, assets or verbatim text from Kiosk Satellite in GoCasa or gocasa-android. NoDerivatives plus NonCommercial can't be combined with the AGPL.
+  - Copyright covers expression, not ideas or algorithms described in prose. Reimplementing a *technique* from this report in our own code is the same clean-room stance the spec takes towards SkyLite-UX (`docs/skylite-go-spec.md` §3.6).
+  - Write from this report, not with the Kiosk Satellite source open. This is not legal advice.
 
 ## 2. Ranked recommendations
 
 | # | Idea | Where in Kiosk Satellite | GoCasa today | Benefit | Effort | Value |
 |---|---|---|---|---|---|---|
-| 1 | Motion-wake that rejects lighting changes | `CameraMotion.kt`, `motion_manager.dart` | Fixed raw thresholds (`internal/web/screensaver.templ` `motionWake`) | Far fewer false wakes from photo crossfades, lamps, TV flicker; works in dim rooms | Small (page JS) | **High** |
-| 2 | Retry with backoff instead of a stuck error page | `browser_manager.dart` | Blind `location.reload()` / `location.assign()` | A Wall display survives upgrades and proxy 502s on its own | Small (page JS) | **High** |
-| 3 | Immich crop around faces | `docs/immich.md`, `photo_frames.dart`, `immich_manager.dart` | Fill crops the centre; zoom drifts randomly | Heads stay in frame on cropped and zooming photos | Medium (sync + template) | **High** |
-| 4 | Immich exclude tags | `docs/immich.md` Filters | Exclude albums or people, favourites, rating | One tag hides a photo from the wall with no album curation | Small–medium | Medium |
-| 5 | `window.kioskSatellite` branch | `docs/js-api.md`, `user_script.dart` | None (a `window.fully` branch was proposed earlier) | Real screen-off in Night mode for HA households on Kiosk Satellite | Small | Medium |
-| 6 | Bridge contract for the Display app | `docs/js-api.md` | Open question (gocasa-android #11) | A tested shape for page ↔ app messages | Design only | Medium |
-| 7 | Display app robustness patterns | `HomeFuse.kt`, `CameraMotion.kt` watchdog, `WakeActivity` | Not yet specified (gocasa-android #3) | A Home-app kiosk that can't brick the tablet; camera wake that recovers | In the Display app | Medium |
-| 8 | Display app updates from a folder GoCasa serves | `docs/updates.md` | Not yet specified (gocasa-android #3) | Sideloaded APKs update with no internet and no GitHub limits | Small–medium | Medium |
-| 9 | Sunrise before Wake time | `docs/alarms.md` Sunrise | Planned Member display (`GLOSSARY.md`, issue #107) | A gentler Night screen to Wake time hand-off | Small in page; real brightness needs the Display app | Medium |
-| 10 | Devices list with remote settings | Remote admin, `docs/fleet.md` | Device settings are cookies only | Change a tablet's settings from your phone | Medium–large | Low–medium |
-| 11 | Keep awake while someone reads ("postpone on motion") | `docs/screensavers.md` Motion Detection | Camera runs only on screensaver and Dim clock | The screen doesn't go to the screensaver mid-read | Small, but camera on all day | Low |
-| 12 | Pixel shift on static screens | `docs/screensavers.md` | None | Less OLED burn-in from the Dim clock | Tiny | Low |
-| 13 | Stack landscape pairs on portrait screens | `docs/immich.md` | Portrait screens show a pair one photo at a time | Fuller portrait walls | Medium; touches ADR 0002 | Low |
-| 14 | Slideshow progress bar, tap edges to step | `docs/immich.md` | Any tap wakes | Small nicety | Small | Low |
-| 15 | Daily forecast in the calendar's Week view | `docs/calendar.md` Weather | Weather pill only | At-a-glance planning | Small | Low |
+| 1 | Motion-wake that rejects lighting changes (§3.1) | `CameraMotion.kt`, `motion_manager.dart` | Fixed raw thresholds (`internal/web/screensaver.templ` `motionWake`) | Expected: fewer false wakes, wakes in dim rooms (needs a tablet test) | Small (page JS) | **High** |
+| 2 | Immich crop around faces (§3.2) | `docs/immich.md`, `photo_frames.dart`, `immich_manager.dart` | Fill crops the centre; zoom drifts randomly | Heads stay in frame | Medium (sync, backfill, migration, template, JSON) | **High** |
+| 3 | Recover from a failed page load (§3.3) | `browser_manager.dart`, `kiosk_screen.dart` | Blind `location.reload()` / `location.assign()` | A Wall display survives upgrades and proxy 502s | Page: small (narrows the gap). Display app: small (closes it) | **High** (Display app) / Medium (page) |
+| 4 | Immich exclude tags (§4.1) | `docs/immich.md`, `immich_manager.dart` | Exclude albums or people, favourites, rating | One tag hides a photo from the wall | Medium (paginated listing per tag) | Medium |
+| 5 | `window.kioskSatellite` branch (§4.2) | `docs/js-api.md`, `user_script.dart` | None (a `window.fully` branch was proposed earlier) | Real screen-off in Night mode for HA households | Small code, end-to-end test needed | Medium |
+| 6 | Bridge contract for the Display app (§4.3) | `docs/js-api.md` | Open question (gocasa-android #11) | A tested shape for page ↔ app messages | Design only | Medium |
+| 7 | Display app robustness patterns (§4.4) | `HomeFuse.kt`, `CameraMotion.kt` | Not yet specified (gocasa-android #3) | A Home-app kiosk that can't brick the tablet; camera wake that recovers | In the Display app | Medium |
+| 8 | Display app updates from a folder GoCasa serves (§4.5) | `docs/updates.md` | Not yet specified (gocasa-android #3) | Sideloaded APKs update with no internet | Small–medium | Medium |
+| 9 | Sunrise before Wake time (§4.6) | `docs/alarms.md` | Planned Member display (#107, #112) | A gentler hand-off from Night screen to Wake time | Small in page; real brightness needs the Display app | Medium |
+| 10 | Devices list with remote settings and profiles (§5) | `docs/remote-api.md`, `docs/fleet.md` | Cookies only | Change a tablet from your phone | Medium–large | Low–medium |
+| 11 | Postpone the screensaver on motion (§5) | `docs/screensavers.md` | Camera only on screensaver and Dim clock | No screensaver while someone reads | Small; camera on all day | Low |
+| 12 | Pixel shift on static screens (§5) | `docs/screensavers.md` | None | Less OLED burn-in | Tiny | Low |
+| 13 | Landscape pairs on portrait screens (§5) | `docs/immich.md` | Pairs shown one photo at a time | Fuller portrait walls | Medium; touches ADR 0002 | Low |
+| 14 | Progress bar, tap edges to step (§5) | `docs/immich.md` | Any tap wakes | Nicety | Small | Low |
+| 15 | Daily forecast in the Week view (§5) | `docs/calendar.md` | Weather pill only | Planning at a glance | Small (longer forecast cache for full weeks) | Low |
+| 16 | Per-block screensaver schedule with wake overrides (§5) | `docs/screensavers.md` | One Night mode window | Different wake rules by time of day | Medium | Low |
+| 17 | Adaptive brightness curve (§5) | `docs/screen.md` | None (a page can't set the backlight) | Comfortable brightness day and night | Display app only | Low (later) |
+| 18 | Secure-context loopback proxy (§5) | `proxy_manager.dart` | n/a | Wake Lock and in-page camera over plain http in a WebView | Display app; resets cookies | Low |
 
 ## 3. High value
 
 ### 3.1 Motion-wake that rejects lighting changes
 
-**In Kiosk Satellite:** a coarse 16×12 luminance grid, 2 samples per cell per axis ([KS:CameraMotion.kt#L101-L109](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L101-L109)), with four defences against false wakes:
+**In Kiosk Satellite:** a coarse 16×12 luminance grid, 2 samples per cell per axis ([CameraMotion.kt#L101-L109](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L101-L109)). Each frame's deltas feed two different tests ([CameraMotion.kt#L1566-L1604](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1566-L1604)):
 
-1. **Mean subtraction.** Each cell is judged on its change *minus the frame's mean change*: "a light change plus the AE compensation that follows it is, to first order, a uniform shift of the whole grid, and subtracting the mean removes it". A body is a local departure from that shift ([KS:CameraMotion.kt#L69-L80](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L69-L80), [#L1555](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1555)).
-2. **Same-sign veto.** If at least 85% of the changed cells (minimum 12) moved the same way, it's lighting, not a person: "a frame-diff of a moving body has both signs at once". On their hardware, reflected monitor flicker in a 1 lux room flagged 30–90% of the grid "at exactly 100 percent sign purity" ([KS:CameraMotion.kt#L128-L139](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L128-L139), [#L1602](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1602)).
-3. **Per-cell noise model for dark rooms.** A cell counts as changed at 4× its own learned frame-to-frame jitter, kept between 4 and 16 (of 255). The jitter is an EMA (α 0.08) fed only by quiet cells. So a dim scene's small real deltas register without bright rooms tripping on noise ([KS:CameraMotion.kt#L111-L126](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L111-L126)).
-4. **Quiet after the app's own light change.** Motion is ignored for 2.5 s after "screensaver transitions, screen power, brightness" ([KS:motion_manager.dart#L84](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/motion/motion_manager.dart#L84), [#L196-L209](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/motion/motion_manager.dart#L196-L209)). It also skips 3 warm-up frames and emits at most one motion event a second ([KS:CameraMotion.kt#L166-L170](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L166-L170)).
+1. **Change count on mean-adjusted deltas.** A cell counts as changed when its delta *minus the frame's mean delta* passes its threshold: "a light change plus the AE compensation that follows it is, to first order, a uniform shift of the whole grid, and subtracting the mean removes it". A body is a local departure from that shift ([CameraMotion.kt#L69-L80](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L69-L80), [#L1555](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1555)).
+2. **Sign veto on *raw* deltas.** The code says: "Raw deltas feed the sign veto only." If at least 85% of the raw-changed cells (minimum 12) moved the same way, the frame is lighting, not a person. As the code puts it, "a frame-diff of a moving body has both signs at once". The veto must use raw deltas because subtracting the mean first would erase the uniform shift it's meant to spot. On their hardware, reflected monitor flicker in a 1 lux room flagged 30–90% of the grid "at exactly 100 percent sign purity" ([CameraMotion.kt#L128-L139](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L128-L139), [#L1595-L1604](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1595-L1604)).
 
-The user docs sum it up: motion detection "filters out whole-room light shifts (such as TV flashes or turning on a lamp), and suppresses detection for a few seconds during internal app brightness and slide transitions" ([KS:docs/screensavers.md#L402-L410](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L402-L410)).
+Two supporting measures:
 
-**GoCasa today:** `motionWake` in `internal/web/screensaver.templ` samples a 64×48 canvas at 4 fps and counts a pixel as changed when R+G+B moves by more than 96. More than 5% changed pixels wakes the page. The only settle time is 2 s at start. All three numbers are fixed, and the deltas are raw. That means:
-- The screensaver's own photo crossfade relights the room, and the camera sees the room relit, so a dark room can wake on a slide change. *Inference from the code; not tested on a device.*
-- A lamp turning on, or AE hunting, reads as a uniform shift of every pixel and wakes it.
-- In a dark room, a person may move R+G+B by less than 96, so the Dim clock may never wake. *Inference; not tested.*
+3. **Per-cell noise model for dark rooms.** A cell's threshold is 4× its own learned frame-to-frame jitter, kept between 4 and 16 (of 255). The jitter is an EMA (α 0.08) over the *mean-adjusted* magnitude, learned only from quiet cells, so motion and global flicker don't desensitise it ([CameraMotion.kt#L111-L126](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L111-L126), [#L1585-L1592](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1585-L1592)).
+4. **Quiet after the app's own light change.** Motion is ignored for 2.5 s after "screensaver transitions, screen power, brightness" ([motion_manager.dart#L84](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/motion/motion_manager.dart#L84), [#L196-L209](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/motion/motion_manager.dart#L196-L209)). It also skips 3 warm-up frames and emits at most one motion event a second ([CameraMotion.kt#L166-L170](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L166-L170)).
 
-**For GoCasa:** reimplement the four ideas in the existing page script, about 30–40 lines and no new dependency:
-- Mean-subtract the deltas.
-- Apply the same-sign veto.
-- Use a per-cell noise floor; the existing 64×48 grid is fine, or downsample to about 16×12.
-- Ignore motion for about 2.5 s after the screensaver swaps a slide, a step the page already knows about.
+The user docs: motion "filters out whole-room light shifts (such as TV flashes or turning on a lamp), and suppresses detection for a few seconds during internal app brightness and slide transitions" ([docs/screensavers.md#L402-L410](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L402-L410)).
 
-Frames still never leave the page. Fit: perfect.
+**GoCasa today:** `motionWake` in `internal/web/screensaver.templ` samples a 64×48 canvas at 4 fps:
+- A pixel counts as changed when R+G+B moves by more than 96 (raw delta).
+- More than 5% changed pixels wakes the page.
+- The only settle time is 2 s at start, and all three numbers are fixed.
 
-### 3.2 A Wall page that recovers by itself
+What follows from the code (my inference; not tested on a tablet):
+- The screensaver's own crossfade relights the room, and a lamp turning on shifts every pixel; either can read as motion.
+- In a dark room, a person may move R+G+B by less than 96, so the Dim clock may not wake.
 
-**In Kiosk Satellite:** a main-frame HTTP failure of 500 or more gets the same retry as a network error, because "Chromium commits these as successful navigations — the proxy's 502 when Home Assistant is unreachable, a reverse proxy's 502/504 during an outage — so onReceivedError never fires and, without this path, the error body sat on screen until an app restart". Retries back off "5s → 10 → 20 → 40 → 60 and holding there", reset after a successful load, and re-navigate as soon as the network returns ([KS:app/lib/managers/browser/browser_manager.dart#L1740-L1790](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1740-L1790)).
+**For GoCasa:** reimplement the four ideas in the existing page script, about 30–40 lines and no dependency:
+- Compute raw per-cell deltas on a coarse grid (the 64×48 canvas averaged down to about 16×12).
+- Run the sign veto on the raw deltas.
+- Count changes on mean-adjusted deltas against a per-cell noise floor.
+- Ignore motion for about 2.5 s after the page swaps a slide, a step it already knows about.
 
-**GoCasa today:** the Wall display moves between pages with plain navigations: `location.assign("/screensaver")` on idle, and `location.reload()` at Night mode boundaries, on `sse:household` and on SSE reconnect (`nightWatch` and `wallDisplay` in `internal/web/screensaver.templ`). If GoCasa is restarting (an upgrade, or a pre-migration backup), the proxy answers 502 and the browser shows that page instead. GoCasa's script is gone at that point, so nothing brings the page back until someone touches it. *The stranding is an inference from how browsers treat a navigation; not tested on a tablet.* The README's upgrade path ("Replace the image and start it") makes this a routine event, not a rare one.
+Frames still never leave the page. Benefit is *expected*: test on a tablet in a dim room with the photo rotation running before calling it fixed. Fit: perfect.
 
-**For GoCasa:** one shared helper that `fetch`es `/healthz` before any automatic navigation or reload, and on failure retries with the same kind of backoff, staying on the current page in the meantime. Under 20 lines, no server change. A Display app could also catch 5xx main-frame loads natively, as Kiosk Satellite does. Fit: perfect.
-
-### 3.3 Immich: crop around faces
+### 3.2 Immich: crop around faces
 
 **In Kiosk Satellite:** when a photo is cropped to fill the screen, the crop moves to Immich's detected faces:
 - Only the cropped axis moves. A crop across centres on the faces; a crop down puts them "a little above the middle"; and a group too tall to fit keeps the top.
-- Small faces in the background don't move the crop.
+- Small background faces don't count.
 - Ken Burns zooms hold still on the faces.
 
-([KS:docs/immich.md#L81-L90](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L81-L90)). In the code:
+([docs/immich.md#L81-L90](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L81-L90)). In the code:
 - Faces shorter than 40% of the tallest are ignored.
 - The faces' centre sits 40% of the way down a vertical crop.
-- Each face box is grown to head and shoulders first.
+- Each box grows to head and shoulders first.
 
-([KS:app/lib/ui/photo_frames.dart#L57-L92](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/photo_frames.dart#L57-L92)). Face boxes come from `GET /api/faces?id=`, stored as fractions of the image ([KS:app/lib/managers/screensaver/immich_manager.dart#L287-L292](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L287-L292), [#L1594](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1594)). This needs the key's `face.read` permission. Without it, photos fall back to a centred crop ([KS:docs/immich.md#L5](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L5)).
+([photo_frames.dart#L57-L92](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/photo_frames.dart#L57-L92)).
 
-**GoCasa today:** the Household's fit is "fill" (centre crop) or "blur" (fit over a blurred copy). The optional slow zoom drifts to a random `--x/--y` (`internal/web/screensaver.templ`, `drift`). Neither knows where people are, so a portrait photo on "fill" often loses heads.
+Face boxes come from `GET /api/faces?id=`, stored as fractions of the image ([immich_manager.dart#L287-L292](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L287-L292)). The lookup tells three outcomes apart, and only "found faces" is final:
+- **Failed** (slow or away server): uncached and asked again next lap.
+- **No `face.read`, or no faces found:** asked again after 30 minutes.
+- **Found faces:** kept for the session.
 
-**For GoCasa:** compute one focus point per photo **at sync time** and store it in `photos_cache` beside `taken_at` and `place`. Then render it as `object-position`, and aim the zoom drift at it. This keeps spec principle 3: no Immich call at request time. Costs:
-- One extra request per *new* asset during sync. Kiosk Satellite already sends `withPeople` on the metadata search, but only to read *who* is in a photo ([KS:immich_manager.dart#L1042-L1074](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1042-L1074)). *Unverified:* whether that answer also carries face boxes, which would avoid the extra request.
-- A migration.
-- Asking for `face.read`. GoCasa's key already needs `person.read` (`internal/app/immich.go` `newImmichConn`).
+([immich_manager.dart#L1588-L1626](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1588-L1626), [docs/immich.md#L90](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L90)). Without `face.read` the crop stays centred ([docs/immich.md#L7](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L7), [#L90](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L90)).
+
+**GoCasa today:** the Household's fit is "fill" (centre crop) or "blur" (fit over a blurred copy). The optional slow zoom drifts to a random `--x/--y` (`internal/web/screensaver.templ`, `drift`). Neither knows where people are.
+
+**For GoCasa:** store a focus point per photo in `photos_cache`, beside `taken_at` and `place`. Render it as `object-position`, and aim the zoom drift at it. Full effort:
+- **A migration** for the column.
+- **Sync:** fetch faces for new assets. Also add a **backfill** pass over photos already cached, and a **refresh** for photos that had no faces or failed (Immich may scan them later). Keep "failed" apart from "none found", as Kiosk Satellite does, so a slow Immich doesn't freeze photos at the centre.
+- **Delivery:** both the first server render and the `/screensaver/photo` JSON must carry the focus point, because the page builds later slides from that JSON (`internal/web/screensaver.templ`, the slide builder around `drift`).
+- **Permission:** ask for `face.read`. GoCasa's key already needs `person.read` (`internal/app/immich.go` `newImmichConn`).
+
+This adds **no request-time face lookup**. Note that GoCasa already fetches an Immich thumbnail at request time on a photo-cache miss (`internal/app/immich.go` `cachedPhoto`); that path is unchanged.
+
+Kiosk Satellite sends `withPeople` on the metadata search, but only to learn *who* is in a photo ([immich_manager.dart#L1042-L1074](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1042-L1074)). *Unverified:* whether that answer also carries face boxes, which would save the per-asset request.
 
 The Fallback folder has no faces and keeps the centre. Fit: good.
+
+### 3.3 Recovering from a failed page load
+
+**In Kiosk Satellite:**
+- The *shell* watches every main-frame load. A 5xx answer goes to the retry path ([kiosk_screen.dart#L2684-L2693](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/kiosk_screen.dart#L2684-L2693)), because "Chromium commits these as successful navigations — the proxy's 502 when Home Assistant is unreachable, a reverse proxy's 502/504 during an outage — so onReceivedError never fires and, without this path, the error body sat on screen until an app restart".
+- Retries back off "5s → 10 → 20 → 40 → 60 and holding there", reset after a good load, and re-navigate as soon as the network returns.
+
+([browser_manager.dart#L1740-L1790](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1740-L1790)).
+
+**GoCasa today:** the Wall display moves between pages with plain navigations:
+- `location.assign("/screensaver")` when idle.
+- `location.reload()` at Night mode boundaries, on `sse:household` and on SSE reconnect.
+
+(`nightWatch` and `wallDisplay` in `internal/web/screensaver.templ`.) If one of these lands while GoCasa is restarting (an upgrade, or a pre-migration backup), the proxy's 502 page replaces GoCasa's. GoCasa's script is gone, so nothing brings it back until someone touches the screen and reloads. *My inference from how browsers treat a navigation; not tested on a tablet.* The README's upgrade path ("Replace the image and start it") makes restarts routine.
+
+**What the page can and can't do:**
+- **Narrow the gap (small):** before an *automatic* navigation, `fetch('/healthz')` with a short timeout and require a 200. If that fails, stay on the current page (it still renders from what it has) and retry with backoff. This avoids starting a navigation into a known outage. It does **not** close the race: `/healthz` only checks SQLite answers (`internal/app/app.go` `healthz`), and the navigation is a separate request that can still fail after the probe passes.
+- **Recover after a failed navigation:** impossible from the page, because the error page has replaced it. That needs something outside the page:
+  - **The Display app (best):** catch 5xx and network errors on main-frame loads and retry with backoff, as above. gocasa-android #10 already plans to re-resolve the server and keep retrying on "Can't reach GoCasa"; adding the 5xx case and the backoff completes it. Small.
+  - **A service worker that serves a cached "reconnecting" page** for failed navigations. Service workers need a secure context, so this only helps HTTPS installs. *Unverified for GoCasa:* SSE and htmx behaviour behind a service worker. Medium.
 
 ## 4. Medium value
 
 ### 4.1 Immich: exclude tags
 
-**In Kiosk Satellite:** "Tag the handful of photos that do not belong on a shared screen (a `kiosk-hide` tag, say) and leave the rest of the library alone, so new uploads show up without any curation step." Excluding a parent tag excludes its children. Immich's search can't exclude by tag, so the kiosk lists the assets of each excluded tag and drops them locally ([KS:docs/immich.md#L42](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L42), [#L57](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L57)). It needs `tag.read` ([KS:docs/immich.md#L5](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L5)), and uses `GET /api/tags` and `tagIds` in `POST /api/search/metadata` ([KS:immich_manager.dart#L1028-L1077](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1028-L1077)).
+**In Kiosk Satellite:** "Tag the handful of photos that do not belong on a shared screen (a `kiosk-hide` tag, say) and leave the rest of the library alone, so new uploads show up without any curation step." Excluding a parent tag excludes its children ([docs/immich.md#L42](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L42), [#L57](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L57)). It needs `tag.read` ([docs/immich.md#L7](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L7)).
 
-**GoCasa today:** excluded albums and people, Favorites only and Minimum rating (`internal/app/immich.go` `immichConfig`, `search`). There are no tags.
+Immich's search can't exclude by tag, so `_assetsTagged` does one paginated `POST /api/search/metadata` per excluded tag, then drops those ids locally ([immich_manager.dart#L1220-L1275](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/immich_manager.dart#L1220-L1275)).
+- It pages in 500s and **stops after 20 pages** (10,000 assets per tag).
+- At that cap it logs that "the rest" may still show.
 
-**For GoCasa:** an "Exclude tags" picker, with the subtraction done in the sync goroutine. Effort is small to medium: a picker, a `tag.read` permission note, and one list call per excluded tag. Fit: good. It's a natural sibling of Exclude people, and the Glossary's "Hide" wording for Memories would need a line on whether tags narrow Memories.
+**GoCasa today:** excluded albums and people, Favorites only and Minimum rating (`internal/app/immich.go` `immichConfig`, `search`). There are no tags. Memories come through a separate call (`internal/app/immich.go` `memories`), and the Glossary says Hide, Favorites only and Minimum rating "never narrow them".
+
+**For GoCasa:** an "Exclude tags" picker, with the subtraction done in the sync goroutine. Two things to decide first:
+- **When the listing is incomplete** (a cap hit, or an error mid-listing): fail safe by keeping the previous photo set and showing a note, like `memories_note`. Don't show an unfiltered set. This matters because people will use the tag as a privacy filter.
+- **Whether excluded tags apply to Memories.** Unlike Favorites or rating, a hide tag is meant to hide, so probably yes. That would mean a Glossary edit to the Memories entry.
+
+Effort: medium. A picker, one paginated listing per tag per sync, and the fail-safe path. Fit: good.
 
 ### 4.2 Running GoCasa inside Kiosk Satellite (`window.kioskSatellite`)
 
 **In Kiosk Satellite:**
-- The app injects `window.kioskSatellite` "into every page at document start", synchronously, with `platform: 'kiosksatellite'` ([KS:docs/js-api.md#L3-L21](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L3-L21), [KS:app/lib/managers/js_api/user_script.dart#L5-L32](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/js_api/user_script.dart#L5-L32)).
-- It offers `screenOff()`/`screenOn()` ("real display power"), `setBrightness(0..1)`, `stopScreensaver()`, `pauseScreensaver(bool)` and `setInteractionActive()` ([KS:docs/js-api.md#L31-L70](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L31-L70)).
-- `getScreensaverSuppressed()` "always returns true. Because the app fully owns the screen, the web page must stand down its own internal screensaver" ([KS:docs/js-api.md#L70](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L70)).
-- A non-HA page can be the default dashboard as a Custom Page with a full URL such as `http://192.168.1.20:8080/wall.html` ([KS:docs/custom-pages.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/custom-pages.md), "Add a page").
+- The app injects `window.kioskSatellite` "into every page at document start", synchronously, with `platform: 'kiosksatellite'` ([docs/js-api.md#L3-L21](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L3-L21), [user_script.dart#L5-L32](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/js_api/user_script.dart#L5-L32)).
+- It offers `screenOn()`/`screenOff()`, which "Controls real display power … Turning it off requires the device admin permission". It also has `setBrightness(0..1)`, `stopScreensaver()`, `pauseScreensaver(bool)` and `setInteractionActive()` ([docs/js-api.md#L31-L70](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L31-L70)).
+- `getScreensaverSuppressed()` "Always returns true. Because the app fully owns the screen, the web page must stand down its own internal screensaver" ([docs/js-api.md#L70](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L70)).
+- A non-HA page can be the default dashboard as a Custom Page with a full URL ([docs/custom-pages.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/custom-pages.md), "Add a page").
 
-**For GoCasa:** an optional `if (window.kioskSatellite)` branch, like the `window.fully` branch proposed in `kiosk-dimming-and-motion-options.md` §2:
-- Night mode's black screen calls `screenOff()`, and waking calls `screenOn()`.
-- GoCasa then has to pick one screensaver: either turn off Kiosk Satellite's, or run GoCasa's own and call `pauseScreensaver(true)`.
+**What waking looks like:** once the panel is powered off, "A panel that **Turn screen off after** powered off takes no touches" ([docs/screensavers.md#L382](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L382)). GoCasa's page can't wake it either, because its black Night screen has no camera wake: `motionWake` runs only on the Dim clock (`internal/web/screensaver.templ`, `Night`). So something else has to wake it:
+- Kiosk Satellite's own camera motion ("on supported hardware where background camera sessions survive screen off"), the power button, or an HA automation calling `screenOn` ([docs/screensavers.md#L374](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L374)).
+- Or GoCasa itself at Night mode's end, but only if the page keeps running with the panel off. *Unverified*; Fully's vendor says WebView scripting stops after a while (`kiosk-dimming-and-motion-options.md` §2).
 
-Small effort. **Caveats:**
-- It only helps households that already run Home Assistant (§1).
-- Its analytics (Basic, Usage, Diagnostics) all default to **on** ([KS:app/lib/managers/settings/definitions.dart#L12439-L12465](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/settings/definitions.dart#L12439-L12465), [KS:docs/analytics.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/analytics.md)). That clashes with GoCasa's "no telemetry" pitch, so any docs should tell people to turn them off.
+**For GoCasa:** an optional `if (window.kioskSatellite)` branch, the same shape as the `window.fully` branch and the `display` SSE event proposed in `kiosk-dimming-and-motion-options.md` §2 and §5, so one design serves both:
+- Night mode's black screen calls `screenOff()`.
+- If that resolves `false` (no device admin), fall back to the existing black page.
+- GoCasa must pick one screensaver: either turn off Kiosk Satellite's, or keep GoCasa's own and call `pauseScreensaver(true)`.
+
+Needs an end-to-end test: a GoCasa URL as a Custom Page, cookies sticking, SSE in its WebView, `screenOff()` from a non-HA origin, and what wakes it.
+
+**Caveats:**
+- Home Assistant is required (§1).
+- Analytics (Basic, Usage, Diagnostics) all default to **on** ([definitions.dart#L12439-L12465](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/settings/definitions.dart#L12439-L12465), [docs/analytics.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/analytics.md)). That clashes with GoCasa's "no telemetry", so docs should say to turn them off.
 - It is free only for non-commercial use.
 
-Value: medium, and a shell for HA homes rather than a replacement for the Display app.
+Value: medium, as a shell for HA homes, not a replacement for the Display app.
 
 ### 4.3 A bridge contract for the Display app (gocasa-android #11)
 
 Kiosk Satellite's page API is a worked example of the open question "what messages pass between GoCasa's page and the Display app":
-- **Presence and identity:** a synchronous presence check with a constant platform discriminator and version.
-- **Never rejects:** every method returns a promise that resolves `null` (queries) or `false` (commands) on failure ([KS:docs/js-api.md#L23-L30](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L23-L30)).
-- **Signals:** DOM `CustomEvent`s, with no string-eval callbacks ([KS:docs/js-api.md#L3](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L3), Events at [#L192](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L192)).
-- **State:** one state snapshot (`getKioskState()`: screensaver, `screenOn`, modes) plus one event that carries the same object whenever anything changes ([KS:docs/js-api.md#L42-L56](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L42-L56)).
+- **Presence and identity:** synchronous presence and version detection.
+- **Fails soft:** every method returns a promise that never rejects. Failures resolve `null` for queries or `false` for commands, and any transport failure resolves `null` whatever the method ([docs/js-api.md#L23-L30](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L23-L30), [user_script.dart#L18-L25](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/js_api/user_script.dart#L18-L25)).
+- **Signals:** DOM `CustomEvent`s ([docs/js-api.md#L192](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L192)).
+- **State:** one snapshot, `getKioskState()`, plus one event carrying the same object whenever anything changes ([docs/js-api.md#L42-L56](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/js-api.md#L42-L56)).
 
-Adopting that *shape* (not the code) for `window.gocasaDisplay` gives GoCasa's page a bridge it can feature-detect and that fails soft. That suits spec principle 2 ("must work with JS partially broken"). Design only.
+Adopting that *shape* for a `window.gocasaDisplay` bridge gives GoCasa a bridge it can feature-detect that fails soft, which suits spec principle 2 ("must work with JS partially broken"). Treat a falsy command result as "not done". Design only.
 
 ### 4.4 Display app robustness patterns (gocasa-android #3, #8, #13)
 
-Kiosk Satellite's manifest matches the Display app's decisions: a disabled-by-default `HOME` activity-alias, a translucent `WakeActivity` with `showWhenLocked`/`turnScreenOn`, a camera foreground service and a device-admin receiver ([KS:app/android/app/src/main/AndroidManifest.xml#L196-L246](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/AndroidManifest.xml#L196-L246)). Three things it adds that the Display app's map doesn't list yet:
-- **Crash fuse for the Home role.** "a kiosk that crash-loops while it IS the home app would otherwise strand whoever is in front of the device on a black screen". After 3 chained starts that never draw a frame, it gives Home back to the stock launcher, in native code "because it must work when Dart is exactly what is broken" ([KS:HomeFuse.kt#L12-L33](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/HomeFuse.kt#L12-L33), [#L45](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/HomeFuse.kt#L45)). For the Display app, which plans to *be* the Home app (#13), this is cheap insurance.
-- **Camera frame watchdog.** No frames for 10 s means a dead session. It covers silent `PENDING_OPEN` binds and OS suspension and rebinds with backoff ([KS:CameraMotion.kt#L305](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L305), [#L1442-L1460](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1442-L1460)). This matches VACA's "camera that opens but delivers no frames" note in #8.
-- **Auto-exposure hunt fallback.** 20 consecutive lighting-shaped frames (about 10 s) step the exposure ladder and restart the session, after a Galaxy Tab S6 Lite whose exposure "oscillates forever, which pins a core" ([KS:CameraMotion.kt#L145-L164](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L145-L164)).
+**The same core design.** Kiosk Satellite's manifest matches the Display app's decisions: a disabled-by-default `HOME` activity-alias, a camera foreground service and a device-admin receiver ([AndroidManifest.xml#L196-L324](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/AndroidManifest.xml#L196-L324)).
+
+**One difference:**
+- gocasa-android #13 puts `showWhenLocked`/`turnScreenOn` on the Wall Activity itself.
+- Kiosk Satellite also keeps a separate translucent `WakeActivity` as "the screen-on fallback: launching this lights the panel where the app's wake lock does not" (same range).
+- Worth keeping in mind if hardware tests show the Wall Activity's own `turnScreenOn` doesn't re-arm when it's brought back to the front, which #13 lists as unverified.
+
+**Three things it adds:**
+- **Crash fuse for the Home role.** The source says "a kiosk that crash-loops while it IS the home app would otherwise strand whoever is in front of the device on a black screen". After 3 chained starts that never draw a frame, it gives Home back to the stock launcher. It does this in native code "because it must work when Dart is exactly what is broken" ([HomeFuse.kt#L12-L33](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/HomeFuse.kt#L12-L33), [#L45](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/HomeFuse.kt#L45)). Cheap insurance for an app that plans to *be* Home (#13).
+- **Camera frame watchdog.** No frames for 10 s means a dead session; this covers binds that silently park in `PENDING_OPEN`. Recovery differs by panel state ([CameraMotion.kt#L305](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L305), [#L1442-L1460](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L1442-L1460)):
+  - **Lit panel:** rebind after a short backoff.
+  - **Dark panel** (the OS suspended the camera): wait for the next screen-on.
+
+  This lines up with VACA's "opens but delivers no frames" note in #8. It also shows that on some devices the camera does *not* survive screen-off, which is the risk #4 flags.
+- **Auto-exposure hunt fallback.** After 20 consecutive lighting-shaped frames (about 10 s), it steps the exposure ladder and restarts the session. It was added for a Galaxy Tab S6 Lite whose exposure "oscillates forever, which pins a core" ([CameraMotion.kt#L145-L164](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt#L145-L164)).
 
 ### 4.5 Display app updates from a folder GoCasa serves
 
@@ -154,67 +218,74 @@ Kiosk Satellite's manifest matches the Display app's decisions: a disabled-by-de
 - It checks GitHub 20 s after launch and then every 12 h.
 - It falls back to the release page when GitHub's 60 requests an hour limit refuses it.
 - It picks the APK for the device's architecture.
-- A **Custom Repository** is any folder holding GitHub's `releases.json` saved as is, plus the APKs. Plain `http://` works, and Android's signature check means the folder "can only ever serve a real Kiosk Satellite release".
-- Android 12+ shows the system prompt for the first in-app update, and "Subsequent updates install silently".
+- A **Custom Repository** is any folder holding GitHub's `releases.json` "saved as is" plus the APKs. Plain `http://` works, and Android's signature check means the folder "can only ever serve a real Kiosk Satellite release".
+- Android 12+ shows the system prompt for the first in-app update, and "Subsequent updates install silently in the background".
 
-([KS:docs/updates.md#L5-L63](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L5-L63), [#L83-L92](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L83-L92)).
+([docs/updates.md#L5-L63](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L5-L63), [#L83-L92](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/updates.md#L83-L92)).
 
-**For GoCasa:** this answers gocasa-android #3's "Updates for a sideloaded APK". GoCasa is the one server every Display app can always reach, so the GoCasa binary (or a mounted folder under `/data`) could serve `releases.json` and the APK. That means no internet, no GitHub limits and no extra service. Fit: good. It's a static file route, though embedding the APK in the binary would bloat it, so prefer a folder.
+**For GoCasa:** this answers gocasa-android #3's "Updates for a sideloaded APK". GoCasa is the one server every Display app can always reach. A folder under `/data` that GoCasa serves statically, with `releases.json` and the APK, means no internet and no GitHub limits. Prefer a folder over embedding the APK in the binary, which would bloat it. Fit: good.
 
 ### 4.6 Sunrise before Wake time (Member display)
 
-**In Kiosk Satellite:** a sunrise alarm starts 10–30 minutes early: "a glow rises from deep red to warm white while the screen brightens from its lowest level to full, then the alarm rings on the last color" ([KS:docs/alarms.md#L67-L71](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/alarms.md#L67-L71), [#L112](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/alarms.md#L112)).
+**In Kiosk Satellite:** a sunrise alarm starts 10–30 minutes early: "a glow rises from deep red to warm white while the screen brightens from its lowest level to full, then the alarm rings on the last color" ([docs/alarms.md#L67-L71](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/alarms.md#L67-L71), [#L112](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/alarms.md#L112)).
 
-**GoCasa:** the planned Night screen is "amber until Wake time and green after it", optionally with an alarm (`GLOSSARY.md`; issues #107, #113). A sunrise ramp in the last minutes before Wake time is a natural option for that design:
+**GoCasa:** the planned Night screen is "amber until Wake time and green after it", optionally with an alarm (`GLOSSARY.md`; the behaviour is being decided in issue #112, "How a Member display behaves", under map #107). A sunrise ramp before Wake time is an option for #112:
 - **In the page:** a CSS colour and opacity ramp. The backlight stays where it is.
 - **With the Display app:** a real brightness ramp.
 
-Raise it when the Member display is specified, not before.
-
 ## 5. Low value, or later
 
-- **Devices list with remote settings.** Kiosk Satellite has a per-device web admin (port 2324) with settings, live screenshots and logs, plus leader/follower profiles ([KS:docs/remote-api.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/remote-api.md), [KS:docs/fleet.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/fleet.md)). GoCasa keeps device settings in cookies only (`internal/app/device.go`: `default_view`, `theme`, `wall_display`, `motion_wake`), so changing a tablet means walking to it with an Admin PIN. A server-side device registry would fix that, but gocasa-android #10 deliberately kept "no device registry or pairing". Revisit only if #3's "status back to GoCasa's admin pages" is taken up.
-- **Postpone the screensaver on motion.** Keeping the camera on between sessions resets the idle timer while someone reads ([KS:docs/screensavers.md#L402-L410](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L402-L410)). GoCasa runs the camera only on the screensaver and Dim clock. Running it on every page all day is a privacy cost the household should opt into separately. Low.
-- **Pixel shift.** This "periodically shifts on screen elements every minute to prevent image retention on OLED displays" ([KS:docs/screensavers.md#L22](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L22)). GoCasa's Dim clock sits still for hours. A few pixels of CSS drift a minute is tiny work and matters only on OLED panels.
-- **Stack landscape pairs on portrait screens** ([KS:docs/immich.md#L104-L108](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L104-L108)). GoCasa deals one shared deck of single photos and portrait Photo pairs for every Wall display (`docs/adr/0002-photo-rotation-is-its-own-module.md`). A portrait screen shows a pair's photos one after the other (`internal/app/rotation.go` `screensaverStep`). Stacking landscape pairs would need a deal per orientation. Low.
-- **Slideshow progress bar and tap-edges-to-step** ([KS:docs/immich.md#L29-L33](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L29-L33)). Small niceties. Tap-to-step conflicts with GoCasa's "any touch wakes".
-- **Daily forecast in the Week view** ([KS:docs/calendar.md#L62-L64](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/calendar.md#L62-L64)). GoCasa already syncs a 6-day forecast, so this is small. Low.
-- **Time-block schedule of screensaver modes**, each with its own brightness, screen-off timer and wake sources ([KS:docs/screensavers.md#L388-L400](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L388-L400)). GoCasa's single Night mode window covers the common "photos by day, dark at night" case. Low.
-- **Adaptive brightness curve** (four points against lux on a log scale, from the device sensor or an HA sensor; [KS:docs/screen.md#L22-L45](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screen.md#L22-L45)). Only a native app can set the backlight, so this is a later Display app feature (#3 lists "brightness control" as unspecified).
-- **Secure-context loopback proxy.** Kiosk Satellite serves a plain-http HA from `127.0.0.1:2325` inside the app so the page becomes a secure context and gets the microphone ([KS:app/lib/managers/proxy/proxy_manager.dart#L10-L30](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/proxy/proxy_manager.dart#L10-L30)). The same trick in the Display app would turn on GoCasa's *existing* Wake Lock and in-page motion-wake over plain http. But the Display app already chose native keep-awake and native camera (#4, #8), and the origin change resets the device's cookies. Keep it as a fallback idea only.
+- **Devices list with remote settings and profiles.** Kiosk Satellite has a per-device web admin (port 2324: settings, live screenshots, logs) and leader/follower *profiles* that push chosen settings categories to other kiosks ([docs/remote-api.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/remote-api.md), [docs/fleet.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/fleet.md)).
+  - GoCasa keeps device settings in cookies only (`internal/app/device.go`: `default_view`, `theme`, `wall_display`, `motion_wake`).
+  - The device-identity part is already proposed in `kiosk-dimming-and-motion-options.md` §5. New here are the profiles: one set of settings applied to many screens.
+  - gocasa-android #10 kept "no device registry or pairing". Revisit only if #3's "status back to GoCasa's admin pages" is taken up.
+- **Postpone the screensaver on motion.** This keeps the camera on between sessions, so the idle timer resets while someone reads ([docs/screensavers.md#L402-L410](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L402-L410)). GoCasa runs the camera only on the screensaver and Dim clock. A camera on all day is a privacy cost the household should opt into separately.
+- **Pixel shift.** It "Periodically shifts on screen elements every minute to prevent image retention on OLED displays" ([docs/screensavers.md#L22](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L22)). GoCasa's Dim clock sits still for hours, and a few pixels of CSS drift is tiny work. It matters only on OLED.
+- **Landscape pairs on portrait screens** ([docs/immich.md#L104-L108](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L104-L108)). GoCasa deals one shared deck of single photos and portrait Photo pairs for every Wall display (`docs/adr/0002-photo-rotation-is-its-own-module.md`). A portrait screen shows a pair one photo after the other (`internal/app/rotation.go` `screensaverStep`). Stacking landscape pairs would need a deal per orientation.
+- **Slideshow progress bar and tap-edges-to-step** ([docs/immich.md#L29-L33](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/immich.md#L29-L33)). Tap-to-step conflicts with GoCasa's "any touch wakes".
+- **Daily forecast in the Week view** ([docs/calendar.md#L62-L64](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/calendar.md#L62-L64)). GoCasa caches today plus 5 days (`internal/app/weather.go`, `forecast_days` 6). A Week view can show any week (`internal/app/calendar.go`), so only days in the cache would get weather, unless the cache grows to 7 or more days.
+- **Per-block screensaver schedule.** Each time block gets its own mode, brightness, screen-off timer and per-block *wake overrides* (motion on at night and off by day, for example) ([docs/screensavers.md#L388-L400](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L388-L400)).
+  - The schedule-owner idea is already in `kiosk-dimming-and-motion-options.md` §5. The new part is per-block wake rules.
+  - GoCasa's single Night mode window covers "photos by day, dark at night".
+- **Adaptive brightness curve.** Four points against lux "on a log scale, because the eye judges light that way", from the device's sensor or an HA sensor ([docs/screen.md#L22-L48](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screen.md#L22-L48)). Only a native app can set the backlight, so this is a later Display app feature (#3 lists "brightness control" as unspecified).
+- **Secure-context loopback proxy.** Kiosk Satellite serves a plain-http HA from `127.0.0.1:2325` inside the app, so the page becomes a secure context and gets the microphone ([proxy_manager.dart#L10-L30](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/proxy/proxy_manager.dart#L10-L30)).
+  - In the Display app it would turn on GoCasa's *existing* Wake Lock and in-page camera wake over plain http.
+  - But the Display app already chose native keep-awake and a native camera (#4, #8), and the origin change resets the device's cookies (Kiosk Satellite warns of the same "one-time re-login").
 
 ## 6. Not a fit
 
 | Kiosk Satellite feature | Why not for GoCasa |
 |---|---|
-| Voice Satellite, wake words, Voice Match, Ground Control, intercom, TTS | Native audio and ML on the device plus HA Assist; far outside a calendar dashboard and the browser client |
-| Music (Sendspin, AirPlay, DLNA, Music Library, Now Playing) | Not GoCasa's domain |
-| RTSP/ONVIF camera streaming, camera views, Bluetooth proxy | Turns the tablet camera into a network camera, the opposite of GoCasa's "frames never leave the page" |
-| Face, hand-gesture and person detection | Needs on-device ML models (ONNX) or special hardware; motion is enough for wake, and §3.1 makes it better |
-| Plugin Manager | Spec §2 non-goal: "Plugin system — integrations are compiled in" |
-| "Pause dashboard during screensaver" ([KS:docs/optimizations.md#L20-L54](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/optimizations.md#L20-L54)) | Already true by design: GoCasa's screensaver is its own page, so nothing renders behind it |
-| Keep HA connected, filter dashboard updates | HA-frontend specific |
-| At a Glance (HA entity states on the screensaver) | Needs a live HA connection from the page; GoCasa's screensaver already shows its own agenda and weather |
-| Calendar view of HA calendars | GoCasa's calendar already does more: Member lanes, diagonal stripes for shared events (`internal/web/calendar.templ` `eventFill`), Edit scopes |
-| Remote admin live screenshots and logs | Belong to a native app on the device, not a server-rendered page |
-| Analytics (on by default) | GoCasa promises no telemetry |
+| Voice Satellite, wake words, Voice Match, intercom ([docs/voice-satellite.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/voice-satellite.md), [docs/intercom.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/intercom.md)) | Native audio and ML on the device plus HA Assist; far outside a calendar dashboard and a browser client |
+| Music: Sendspin, AirPlay, DLNA, Music Library ([docs/sendspin.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/sendspin.md), [docs/dlna.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/dlna.md)) | Not GoCasa's domain |
+| RTSP/ONVIF streaming of the tablet camera ([docs/camera.md#L104](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/camera.md#L104)) | Turns the tablet into a network camera, the opposite of GoCasa's "frames never leave the page" |
+| Camera views of other cameras ([docs/cameras.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/cameras.md)) | A home-security feature from HA or Go2RTC; GoCasa has no camera integration and the spec lists none |
+| Bluetooth proxy ([docs/esphome.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/esphome.md)) | Relays BLE adverts to HA over ESPHome; native-only and HA-only |
+| Face, hand-gesture and person detection ([docs/screensavers.md#L418](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/screensavers.md#L418), [docs/gestures.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/gestures.md)) | Needs on-device ML models or special hardware; motion is enough for wake, and §3.1 makes it better |
+| Plugin Manager ([docs/plugins.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/plugins.md)) | Spec §2 non-goal: "Plugin system — integrations are compiled in" |
+| "Pause dashboard during screensaver" ([docs/optimizations.md#L20-L54](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/optimizations.md#L20-L54)) | Already true by design: GoCasa's screensaver is its own page, so nothing renders behind it |
+| Keep HA connected, filter dashboard updates ([docs/optimizations.md#L14-L18](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/optimizations.md#L14-L18), [#L64](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/optimizations.md#L64)) | HA-frontend specific |
+| At a Glance, HA entity states on the screensaver ([docs/at-a-glance.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/at-a-glance.md)) | Needs a live HA connection from the page; GoCasa's screensaver already shows its own agenda and weather |
+| Calendar view of HA calendars ([docs/calendar.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/calendar.md)) | GoCasa's calendar already does more: Member lanes, diagonal stripes for shared events (`internal/web/calendar.templ` `eventFill`), Edit scopes |
+| Remote admin live screenshots and logs ([docs/remote-api.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/remote-api.md)) | Belong to a native app on the device, not a server-rendered page |
+| Analytics on by default ([docs/analytics.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/analytics.md)) | GoCasa promises no telemetry |
 
 ## 7. Not verified
 
-- That GoCasa's fixed-threshold motion-wake actually false-wakes on photo crossfades, or misses people in a dark room, on a real tablet (§3.1 is an inference from the code).
-- That a reload or navigation during a GoCasa restart leaves a browser-based Wall display stuck on a 502 page (§3.2 is an inference; Kiosk Satellite's comment describes the same thing in WebView).
-- Whether Immich's metadata search can return face boxes inline, so face-aware crops could skip a per-asset `GET /api/faces` (§3.3).
-- That Kiosk Satellite works as a GoCasa shell end to end: a GoCasa URL as a Custom Page, cookies sticking, SSE through the WebView, and `screenOff()` from a non-HA origin. Read from its docs and setup code only; not installed (the brief says not to run it).
-- Kiosk Satellite's claims about its own behaviour on devices (silent updates on Android 12+, power numbers in `optimizations.md`) are the vendor's own measurements.
+- That GoCasa's fixed-threshold motion-wake false-wakes on crossfades or misses people in a dark room, and that §3.1 fixes it, on a real tablet.
+- That an automatic reload during a GoCasa restart leaves a browser-based Wall display stuck on a 502 page (§3.3 is an inference; Kiosk Satellite's comment describes the same thing in a WebView).
+- Whether Immich's metadata search can return face boxes inline (§3.2).
+- That Kiosk Satellite works as a GoCasa shell end to end, and what keeps or wakes the page with the panel off (§4.2). Read from its docs and code only; not installed (the brief says not to run it).
+- Kiosk Satellite's claims about its own behaviour on devices (silent updates on Android 12+, power numbers in `optimizations.md`) are the vendor's own.
 
 ## Sources
 
-Kiosk Satellite at `d78aac9` (all `https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/…`):
+Kiosk Satellite at `d78aac9` (`https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/…`):
 - `README.md`, `LICENSE`, `PLUGIN-EXCEPTION.md`
-- `docs/screensavers.md`, `docs/immich.md`, `docs/calendar.md`, `docs/js-api.md`, `docs/custom-pages.md`, `docs/updates.md`, `docs/alarms.md`, `docs/screen.md`, `docs/optimizations.md`, `docs/remote-api.md`, `docs/fleet.md`, `docs/analytics.md`
+- `docs/`: `screensavers.md`, `immich.md`, `calendar.md`, `js-api.md`, `custom-pages.md`, `updates.md`, `alarms.md`, `screen.md`, `optimizations.md`, `remote-api.md`, `fleet.md`, `analytics.md`, `camera.md`, `cameras.md`, `esphome.md`, `gestures.md`, `plugins.md`, `voice-satellite.md`, `intercom.md`, `sendspin.md`, `dlna.md`, `at-a-glance.md`
 - `app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/CameraMotion.kt`, `HomeFuse.kt`; `app/android/app/src/main/AndroidManifest.xml`
-- `app/lib/managers/motion/motion_manager.dart`, `app/lib/managers/browser/browser_manager.dart`, `app/lib/managers/screensaver/immich_manager.dart`, `app/lib/ui/photo_frames.dart`, `app/lib/managers/js_api/user_script.dart`, `app/lib/managers/proxy/proxy_manager.dart`, `app/lib/managers/settings/definitions.dart`, `app/lib/ui/setup_screen.dart`
+- `app/lib/managers/motion/motion_manager.dart`, `app/lib/managers/browser/browser_manager.dart`, `app/lib/ui/kiosk_screen.dart`, `app/lib/managers/screensaver/immich_manager.dart`, `app/lib/ui/photo_frames.dart`, `app/lib/managers/js_api/user_script.dart`, `app/lib/managers/proxy/proxy_manager.dart`, `app/lib/managers/settings/definitions.dart`, `app/lib/ui/setup_screen.dart`
 
-GoCasa (this repo, `90daff5`): `README.md`, `GLOSSARY.md`, `docs/skylite-go-spec.md`, `docs/adr/0002-photo-rotation-is-its-own-module.md`, `internal/web/screensaver.templ`, `internal/web/calendar.templ`, `internal/app/immich.go`, `internal/app/rotation.go`, `internal/app/device.go`, issues #107 and #113.
+GoCasa (this repo, `90daff5`): `README.md`, `GLOSSARY.md`, `docs/skylite-go-spec.md`, `docs/adr/0002-photo-rotation-is-its-own-module.md`, `internal/web/screensaver.templ`, `internal/web/calendar.templ`, `internal/app/immich.go`, `internal/app/rotation.go`, `internal/app/device.go`, `internal/app/weather.go`, `internal/app/calendar.go`, `internal/app/app.go`, issues #107, #112 and #113.
 
 gocasa-android: issues [#3](https://github.com/DeRusto/gocasa-android/issues/3), [#4](https://github.com/DeRusto/gocasa-android/issues/4), [#8](https://github.com/DeRusto/gocasa-android/issues/8), [#10](https://github.com/DeRusto/gocasa-android/issues/10), [#11](https://github.com/DeRusto/gocasa-android/issues/11), [#13](https://github.com/DeRusto/gocasa-android/issues/13).
