@@ -6,17 +6,17 @@ Every claim about GoCasa cites a file. Every review is quoted from the spreadshe
 
 ## Short answer
 
-- **The spreadsheet undersold GoCasa.** It judged coverage from the README alone. In the code, GoCasa already has most of what these owners pay a subscription for, or complain is missing: event locations, split colours for multi-Member events, a "+" on every day, editing Google events with Members on them, sync status in Settings and on the calendar, dark mode, and an Immich screensaver with Memories. **50 of 117 reviews (43%) are already solved, and 8 more partly.** Those are README selling points, not roadmap items.
+- **The spreadsheet undersold GoCasa.** It judged coverage from the README alone. In the code, GoCasa already has most of what these owners pay a subscription for, or complain is missing: event locations, split colours for multi-Member events, a "+" on every day, editing Google events with Members on them, sync status in Settings and on the calendar, dark mode, and an Immich screensaver with Memories. **48 of 117 reviews (41%) are already solved, and 8 more partly.** Those are README selling points, not roadmap items.
 - **Its top two gaps were inflated.** "Calendar sync & reliability" (16) held only 6 real sync complaints with other calendars. Two of them name iPhone or Apple, and GoCasa's two-way Google sync covers part of two more. The rest were app crashes, Wi-Fi, a photo-upload crash and shopping-list drift. "Calendar entry & navigation" (15) is almost entirely solved.
 - **The real gaps, ranked by how strong the evidence is and how well each fits GoCasa:**
   1. **Event reminders** (7 reviews across 3 products, 4 of them asking for several alerts or custom ones per event; plus 1 asking to be told when an event changes). No nagging. Showing them on the wall: **small–medium**. Sending them to phones is a new scope decision: the spec allows "in-app display only" in v1.
-  2. **Phone access: an installable web app** (8 widget reviews, 4 of them about calendar widgets). Plus telling people that `/calendar.ics` already feeds the phone's own calendar widget. **Small**, but it needs HTTPS.
-  3. **Meal plans read from Mealie** (8 meal reviews, about 3 that a read-only view answers directly; plus 2 self-hosted sources). Show tonight's dinner and the week's meals, and keep planning in Mealie. **Medium.**
+  2. **Phone access: an installable web app** (8 reviews that mainly want a widget, 3 more that mention one; 4 of the 8 about calendar widgets. No review asks to install a web app: that is my nearest web answer). Plus telling people that `/calendar.ics` already feeds the phone's own calendar widget. **Small**, but it needs HTTPS.
+  3. **Meal plans read from Mealie** (8 meal reviews, but only 1 that a read-only view answers directly and 2 next to it; plus 2 self-hosted sources). Show tonight's dinner and the week's meals, and keep planning in Mealie. **Medium.**
   4. **Event search** (4 reviews, all Hearth). **Small.**
   5. **Two-way Apple/iCloud sync** over CalDAV (2 reviews that name Apple or iPhone, plus 2 broader sync reviews and 1 iOS setup ask). The spec already names it a "Phase 6 candidate". **Large.**
   6. **Show event locations** in the views, not only in the edit form. **Tiny.** It also makes an existing feature visible.
   7. **Stopping children from completing a sibling's chores** (1 direct review) and **an on-screen note** (2 reviews). Thin evidence, and each runs into a domain rule that needs deciding first.
-- **Don't pursue:** voice assistants, AI import, a grocery-store API, budgeting, video messages. They are thin and break the "no cloud" rule. Sub-tasks are already being designed as Routines (#109).
+- **Don't pursue:** voice assistants, AI import, a grocery-store API, budgeting, video messages. They are thin and break the "no cloud" rule. Also not ranked: steps inside one chore (1 review) and videos on the screensaver (1 review).
 - **The sample can't support ranking by raw counts.** It was chosen by hand, it is mostly about the companion phone apps rather than the displays, and the self-hosted evidence is three sources. Treat these counts as signals, not market share.
 
 ---
@@ -69,11 +69,11 @@ One primary theme per review. Counts are within this sample only.
 | Calendar entry, editing and navigation | 10 | | 10 | | | **Selling point** (§5) |
 | Vendor bugs, crashes, Wi-Fi, hardware | 9 | | | | 9 | n/a |
 | Meal planning and recipes | 9 | 8 | | | 1 | **Gap** (§4.3) |
-| Reminders wanted | 8 | 8 | | | | **Gap** (§4.1) |
+| Reminders and change alerts | 8 | 8 | | | | **Gap** (§4.1): 7 reminders, 1 change alert |
 | Accounts, logins, setup and privacy | 8 | | 3 | | 5 | Mostly n/a. No logins for the family is a selling point |
-| Chores, routines and child access | 6 | 2 | 2 | 2 | | Mixed. Child lock **gap** (§4.7), Routines tracked (#109) |
-| Display look and customisation | 6 | | 4 | 1 | 1 | **Selling point** (dark mode, default view, holiday feeds, any orientation) |
-| Photos and screensaver | 6 | | 4 | 2 | | **Selling point**. No video |
+| Chores, routines and child access | 6 | 2 | 1 | 2 | 1 | Mixed. Sibling-chore guard **gap** (§4.7); steps inside a chore: gap, not ranked (§6) |
+| Display look and customisation | 6 | | 3 | 2 | 1 | **Selling point** (dark mode, default view, holiday feeds, any orientation) |
+| Photos and screensaver | 6 | 1 | 4 | 1 | | **Selling point**. No video (gap, not ranked) |
 | Two-way sync with other calendars | 6 | 3 | | 3 | | Google: covered. Apple/iCloud and other providers: **gap** (§4.5) |
 | Voice, AI and automation entry | 5 | 5 | | | | Gap, **poor fit** (§6) |
 | Shopping-list drift (vendor bug) | 3 | | | | 3 | n/a. Mirrored lists treat Mealie as the source of truth |
@@ -83,7 +83,7 @@ One primary theme per review. Counts are within this sample only.
 | Event search | 2 | 2 | | | | **Gap** (§4.4). 4 reviews counting secondary asks |
 | Out of scope (budgeting, store APIs) | 2 | | | | 2 | n/a |
 | On-screen note | 1 | 1 | | | | **Gap** (§4.8). 2 reviews counting secondary asks |
-| **Total** | **117** | **37** | **50** | **8** | **22** | |
+| **Total** | **117** | **38** | **48** | **8** | **23** | |
 
 **How this differs from the spreadsheet's 16 "Calendar sync & reliability" rows:**
 - 6 are real sync complaints with other calendars: R35, R40, R44, R59, R84, R113.
@@ -95,8 +95,8 @@ One primary theme per review. Counts are within this sample only.
 | # | Gap | Evidence | GoCasa today | Effort | Fit |
 |---|---|---|---|---|---|
 | 1 | Event reminders, several per event, no nagging | 7 reminder reviews + 1 change alert, 3 products; 4 ask for several or custom alerts | None. Spec: "in-app display only in v1" | Wall: small–medium. Phones: medium–large | Wall: high. Phone push: needs a scope decision |
-| 2 | Install on a phone, widget path | 8 widget reviews, 3 products (4 about calendar widgets); 5 more already solved | Responsive pages, `/calendar.ics`; no web manifest | Small (needs HTTPS) | High |
-| 3 | Meal plan from Mealie on Today and the screensaver | 8 meal reviews, 3 products, ~3 answered directly; 2 self-hosted sources | Mealie shopping lists only | Medium | High |
+| 2 | Install on a phone, widget path | 8 widget reviews + 3 secondary mentions, 3 products (4 about calendar widgets); install itself is my inference | Responsive pages, `/calendar.ics`; no web manifest | Small (needs HTTPS) | High |
+| 3 | Meal plan from Mealie on Today and the screensaver | 8 meal reviews, 3 products, 1 answered directly, 2 adjacent; 2 self-hosted sources | Mealie shopping lists only | Medium | High |
 | 4 | Event search | 2 primary + 2 secondary, Hearth only | None | Small | High |
 | 5 | Two-way Apple/iCloud (CalDAV) | 2 name Apple/iPhone; 2 broader; 1 iOS setup ask | iCal read-only in, ICS out | Large | High (pure-Go library exists) |
 | 6 | Show location in the views | 3 asks for a feature that exists but can't be seen | Stored, synced, not displayed | Tiny | High |
@@ -137,17 +137,17 @@ One primary theme per review. Counts are within this sample only.
 
 ### 4.2 Phone access: an installable web app, quick add and a widget path
 
-**Evidence** (8 gap reviews, 3 products. 4 want a *calendar* widget (R1, R51, R81, R91); R47, R55 and R109 want calendar and tasks or the day; R13 wants a *task* widget, which nothing here answers):
+**Evidence** (8 gap reviews, 3 products. 4 want a *calendar* widget (R1, R51, R81, R91); R47, R55 and R109 want calendar and tasks or the day; R13 wants a *task* widget, which nothing here answers. 3 more reviews filed under other themes also mention widgets: R42, R49, R53. None asks to install a web app; that is my inference of the nearest thing a web app can do):
 - "The app needs a phone widget option to be able to look at the family calendar at a glance" ([Kailey Taylor, Skylight, 2025-03-24][sky-play])
 - "please provide a widget that gives you a weekly view" ([JordanMarieT, Hearth, 2025-11-04][hearth])
 - "Would love a widget option for a quick overview of the day without needing to open the app!" ([brandeella, Hearth, 2025-08-22][hearth])
 - "the iOS widget only shows 3 events at a time, which defeats the point." ([LaNinaSopresa, Cozyla, 2026-10-17][cozyla])
 - "Needs to have an Apple widget calendar for full functionality. Ideally would like to replace my apple calendar with cozyla" ([kt0299, Cozyla, 2026-08-27][cozyla])
 
-5 more reviews in this theme are **already solved**: they ask for laptop or browser access, which GoCasa *is*.
+5 more reviews in this theme are **already solved**: 3 ask for laptop or browser access, which GoCasa *is*, and 2 (R112, R114) for to-do and shopping lists the phone app hides, which every GoCasa page shows in any browser.
 - "I really wish I could access with my laptop to add things" ([SDugGale10, Hearth, 2026-10-16][hearth])
 - "we need the ability to be able to add from a web browser would make bulk adding and planning much better." ([NoNamesAvailiable1470, Cozyla, 2026-08-09][cozyla])
-- Also R88, R112 and R114 in the appendix.
+- Also R88 in the appendix.
 
 **GoCasa today:**
 - Every page is a responsive web page. The calendar header packs into one scrolling row on phones (`internal/web/calendar.templ`, the `max-[759px]` classes).
@@ -164,7 +164,7 @@ One primary theme per review. Counts are within this sample only.
 
 ### 4.3 Meal plans read from Mealie
 
-**Evidence** (8 gap reviews, 3 products; plus self-hosted asks). A read-only meal view answers R107 (calendar and meals hard to cross-reference) and R65 (meal planning tied to the lists), and partly R58 (go-to meals to choose from). The rest (R5, R61, planning then listing; R33, recipe categories; R90, dragging meals; R102, importing recipes) are planning and recipe work that would stay in Mealie. *Unverified* here how well Mealie itself does each.
+**Evidence** (8 gap reviews, 3 products; plus self-hosted asks). A read-only meal view answers only R107 (calendar and meals hard to cross-reference) directly. R65 (integrate meal planning and grocery lists) and R58 (an archive of go-to meals to choose from while planning) sit next to it but are planning asks. The rest (R5, R61, planning then listing; R33, recipe categories; R90, dragging meals; R102, importing recipes) are planning and recipe work that would stay in Mealie. *Unverified* here how well Mealie itself does each.
 - "It's tedious to use another app to plan my weekly menu and then add each grocery item individually to Hearth's list." ([aelbery, Hearth, 2025-08-11][hearth])
 - "I wish there was a way to have an archive of your go-to meals and their corresponding recipes that you can look through and choose from when planning." ([ridelbi, Hearth, 2025-08-16][hearth])
 - "I would like to be able to swap meals between dates on the calendar just by dragging them around." ([mascma, Cozyla, 2026-08-30][cozyla])
@@ -278,17 +278,17 @@ These are things paying owners complain about or wish for, and GoCasa already do
 | Laptop and browser access (5) | It is a web app; any browser on the LAN (server-rendered pages, `internal/web/*.templ`; phone layout in `internal/web/calendar.templ`) | "the web app is essentially obsolete" ([SDugGale10, Hearth, 2026-10-16][hearth]) |
 | Tap a day to add; edit events; months ahead; week view; event order (10) | "+" per day; full edit; Prev/Next by date; month/week/day/agenda; events sorted by time (`internal/app/events.go`, `slices.SortFunc`) | "the ability to tap a day to add an event for that day has been removed." ([RayO3D, Skylight, 2026-06-25][sky-ios]) |
 | One event for several kids, split colours (3) | Many Members per event, striped in each colour (`internal/web/calendar.templ` `eventFill`) | "when you put multiple people in an event that the event would split the colors … Instead, it turns gray." ([MAdramma, Cozyla, 2026-07-21][cozyla]) |
-| Edit synced events, assign them to people (2, partly: Google only) | Google edits write back (`internal/app/google_write.go`); Members on any Google event (`internal/app/event_members.go`) | "you can't edit any of the events you sync from different calendars" ([Finks_02, Hearth, 2025-08-14][hearth]) |
+| Edit synced events and assign people (R59), add events to a linked calendar (R113); partly: Google only | Google edits write back (`internal/app/google_write.go`); Members on any Google event (`internal/app/event_members.go`) | "you can't edit any of the events you sync from different calendars" ([Finks_02, Hearth, 2025-08-14][hearth]) |
 | Event location (3) | Stored and synced (§4.6) | see §4.6 |
 | Rotating screensaver, more photos, daily memories (4) | Immich albums, people and Memories (`internal/app/immich.go`), or a folder (`internal/app/fallback.go`); no-repeat shuffle (`internal/app/rotation.go`) | "we just wish the screensaver had an option to stream daily memories instead of starting at the first picture every time." ([Cozyla user, 2026-08-27][cozyla]) |
-| Dark mode, default view, landscape, holidays (4 + 1 partly) | Per-device theme and Default view (`POST /device/theme`, `POST /device/default-view` in `internal/app/app.go`); responsive layout for any orientation; holiday or birthday calendars as iCal feeds (`internal/app/ical.go`) or yearly events (`EventForm.Repeat` in `internal/web/calendar.templ`). Not: filling a date with a colour (R50) | "my eyes are begging for a dark mode option." ([ThatParksGuy, Cozyla, 2026-06-29][cozyla]) |
+| Dark mode, default view, landscape, holidays (3 + 2 partly) | Per-device theme and Default view (`POST /device/theme`, `POST /device/default-view` in `internal/app/app.go`); a responsive layout that switches at 760 px wide rather than on orientation (the `min-[760px]` classes in `internal/web/today.templ` and `internal/web/calendar.templ`); holiday or birthday calendars as iCal feeds (`internal/app/ical.go`) or yearly events (`EventForm.Repeat` in `internal/web/calendar.templ`). Not: filling a date with a colour (R50), holidays listed automatically, or colours by event type rather than by Member or calendar (R79, `eventFill` in `internal/web/calendar.templ`) | "my eyes are begging for a dark mode option." ([ThatParksGuy, Cozyla, 2026-06-29][cozyla]) |
 | Marketing pushes, forced update pop-ups (2) | No notification code anywhere in `internal/`; no telemetry (README) | see §4.1 |
-| Separate logins, deleting profiles, forced photo-library access (3) | No family logins; Admins delete or archive Members (`POST /settings/members/{id}/delete`); no phone app asking for permissions | "the fact I need to contact support to delete a profile is burdensome." ([rbe2, Hearth, 2025-11-03][hearth]) |
-| "Up for grabs" chores; household maintenance without a person; ticking off yesterday's (3) | Anyone chores; to-do columns per room with repeats; Late Rounds claimable until the next Round ends (`GLOSSARY.md` **Late**) | "options for all general maintenance things around the home … without having to create a 'person' to assign it to." ([SkitzyOne1, Cozyla, 2026-08-05][cozyla]) |
+| Separate logins, deleting profiles, forced photo-library access (3) | No family logins; Admins delete or archive Members (`POST /settings/members/{id}/delete` in `internal/app/app.go`); no phone app asking for permissions | "the fact I need to contact support to delete a profile is burdensome." ([rbe2, Hearth, 2025-11-03][hearth]) |
+| "Up for grabs" chores; household maintenance without a person; ticking off yesterday's (1 + 2 partly) | Anyone chores (`GLOSSARY.md` **Anyone chore**). Partly: maintenance as Recurring to-dos in a per-room column, since every Chore needs a person assigned (`internal/app/chores.go` `choreForm`); yesterday's Round stays claimable until the next Round ends (`GLOSSARY.md` **Late**), older ones need an Adjustment | "options for all general maintenance things around the home … without having to create a 'person' to assign it to." ([SkitzyOne1, Cozyla, 2026-08-05][cozyla]) |
 | Silent sync failures (no review in this sample asks directly) | "Sync failing (N in a row)" in Settings (`internal/web/settings.templ` `syncStatus`); stale banner on the calendar (`internal/web/calendar.templ` `StaleCalendar`) | — |
 
-Partly solved:
-- The screensaver shows **images only**, no videos ([JBL Listener, Skylight, 2026-08-20][sky-ios]).
+Partly solved, or not done:
+- The screensaver shows **images only**, no videos (R24, [JBL Listener, Skylight, 2026-08-20][sky-ios]): a gap, not ranked (§6).
 - Photos show on the screensaver, not behind the calendar ([OreoMME, Cozyla, 2026-08-10][cozyla]).
 
 ## 6. Not applicable, or not worth pursuing
@@ -299,7 +299,9 @@ Partly solved:
   - *Inference, untested:* GoCasa's CSRF guard (`http.NewCrossOriginProtection`, `internal/app/app.go`) lets through requests that carry no browser headers. So an iOS Shortcut posting the `note` form field to `POST /lists/{id}/items` might already add a list item. That is undocumented and unsupported.
   - A documented JSON API is already planned in the spec's route table (`/api/*`, §8). That is the right home for automation if it's ever wanted.
 - **Budgeting, grocery-store cart APIs, video messages for kids** (3). Outside a family calendar, or cloud-bound.
-- **Sub-tasks and routines** ([JustVerasThoughtsAndOpinions, Skylight, 2026-09-21][sky-ios]). Already being designed: Routines order daily Each chores under Morning, Afternoon and Evening (#109, #107; `GLOSSARY.md` **Routine**). Steps inside one chore were not chosen there.
+- **Steps inside one chore** ([JustVerasThoughtsAndOpinions, Skylight, 2026-09-21][sky-ios]): a gap on one review, not ranked. The planned Routines are different: they order whole daily Each chores under Morning, Afternoon and Evening (#109, #107; `GLOSSARY.md` **Routine**), with no steps inside a chore.
+- **Videos on the screensaver** (R24): a gap on one review, not ranked. Immich photos are fetched as images only (`docs/skylite-go-spec.md` §10, `type:{eq:"IMAGE"}`).
+- **Freezing the whole screen** (R106): not something a web page can do; remote device control is in `docs/research/kiosk-satellite.md` §5.
 - **Remote control of the display from a phone; motion wake; face crops; display recovery.** Covered in `docs/research/kiosk-satellite.md`.
 
 ## 7. Open questions
@@ -340,7 +342,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R1 | Skylight Calendar | [Kailey Taylor][sky-play], 2025-03-24 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
 | R2 | Skylight Calendar | [Tori Christensen][sky-play], 2025-06-07 | Chores, routines & child access | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R3 | Skylight Calendar | [Larron See][sky-play], 2026-11-19 | Event details & location | Out of scope (budgeting, store APIs) | n/a |
-| R4 | Skylight Calendar | [Jenkins330][sky-ios], 2026-10-19 | Notifications & reminders | Reminders wanted | gap |
+| R4 | Skylight Calendar | [Jenkins330][sky-ios], 2026-10-19 | Notifications & reminders | Reminders and change alerts | gap |
 | R5 | Skylight Calendar | [novafang][sky-ios], 2026-10-18 | Meals, recipes & shopping | Meal planning and recipes | gap |
 | R6 | Skylight Calendar | [SDAM1326][sky-ios], 2026-10-12 | Subscription & paywalls | Subscriptions and paywalls | solved |
 | R7 | Skylight Calendar | [anthonyb176][sky-ios], 2026-10-11 | Account, setup & support | Accounts, logins, setup and privacy | n/a |
@@ -350,9 +352,9 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R11 | Skylight Calendar | [Phb9][sky-ios], 2026-09-27 | Integrations & automation | Voice, AI and automation entry | gap |
 | R12 | Skylight Calendar | [Diiulloodles][sky-ios], 2026-09-25 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
 | R13 | Skylight Calendar | [Gamegirl1775][sky-ios], 2026-09-21 | Chores, routines & child access | Phone, laptop and widget access | gap |
-| R14 | Skylight Calendar | [JustVerasThoughtsAndOpinions][sky-ios], 2026-09-21 | Chores, routines & child access | Chores, routines and child access | partly |
+| R14 | Skylight Calendar | [JustVerasThoughtsAndOpinions][sky-ios], 2026-09-21 | Chores, routines & child access | Chores, routines and child access | gap |
 | R15 | Skylight Calendar | [hughouse][sky-ios], 2026-09-20 | Calendar entry & navigation | Display look and customisation | n/a |
-| R16 | Skylight Calendar | [Lace Atkinson][sky-ios], 2026-09-08 | Notifications & reminders | Reminders wanted | gap |
+| R16 | Skylight Calendar | [Lace Atkinson][sky-ios], 2026-09-08 | Notifications & reminders | Reminders and change alerts | gap |
 | R17 | Skylight Calendar | [Purpl3keys][sky-ios], 2026-09-07 | Calendar sync & reliability | Shopping-list drift (vendor bug) | n/a |
 | R18 | Skylight Calendar | [AppleseedMom][sky-ios], 2026-09-07 | Account, setup & support | Subscriptions and paywalls | solved |
 | R19 | Skylight Calendar | [shellyrae][sky-ios], 2026-08-30 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
@@ -360,15 +362,15 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R21 | Skylight Calendar | [margritz2000][sky-ios], 2026-08-24 | Chores, routines & child access | Chores, routines and child access | solved |
 | R22 | Skylight Calendar | [Euodia][sky-ios], 2026-08-24 | Photo/media limits | Photos and screensaver | solved |
 | R23 | Skylight Calendar | [Nocalmom7][sky-ios], 2026-08-21 | Subscription & paywalls | Subscriptions and paywalls | solved |
-| R24 | Skylight Calendar | [JBL Listener][sky-ios], 2026-08-20 | Photo/media limits | Photos and screensaver | partly |
-| R25 | Skylight Calendar | [KaylaTVan][sky-ios], 2026-08-08 | Notifications & reminders | Reminders wanted | gap |
-| R26 | Skylight Calendar | [JJMatt82][sky-ios], 2026-08-07 | Notifications & reminders | Reminders wanted | gap |
+| R24 | Skylight Calendar | [JBL Listener][sky-ios], 2026-08-20 | Photo/media limits | Photos and screensaver | gap |
+| R25 | Skylight Calendar | [KaylaTVan][sky-ios], 2026-08-08 | Notifications & reminders | Reminders and change alerts | gap |
+| R26 | Skylight Calendar | [JJMatt82][sky-ios], 2026-08-07 | Notifications & reminders | Reminders and change alerts | gap |
 | R27 | Skylight Calendar | [Maxwellh][sky-ios], 2026-08-06 | Subscription & paywalls | Subscriptions and paywalls | solved |
 | R28 | Skylight Calendar | [prettyflyforanappguy][sky-ios], 2026-08-06 | Calendar sync & reliability | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R29 | Skylight Calendar | [Mogan Toban][sky-ios], 2026-07-30 | Calendar sync & reliability | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R30 | Skylight Calendar | [yonatan_E][sky-ios], 2026-07-28 | Notifications & reminders | Unwanted notifications and pop-ups | solved |
 | R31 | Skylight Calendar | [jphotog][sky-ios], 2026-07-27 | Privacy & local access | Accounts, logins, setup and privacy | solved |
-| R32 | Skylight Calendar | [Jcarlson12][sky-ios], 2026-07-25 | Notifications & reminders | Reminders wanted | gap |
+| R32 | Skylight Calendar | [Jcarlson12][sky-ios], 2026-07-25 | Notifications & reminders | Reminders and change alerts | gap |
 | R33 | Skylight Calendar | [C.Stefanick][sky-ios], 2026-07-07 | Meals, recipes & shopping | Meal planning and recipes | gap |
 | R34 | Skylight Calendar | [Easymac106][sky-ios], 2026-07-06 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
 | R35 | Skylight Calendar | [2347CAnnaC][sky-ios], 2026-07-05 | Calendar sync & reliability | Two-way sync with other calendars | gap |
@@ -384,7 +386,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R45 | Hearth Display | [Socially_ari][hearth], 2026-06-24 | Account, setup & support | Accounts, logins, setup and privacy | n/a |
 | R46 | Hearth Display | [JBbur25][hearth], 2026-06-17 | Subscription & paywalls | Subscriptions and paywalls | solved |
 | R47 | Hearth Display | [katroot09][hearth], 2026-05-17 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
-| R48 | Hearth Display | [Potatospam7][hearth], 2026-03-05 | Notifications & reminders | Reminders wanted | gap |
+| R48 | Hearth Display | [Potatospam7][hearth], 2026-03-05 | Notifications & reminders | Reminders and change alerts | gap |
 | R49 | Hearth Display | [CL0V3][hearth], 2026-02-04 | Integrations & automation | Voice, AI and automation entry | gap |
 | R50 | Hearth Display | [hubby415][hearth], 2025-11-16 | Display customization & accessibility | Display look and customisation | partly |
 | R51 | Hearth Display | [JordanMarieT][hearth], 2025-11-04 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
@@ -398,7 +400,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R59 | Hearth Display | [Finks_02][hearth], 2025-08-14 | Calendar sync & reliability | Two-way sync with other calendars | partly |
 | R60 | Hearth Display | [Stephen_C82][hearth], 2025-08-14 | Display customization & accessibility | Photos and screensaver | solved |
 | R61 | Hearth Display | [aelbery][hearth], 2025-08-11 | Meals, recipes & shopping | Meal planning and recipes | gap |
-| R62 | Hearth Display | [Addicted2dci][hearth], 2025-08-11 | Meals, recipes & shopping | Reminders wanted | gap |
+| R62 | Hearth Display | [Addicted2dci][hearth], 2025-08-11 | Meals, recipes & shopping | Reminders and change alerts | gap |
 | R63 | Hearth Display | [figutspiner1000][hearth], 2025-08-10 | Display customization & accessibility | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R64 | Hearth Display | [Mouse Griswold][hearth], 2025-08-10 | Calendar entry & navigation | Event search | gap |
 | R65 | Hearth Display | [Disco_Pierre][hearth], 2025-08-08 | Meals, recipes & shopping | Meal planning and recipes | gap |
@@ -415,7 +417,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R76 | Hearth Display | [Raclark][hearth], 2024-07-27 | Event details & location | Event location | solved |
 | R77 | Hearth Display | [Lyzzy B][hearth], 2024-07-18 | Calendar sync & reliability | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R78 | Hearth Display | [JoannaS][hearth], 2024-06-30 | Subscription & paywalls | Subscriptions and paywalls | solved |
-| R79 | Cozyla | [Stellar413][cozyla], 2026-10-22 | Display customization & accessibility | Display look and customisation | solved |
+| R79 | Cozyla | [Stellar413][cozyla], 2026-10-22 | Display customization & accessibility | Display look and customisation | partly |
 | R80 | Cozyla | [CO_Dad_John][cozyla], 2026-10-21 | Account, setup & support | Accounts, logins, setup and privacy | solved |
 | R81 | Cozyla | [LaNinaSopresa][cozyla], 2026-10-17 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
 | R82 | Cozyla | [Field and fortress][cozyla], 2026-10-01 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
@@ -423,7 +425,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R84 | Cozyla | [alexdejesus62][cozyla], 2026-09-27 | Calendar sync & reliability | Two-way sync with other calendars | gap |
 | R85 | Cozyla | [Raising2azkids][cozyla], 2026-09-26 | Account, setup & support | Accounts, logins, setup and privacy | n/a |
 | R86 | Cozyla | [Praction3r][cozyla], 2026-09-25 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
-| R87 | Cozyla | [Hysxc6][cozyla], 2026-09-24 | Notifications & reminders | Reminders wanted | gap |
+| R87 | Cozyla | [Hysxc6][cozyla], 2026-09-24 | Notifications & reminders | Reminders and change alerts | gap |
 | R88 | Cozyla | [KTBug613][cozyla], 2026-09-07 | Mobile/web access & widgets | Phone, laptop and widget access | solved |
 | R89 | Cozyla | [Sh 67][cozyla], 2026-09-03 | Display customization & accessibility | Photos and screensaver | solved |
 | R90 | Cozyla | [mascma][cozyla], 2026-08-30 | Meals, recipes & shopping | Meal planning and recipes | gap |
@@ -435,14 +437,14 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R96 | Cozyla | [NoNamesAvailiable1470][cozyla], 2026-08-09 | Mobile/web access & widgets | Phone, laptop and widget access | solved |
 | R97 | Cozyla | [Blaine’s Mommy][cozyla], 2026-08-08 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
 | R98 | Cozyla | [CCFITCC][cozyla], 2026-08-06 | Integrations & automation | Voice, AI and automation entry | gap |
-| R99 | Cozyla | [SkitzyOne1][cozyla], 2026-08-05 | Chores, routines & child access | Chores, routines and child access | solved |
+| R99 | Cozyla | [SkitzyOne1][cozyla], 2026-08-05 | Chores, routines & child access | Chores, routines and child access | partly |
 | R100 | Cozyla | [h iuuxebundw o edi][cozyla], 2026-08-05 | Chores, routines & child access | Chores, routines and child access | partly |
 | R101 | Cozyla | [SC Mama x4][cozyla], 2026-08-04 | Event details & location | Event location | solved |
 | R102 | Cozyla | [Court_910][cozyla], 2026-08-04 | Meals, recipes & shopping | Meal planning and recipes | gap |
 | R103 | Cozyla | [MAdramma][cozyla], 2026-07-21 | Display customization & accessibility | Multi-Member events and colours | solved |
 | R104 | Cozyla | [IveTriedEmAll][cozyla], 2026-07-16 | Subscription & paywalls | Subscriptions and paywalls | solved |
 | R105 | Cozyla | [VicRum3][cozyla], 2026-07-15 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
-| R106 | Cozyla | [TroutKrewMama][cozyla], 2026-07-15 | Chores, routines & child access | Chores, routines and child access | gap |
+| R106 | Cozyla | [TroutKrewMama][cozyla], 2026-07-15 | Chores, routines & child access | Chores, routines and child access | n/a |
 | R107 | Cozyla | [davidrit2][cozyla], 2026-07-05 | Meals, recipes & shopping | Meal planning and recipes | gap |
 | R108 | Cozyla | [cleogenia42][cozyla], 2026-07-02 | Calendar sync & reliability | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R109 | Cozyla | [Anna antique][cozyla], 2026-07-01 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
