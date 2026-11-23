@@ -137,7 +137,7 @@ The Fallback folder has no faces and keeps the centre. Fit: good.
 **In Kiosk Satellite:**
 - The *shell* watches every main-frame load. A 5xx answer goes to the retry path ([kiosk_screen.dart#L2684-L2693](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/ui/kiosk_screen.dart#L2684-L2693)), because "Chromium commits these as successful navigations — the proxy's 502 when Home Assistant is unreachable, a reverse proxy's 502/504 during an outage — so onReceivedError never fires and, without this path, the error body sat on screen until an app restart".
 - Retries back off "5s → 10 → 20 → 40 → 60 and holding there", reset after a good load, and re-navigate after the network returns.
-- Two qualifications. Retries are *scheduled* only when the **auto-reload on error** setting is on, which it is by default; the check happens when the timer is created ([browser_manager.dart#L1774](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1774)). Network-return recovery is a separate path: it re-navigates a failed page after a two-second wait "for routes and DNS" ([browser_manager.dart#L2424-L2436](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L2424-L2436)).
+- Two qualifications. Retries are *scheduled* only when the **auto-reload on error** setting is on, which it is by default ([definitions.dart#L594-L597](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/settings/definitions.dart#L594-L597)); the check happens when the timer is created ([browser_manager.dart#L1774](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1774)). Network-return recovery is a separate path: it re-navigates a failed page after a two-second wait "for routes and DNS" ([browser_manager.dart#L2424-L2443](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L2424-L2443)).
 
 ([browser_manager.dart#L1740-L1790](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/browser/browser_manager.dart#L1740-L1790)).
 
@@ -174,7 +174,11 @@ Immich's search can't exclude by tag, so `_assetsTagged` does one paginated `POS
   - Persist an **eligibility gate**, shared by the rotation (`internal/app/rotation.go`) and the photo handler (`cachedPhoto`).
   - Open the gate only after a sync completes with the full exclusion applied. Close it on any incomplete sync while tags are excluded, and whenever the exclusion settings change.
   - While it's closed, no Immich photo shows: the Fallback folder takes over if it's on, and a note like `memories_note` says why.
-  - Tell open Wall displays over SSE to drop their Immich slide when the gate closes.
+  - Make the displays honour the gate too, because a server-side flag alone leaves gaps:
+    - **Clear on close:** displays drop any Immich slide when the gate closes.
+    - **Recheck on reconnect:** GoCasa's stream sends only a hello and heartbeats and replays nothing missed (`internal/app/live.go`), so a display that was offline must check the gate's state when it reconnects.
+    - **Drop stale work:** the page awaits image decoding before it adds a slide (`internal/web/screensaver.templ`), so discard pending slide work started under an earlier gate state.
+    - **Revalidate images:** Immich photos are served `private, max-age=86400` (`internal/app/immich.go`), so a browser could show a cached photo without asking. Revalidate Immich image requests (or make them uncacheable) while tags are excluded.
 
   People will use the tag as a privacy filter, so a wrong "show" is worse than a blank screensaver.
 - **Whether excluded tags apply to Memories.** Unlike Favorites or rating, a hide tag is meant to hide, so probably yes; that needs a Glossary edit to the Memories entry. If so:
@@ -196,8 +200,10 @@ Effort: medium. A picker, one paginated, unscoped listing per tag per sync, and 
 - Or GoCasa itself at Night mode's end, but only if the page keeps running with the panel off. *Unverified*; Fully's vendor says WebView scripting stops after a while (`kiosk-dimming-and-motion-options.md` §2).
 
 **For GoCasa:** an optional `if (window.kioskSatellite)` branch, the same shape as the `window.fully` branch and the `display` SSE event proposed in `kiosk-dimming-and-motion-options.md` §2 and §5, so one design serves both:
-- **The concrete integration: let Kiosk Satellite own the night.** Use its own scheduled screensaver, with "Turn screen off after" and "Dismiss on motion", and have GoCasa's page stand down its own screensaver and Night page when `getScreensaverSuppressed()` says so. That's the only route with a documented camera-wake path.
-- **Page-driven `screenOff()` stays off by default,** and GoCasa keeps its black Night page. Turn it on only once device admin has been verified as provisioned (by hand, outside the page) *and* a wake path has been proven separately.
+- **Default: GoCasa's current behaviour, unchanged.** It keeps its own screensaver and black Night page, even inside Kiosk Satellite.
+- **Opt-in: let Kiosk Satellite own the night, per display.** This is the only route with a documented camera-wake path: Kiosk Satellite's scheduled screensaver with "Turn screen off after" and "Dismiss on motion". A device setting such as "Kiosk Satellite runs the screensaver" makes GoCasa skip both its idle navigation to `/screensaver` and the Night page it picks server-side (`internal/app/device.go`). An Admin turns it on only after setting up the Kiosk Satellite schedule and checking that it wakes.
+  - Don't key this off `getScreensaverSuppressed()`: it returns `true` unconditionally, schedule or not ([screensaver_manager.dart#L1252](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screensaver/screensaver_manager.dart#L1252)).
+- **Page-driven `screenOff()` stays off by default.** Turn it on only once device admin has been verified as provisioned (by hand, outside the page) *and* a wake path has been proven separately.
 - **Why the page can't check permission first.** The page bridge exposes no device-admin status and sends `screenOff` with no `prompt: false`. When device admin isn't granted, Kiosk Satellite puts **Android's device-admin grant screen** on the tablet, and the page's `false` arrives only after that prompt ([screen_manager.dart#L356-L375](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/screen/screen_manager.dart#L356-L375), [user_script.dart#L71](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/app/lib/managers/js_api/user_script.dart#L71)). Its own screensaver timer calls the quiet form instead. An unattended Night mode boundary must never raise that prompt.
 
 Needs an end-to-end test: a GoCasa URL as a Custom Page, cookies sticking, SSE in its WebView, `screenOff()` from a non-HA origin, and what wakes it.
