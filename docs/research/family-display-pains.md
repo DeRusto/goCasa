@@ -6,16 +6,16 @@ Every claim about GoCasa cites a file. Every review is quoted from the spreadshe
 
 ## Short answer
 
-- **The spreadsheet undersold GoCasa.** It judged coverage from the README alone. In the code, GoCasa already has most of what these owners pay a subscription for, or complain is missing: event locations, split colours for multi-Member events, a "+" on every day, editing Google events with Members on them, sync status in Settings and on the calendar, dark mode, and an Immich screensaver with Memories. **53 of 117 reviews (45%) are already solved.** Those are README selling points, not roadmap items.
-- **Its top two gaps were inflated.** "Calendar sync & reliability" (16) held only 6 real sync complaints with other calendars, and GoCasa already solves 2 of them (Google). The rest were app crashes, Wi-Fi, a photo-upload crash and shopping-list drift. "Calendar entry & navigation" (15) is almost entirely solved.
+- **The spreadsheet undersold GoCasa.** It judged coverage from the README alone. In the code, GoCasa already has most of what these owners pay a subscription for, or complain is missing: event locations, split colours for multi-Member events, a "+" on every day, editing Google events with Members on them, sync status in Settings and on the calendar, dark mode, and an Immich screensaver with Memories. **50 of 117 reviews (43%) are already solved, and 8 more partly.** Those are README selling points, not roadmap items.
+- **Its top two gaps were inflated.** "Calendar sync & reliability" (16) held only 6 real sync complaints with other calendars. Two of them name iPhone or Apple, and GoCasa's two-way Google sync covers part of two more. The rest were app crashes, Wi-Fi, a photo-upload crash and shopping-list drift. "Calendar entry & navigation" (15) is almost entirely solved.
 - **The real gaps, ranked by how strong the evidence is and how well each fits GoCasa:**
-  1. **Event reminders** (8 reviews, 3 products). Several alerts per event, with no nagging. **Medium–large**, and it needs a decision about the spec's "no push" rule.
-  2. **Phone access: an installable web app and quick add** (8 widget reviews). Plus telling people that `/calendar.ics` already feeds the phone's own calendar widget. **Small.**
-  3. **Meal plans read from Mealie** (8 reviews, plus 2 of the self-hosted sources). Show tonight's dinner and the week's meals, and keep planning in Mealie. **Medium.**
+  1. **Event reminders** (7 reviews across 3 products, 4 of them asking for several alerts or custom ones per event; plus 1 asking to be told when an event changes). No nagging. Showing them on the wall: **small–medium**. Sending them to phones is a new scope decision: the spec allows "in-app display only" in v1.
+  2. **Phone access: an installable web app** (8 widget reviews, 4 of them about calendar widgets). Plus telling people that `/calendar.ics` already feeds the phone's own calendar widget. **Small**, but it needs HTTPS.
+  3. **Meal plans read from Mealie** (8 meal reviews, about 3 that a read-only view answers directly; plus 2 self-hosted sources). Show tonight's dinner and the week's meals, and keep planning in Mealie. **Medium.**
   4. **Event search** (4 reviews, all Hearth). **Small.**
-  5. **Two-way Apple/iCloud sync** over CalDAV (3–4 reviews). The spec already names it a "Phase 6 candidate". **Large.**
+  5. **Two-way Apple/iCloud sync** over CalDAV (2 reviews that name Apple or iPhone, plus 2 broader sync reviews and 1 iOS setup ask). The spec already names it a "Phase 6 candidate". **Large.**
   6. **Show event locations** in the views, not only in the edit form. **Tiny.** It also makes an existing feature visible.
-  7. **Stopping children from completing a sibling's chores** (2 reviews) and **an on-screen note** (2 reviews). Thin evidence, and each runs into a domain rule that needs deciding first.
+  7. **Stopping children from completing a sibling's chores** (1 direct review) and **an on-screen note** (2 reviews). Thin evidence, and each runs into a domain rule that needs deciding first.
 - **Don't pursue:** voice assistants, AI import, a grocery-store API, budgeting, video messages. They are thin and break the "no cloud" rule. Sub-tasks are already being designed as Routines (#109).
 - **The sample can't support ranking by raw counts.** It was chosen by hand, it is mostly about the companion phone apps rather than the displays, and the self-hosted evidence is three sources. Treat these counts as signals, not market share.
 
@@ -54,7 +54,7 @@ The full row-by-row mapping is in the [appendix](#appendix-every-review-re-theme
 | "Light/dark theme" listed, yet "no dark mode" and "rotating screensaver" counted against GoCasa | Per-device theme (`POST /device/theme`, `internal/app/app.go`). A no-repeat shuffled photo rotation (`internal/app/rotation.go`) from Immich albums, people and Memories (`internal/app/immich.go` `Memories`) or a Fallback folder (`internal/app/fallback.go`). |
 | Split colours for multi-person events: not mentioned | Already built. An event with several Members is filled with diagonal stripes of every Member's colour (`internal/web/calendar.templ` `eventFill`, `repeating-linear-gradient(135deg …)`), and the time grid shows up to three avatars. |
 | Tap a date to add an event: counted as a gap | Every month cell and agenda day has a "+" that opens a new event on that date (`internal/web/calendar.templ` `monthDay`, `calendarDay`, `newEventURL`). Saving returns to the event's own date (`internal/app/calendar.go` `saveEvent` redirects to `/calendar?date=…`). |
-| Editing synced events and assigning people (Finks_02): counted as a sync gap | Google events in a writable calendar open the full event form and save back to Google (`POST /calendar/synced/{id}/edit`, `internal/app/app.go`). Any Google event can have GoCasa Members, and later syncs keep them (`internal/app/event_members.go`; `GLOSSARY.md` **Default Members**). iCal feed events remain read-only (`internal/web/settings.templ` FeedsSection). |
+| Editing synced events and assigning people (Finks_02): counted as a sync gap (now **partly**: the reviewer doesn't say which calendars) | Google events in a writable calendar open the full event form and save back to Google (`POST /calendar/synced/{id}/edit`, `internal/app/app.go`). Any Google event can have GoCasa Members, and later syncs keep them (`internal/app/event_members.go`; `GLOSSARY.md` **Default Members**). iCal feed events remain read-only (`internal/web/settings.templ` FeedsSection). |
 | Budgeting filed under "Event details & location" | A budgeting wish (Larron See). Out of scope for GoCasa; it is not a location request. |
 | "Notifications & reminders: 9, No" | 2 of the 9 are complaints about **too many** notifications (daily update pop-ups; marketing pushes). GoCasa has neither: it has no notifications at all, and no telemetry (README). |
 
@@ -72,9 +72,9 @@ One primary theme per review. Counts are within this sample only.
 | Reminders wanted | 8 | 8 | | | | **Gap** (§4.1) |
 | Accounts, logins, setup and privacy | 8 | | 3 | | 5 | Mostly n/a. No logins for the family is a selling point |
 | Chores, routines and child access | 6 | 2 | 2 | 2 | | Mixed. Child lock **gap** (§4.7), Routines tracked (#109) |
-| Display look and customisation | 6 | | 5 | | 1 | **Selling point** (dark mode, default view, holiday feeds, any orientation) |
+| Display look and customisation | 6 | | 4 | 1 | 1 | **Selling point** (dark mode, default view, holiday feeds, any orientation) |
 | Photos and screensaver | 6 | | 4 | 2 | | **Selling point**. No video |
-| Two-way sync with other calendars | 6 | 3 | 2 | 1 | | Google: solved. Apple/iCloud: **gap** (§4.5) |
+| Two-way sync with other calendars | 6 | 3 | | 3 | | Google: covered. Apple/iCloud and other providers: **gap** (§4.5) |
 | Voice, AI and automation entry | 5 | 5 | | | | Gap, **poor fit** (§6) |
 | Shopping-list drift (vendor bug) | 3 | | | | 3 | n/a. Mirrored lists treat Mealie as the source of truth |
 | Multi-Member events and colours | 3 | | 3 | | | **Selling point** |
@@ -83,7 +83,7 @@ One primary theme per review. Counts are within this sample only.
 | Event search | 2 | 2 | | | | **Gap** (§4.4). 4 reviews counting secondary asks |
 | Out of scope (budgeting, store APIs) | 2 | | | | 2 | n/a |
 | On-screen note | 1 | 1 | | | | **Gap** (§4.8). 2 reviews counting secondary asks |
-| **Total** | **117** | **37** | **53** | **5** | **22** | |
+| **Total** | **117** | **37** | **50** | **8** | **22** | |
 
 **How this differs from the spreadsheet's 16 "Calendar sync & reliability" rows:**
 - 6 are real sync complaints with other calendars: R35, R40, R44, R59, R84, R113.
@@ -94,18 +94,18 @@ One primary theme per review. Counts are within this sample only.
 
 | # | Gap | Evidence | GoCasa today | Effort | Fit |
 |---|---|---|---|---|---|
-| 1 | Event reminders, several per event, no nagging | 8 primary, 3 products; specific | None. Spec rules out push and email | Medium–large | Medium: needs a decision on the "no push" rule |
-| 2 | Install on a phone, quick add, widget path | 8 widget reviews, 3 products; 5 more already solved | Responsive pages, `/calendar.ics`; no web manifest | Small | High |
-| 3 | Meal plan from Mealie on Today and the screensaver | 8 reviews, 3 products; 2 self-hosted sources | Mealie shopping lists only | Medium | High |
+| 1 | Event reminders, several per event, no nagging | 7 reminder reviews + 1 change alert, 3 products; 4 ask for several or custom alerts | None. Spec: "in-app display only in v1" | Wall: small–medium. Phones: medium–large | Wall: high. Phone push: needs a scope decision |
+| 2 | Install on a phone, widget path | 8 widget reviews, 3 products (4 about calendar widgets); 5 more already solved | Responsive pages, `/calendar.ics`; no web manifest | Small (needs HTTPS) | High |
+| 3 | Meal plan from Mealie on Today and the screensaver | 8 meal reviews, 3 products, ~3 answered directly; 2 self-hosted sources | Mealie shopping lists only | Medium | High |
 | 4 | Event search | 2 primary + 2 secondary, Hearth only | None | Small | High |
-| 5 | Two-way Apple/iCloud (CalDAV) | 3 gap + 1 partly + 1 setup ask | iCal read-only in, ICS out | Large | High (pure-Go library exists) |
+| 5 | Two-way Apple/iCloud (CalDAV) | 2 name Apple/iPhone; 2 broader; 1 iOS setup ask | iCal read-only in, ICS out | Large | High (pure-Go library exists) |
 | 6 | Show location in the views | 3 asks for a feature that exists but can't be seen | Stored, synced, not displayed | Tiny | High |
-| 7 | Child can't complete a sibling's chores | 2 | All-or-nothing chore Lock | Small–medium | Unclear: clashes with "only Admins have PINs" |
+| 7 | Child can't complete a sibling's chores | 1 direct (+1 "freeze the screen") | Device-wide unlock; can't tell siblings apart | Small–medium | Unclear: clashes with "only Admins have PINs" |
 | 8 | An on-screen note | 1 primary + 1 secondary | None | Small | High, but #107 excluded parent messages |
 
 ### 4.1 Event reminders, several per event, with no nagging
 
-**Evidence** (8 primary reviews, plus a second mention in R62):
+**Evidence** (8 reviews: 7 want reminders, 4 of them several or custom alerts per event (R16, R25, R48, R62); R4 wants to be told when an event is added or changed, which reminders don't answer):
 - "You get two notifications maximum. For some appointments we need a notification a day before, the morning of, and then at the time of the event." ([Lace Atkinson, Skylight, 2026-09-08][sky-ios])
 - "being able to set multiple alerts for the same event" ([Potatospam7, Hearth, 2026-03-05][hearth])
 - "I can't figure out how to get it to send me notifications before an event happens." ([Hysxc6, Cozyla, 2026-09-24][cozyla])
@@ -113,7 +113,7 @@ One primary theme per review. Counts are within this sample only.
 - "a notification function that lets people know when an event has been scheduled, or edited." ([Jenkins330, Skylight, 2026-10-19][sky-ios])
 - The flip side: "no way to turn off marketing messages; an app like this needs to use that notification privilege with care" ([yonatan_E, Skylight, 2026-07-28][sky-ios]), and daily update pop-ups "you have to acknowledge before using the calendar" ([Johnny Groovy, Skylight, 2026-09-28][sky-ios]).
 
-**GoCasa today:** no reminders of any kind. No `VALARM` in the ICS export (`internal/app/ics.go`), no reminder fields in the Google write (`internal/app/google_write.go` `googleBody` sends summary, location, description and times only). The spec sets this deliberately: "Email/SMS reminders: in-app display only in v1" (`docs/skylite-go-spec.md` §2), and "No push notifications (they'd need the server exposed to the internet)" (§7.2, Freshness).
+**GoCasa today:** no reminders of any kind. No `VALARM` in the ICS export (`internal/app/ics.go`), no reminder fields in the Google write (`internal/app/google_write.go` `googleBody` sends summary, location, description and times only). The spec sets the scope: "Email/SMS reminders — in-app display only in v1" (`docs/skylite-go-spec.md` §2). (Its separate "No push notifications" line in §7.2 is about Google pushing changes to GoCasa, not reminders.)
 
 **What partly works today, by inference (not tested):**
 - Events GoCasa writes to a Google calendar should get that calendar's default reminders in Google's own apps, because GoCasa sends no `reminders` field.
@@ -127,16 +127,17 @@ One primary theme per review. Counts are within this sample only.
 3. **Web Push to phones** that opted in. **Medium–large.**
    - Needs HTTPS, a service worker and the manifest from §4.2.
    - On iOS, push works only for a web app added to the Home Screen (*unverified* for current iOS).
-   - The spec's reason for ruling it out may not hold. In the Web Push protocol (RFC 8030), the *server sends outbound* to the browser vendor's push service, so GoCasa needn't be reachable from the internet to deliver. The phone only needs to have opened GoCasa once to subscribe.
-   - The trade-off is real, though: reminder text passes through Apple's, Google's or Mozilla's push service, encrypted end to end per RFC 8291. That is a third-party relay.
+   - This is new scope beyond the spec's "in-app display only".
+   - In the Web Push protocol (RFC 8030), the server sends outbound to the browser vendor's push service, so GoCasa needn't be reachable from the internet to deliver. The phone only needs to have opened GoCasa once to subscribe.
+   - But reminder text then passes through Apple's, Google's or Mozilla's push service, encrypted end to end per RFC 8291. That is a third-party relay for a "no cloud" app.
 
 **No nagging, by design:** reminders only on events someone set them on, with no default reminders on every event. No marketing or "what's new" pop-ups, ever (GoCasa has neither today).
 
-**Fit:** steps 1–2 fit fully. Step 3 needs a decision (open question 1).
+**Fit:** steps 1–2 fit fully. Step 3 needs a scope decision (open question 1). R4's "tell me when an event changes" would need the same phone channel; it's left out here.
 
 ### 4.2 Phone access: an installable web app, quick add and a widget path
 
-**Evidence** (8 gap reviews, 3 products):
+**Evidence** (8 gap reviews, 3 products. 4 want a *calendar* widget (R1, R51, R81, R91); R47, R55 and R109 want calendar and tasks or the day; R13 wants a *task* widget, which nothing here answers):
 - "The app needs a phone widget option to be able to look at the family calendar at a glance" ([Kailey Taylor, Skylight, 2025-03-24][sky-play])
 - "please provide a widget that gives you a weekly view" ([JordanMarieT, Hearth, 2025-11-04][hearth])
 - "Would love a widget option for a quick overview of the day without needing to open the app!" ([brandeella, Hearth, 2025-08-22][hearth])
@@ -156,14 +157,14 @@ One primary theme per review. Counts are within this sample only.
 
 **The gap:**
 - **Installable web app** (small): a `manifest.webmanifest`, icons and `apple-touch-icon`, embedded like the other static files. GoCasa then opens from the Home Screen like an app. `docs/research/home-assistant-and-android.md` already recommends a PWA for Chromebooks.
-- **A quick-add page for phones** (small–medium): one form for an event, to-do or list item, with the date and Member picked by tapping.
+- **A quick-add page for phones** (small–medium): one form for an event, to-do or list item. *My inference:* no review asks for this in those words. It is the nearest thing a web app can offer to "add without opening the app".
 - **Widgets:** a web app can't put a native widget on an iPhone Home Screen. The honest path is to **tell people** that subscribing to `/calendar.ics` in the phone's own calendar shows GoCasa events in that calendar's widget. That works today, but only while the phone can reach GoCasa. A real widget is a native-app job, and native apps are a non-goal (`docs/skylite-go-spec.md` §2).
 
-**Fit:** high. Static files in the binary, no new dependency.
+**Fit:** high. Static files in the binary, no new dependency. Installing needs HTTPS (`docs/research/home-assistant-and-android.md` §3), which GoCasa leaves to the reverse proxy (README "HTTPS").
 
 ### 4.3 Meal plans read from Mealie
 
-**Evidence** (8 gap reviews, 3 products; plus self-hosted asks):
+**Evidence** (8 gap reviews, 3 products; plus self-hosted asks). A read-only meal view answers R107 (calendar and meals hard to cross-reference) and R65 (meal planning tied to the lists), and partly R58 (go-to meals to choose from). The rest (R5, R61, planning then listing; R33, recipe categories; R90, dragging meals; R102, importing recipes) are planning and recipe work that would stay in Mealie. *Unverified* here how well Mealie itself does each.
 - "It's tedious to use another app to plan my weekly menu and then add each grocery item individually to Hearth's list." ([aelbery, Hearth, 2025-08-11][hearth])
 - "I wish there was a way to have an archive of your go-to meals and their corresponding recipes that you can look through and choose from when planning." ([ridelbi, Hearth, 2025-08-16][hearth])
 - "I would like to be able to swap meals between dates on the calendar just by dragging them around." ([mascma, Cozyla, 2026-08-30][cozyla])
@@ -199,7 +200,7 @@ One primary theme per review. Counts are within this sample only.
 
 ### 4.5 Two-way Apple/iCloud sync (CalDAV)
 
-**Evidence** (3 gap, 1 partly, plus a setup ask):
+**Evidence** (R35 and R84 name Apple or iPhone; R40 says "my phone calendar"; R44 says only "other colander's apps"; R85 is an iOS setup ask):
 - "difficulties editing and deleting events from the calendar. This seems to be an issue with syncing with my Apple calendar" ([2347CAnnaC, Skylight, 2026-07-05][sky-ios])
 - "Your directions for getting the app to connect with my phone calendar are outdated and have never worked. I have to manually enter everything onto my phone calendar as well as enter everything into the Skylight calendar" ([JH7508, Skylight, 2026-06-22][sky-ios])
 - "The calendar seems to sync with my iPhone calendar, but only in one direction." ([alexdejesus62, Cozyla, 2026-09-27][cozyla])
@@ -207,7 +208,7 @@ One primary theme per review. Counts are within this sample only.
 - "Needs better tutorial in Calendar sinking, especially with iOS devices" ([Raising2azkids, Cozyla, 2026-09-26][cozyla])
 
 **GoCasa today:**
-- Two-way Google (`internal/app/google_sync.go`, `internal/app/google_write.go`). That solves R59 and R113: "it can delete your calendar events if you link it to your calendar, but can't add them" ([Broken Game Spotter, Cozyla, 2026-05-05][cozyla]).
+- Two-way Google (`internal/app/google_sync.go`, `internal/app/google_write.go`). That covers R59 and R113 when the calendar is Google, which neither review says (so both are **partly**): "it can delete your calendar events if you link it to your calendar, but can't add them" ([Broken Game Spotter, Cozyla, 2026-05-05][cozyla]).
 - iCloud can come in only as a read-only iCal feed (a public iCloud calendar link), shown as "Read-only iCal or webcal calendars" (`internal/web/settings.templ` FeedsSection).
 - GoCasa's events go out to Apple Calendar as an ICS subscription (`internal/app/ics.go`).
 - The spec: "true CalDAV sync is a Phase 6 candidate (`emersion/go-webdav`)" (`docs/skylite-go-spec.md` §2). No issue tracks it.
@@ -237,17 +238,17 @@ GoCasa already **stores** a location (§2), so these are solved. But it never **
 
 ### 4.7 A child can't complete a sibling's chores
 
-**Evidence** (2):
+**Evidence** (1 direct; R106 wants the whole screen frozen, which a page can't do):
 - "We do wish there was a screen lock so the littles wouldn't be able to mark off their siblings' chores" ([TLAS11, Skylight, 2026-06-25][sky-ios])
 - "not being able to freeze the screen so the kids cant play on it." ([TroutKrewMama, Cozyla, 2026-07-15][cozyla])
 
 **GoCasa today:**
-- The chore Lock is all-or-nothing: with it on, *every* completion needs an Admin's PIN (`internal/app/app.go`, `requireLock(web.LockChores, …)`).
-- With it off, a completion is "credited to whoever taps their avatar (no PIN)" (`docs/skylite-go-spec.md` §8).
+- The chore Lock works per device, not per child. With it on, a locked device asks for an Admin's PIN before a completion (`internal/app/app.go`, `requireLock(web.LockChores, …)`). But "One unlock covers every Lock" (`internal/app/members.go` `requireLock`) until 5 minutes pass with no activity, someone taps "Lock now", or a Wall display enters the screensaver (`docs/skylite-go-spec.md` §9, Unlock lifetime).
+- Either way, a completion is "credited to whoever taps their avatar (no PIN)" (`docs/skylite-go-spec.md` §8). So on an unlocked shared screen, nothing tells siblings apart.
 - Only Admins have PINs (`GLOSSARY.md` **Admin**, **Lock**).
 - The planned Member display (#112) shows one Member's page per device, which may cover the case of a child's own tablet.
 
-**The gap:** stop one child completing another's chores on a shared Wall display without making a parent type a PIN each time. Possible approaches: a kid PIN, completing only from the Member page or Member display, or a parent approving later.
+**The gap:** stop one child completing another's chores on a shared Wall display without a parent unlocking it for them. Possible approaches: a kid PIN, completing only from the Member page or Member display, or a parent approving later.
 
 **Effort:** small–medium. **Fit:** depends on a domain decision (open question 4), since any kid PIN contradicts "Only Admins have a PIN".
 
@@ -273,18 +274,18 @@ These are things paying owners complain about or wish for, and GoCasa already do
 
 | Pain in the reviews | GoCasa | Example review |
 |---|---|---|
-| Subscription for photos, routines, "any useful feature" (14) | One install, no subscription or account (README) | "Woke up one day … to a QR code that basically said, 'if you want to show pictures, you need an upgraded plan.'" ([Maxwellh, Skylight, 2026-08-06][sky-ios]) |
-| Laptop and browser access (5) | It is a web app; any browser on the LAN | "the web app is essentially obsolete" ([SDugGale10, Hearth, 2026-10-16][hearth]) |
+| Subscription for photos, routines, "any useful feature" (14) | One install, no subscription or account (README; config needs no account: `internal/config/config.go`) | "Woke up one day … to a QR code that basically said, 'if you want to show pictures, you need an upgraded plan.'" ([Maxwellh, Skylight, 2026-08-06][sky-ios]) |
+| Laptop and browser access (5) | It is a web app; any browser on the LAN (server-rendered pages, `internal/web/*.templ`; phone layout in `internal/web/calendar.templ`) | "the web app is essentially obsolete" ([SDugGale10, Hearth, 2026-10-16][hearth]) |
 | Tap a day to add; edit events; months ahead; week view; event order (10) | "+" per day; full edit; Prev/Next by date; month/week/day/agenda; events sorted by time (`internal/app/events.go`, `slices.SortFunc`) | "the ability to tap a day to add an event for that day has been removed." ([RayO3D, Skylight, 2026-06-25][sky-ios]) |
 | One event for several kids, split colours (3) | Many Members per event, striped in each colour (`internal/web/calendar.templ` `eventFill`) | "when you put multiple people in an event that the event would split the colors … Instead, it turns gray." ([MAdramma, Cozyla, 2026-07-21][cozyla]) |
-| Edit synced events, assign them to people (2) | Google edits write back; Members on any Google event | "you can't edit any of the events you sync from different calendars" ([Finks_02, Hearth, 2025-08-14][hearth]) |
+| Edit synced events, assign them to people (2, partly: Google only) | Google edits write back (`internal/app/google_write.go`); Members on any Google event (`internal/app/event_members.go`) | "you can't edit any of the events you sync from different calendars" ([Finks_02, Hearth, 2025-08-14][hearth]) |
 | Event location (3) | Stored and synced (§4.6) | see §4.6 |
-| Rotating screensaver, more photos, daily memories (4) | Immich albums, people and Memories, or a folder; no-repeat shuffle | "we just wish the screensaver had an option to stream daily memories instead of starting at the first picture every time." ([Cozyla user, 2026-08-27][cozyla]) |
-| Dark mode, default view, landscape, holidays (5) | Per-device theme and Default view; any screen orientation; holiday or birthday calendars as iCal feeds or yearly events | "my eyes are begging for a dark mode option." ([ThatParksGuy, Cozyla, 2026-06-29][cozyla]) |
-| Marketing pushes, forced update pop-ups (2) | No notifications, no telemetry | see §4.1 |
+| Rotating screensaver, more photos, daily memories (4) | Immich albums, people and Memories (`internal/app/immich.go`), or a folder (`internal/app/fallback.go`); no-repeat shuffle (`internal/app/rotation.go`) | "we just wish the screensaver had an option to stream daily memories instead of starting at the first picture every time." ([Cozyla user, 2026-08-27][cozyla]) |
+| Dark mode, default view, landscape, holidays (4 + 1 partly) | Per-device theme and Default view (`POST /device/theme`, `POST /device/default-view` in `internal/app/app.go`); responsive layout for any orientation; holiday or birthday calendars as iCal feeds (`internal/app/ical.go`) or yearly events (`EventForm.Repeat` in `internal/web/calendar.templ`). Not: filling a date with a colour (R50) | "my eyes are begging for a dark mode option." ([ThatParksGuy, Cozyla, 2026-06-29][cozyla]) |
+| Marketing pushes, forced update pop-ups (2) | No notification code anywhere in `internal/`; no telemetry (README) | see §4.1 |
 | Separate logins, deleting profiles, forced photo-library access (3) | No family logins; Admins delete or archive Members (`POST /settings/members/{id}/delete`); no phone app asking for permissions | "the fact I need to contact support to delete a profile is burdensome." ([rbe2, Hearth, 2025-11-03][hearth]) |
 | "Up for grabs" chores; household maintenance without a person; ticking off yesterday's (3) | Anyone chores; to-do columns per room with repeats; Late Rounds claimable until the next Round ends (`GLOSSARY.md` **Late**) | "options for all general maintenance things around the home … without having to create a 'person' to assign it to." ([SkitzyOne1, Cozyla, 2026-08-05][cozyla]) |
-| Silent sync failures | "Sync failing (N in a row)" in Settings; stale banner on the calendar (§2) | "I kept forwarding emails, assuming everything was being added to the calendar, only to discover much later that nothing has been showing up." ([Mogan Toban, Skylight, 2026-07-30][sky-ios]) |
+| Silent sync failures (no review in this sample asks directly) | "Sync failing (N in a row)" in Settings (`internal/web/settings.templ` `syncStatus`); stale banner on the calendar (`internal/web/calendar.templ` `StaleCalendar`) | — |
 
 Partly solved:
 - The screensaver shows **images only**, no videos ([JBL Listener, Skylight, 2026-08-20][sky-ios]).
@@ -292,7 +293,7 @@ Partly solved:
 
 ## 6. Not applicable, or not worth pursuing
 
-- **Vendor bugs, crashes, Wi-Fi, touchscreens, logins** (9 + 5 rows). Each product's own reliability problems. The lesson for GoCasa is the one it already follows: render from local SQLite, so a dead upstream degrades sync and never the screen (`docs/skylite-go-spec.md` §3 principle 3).
+- **Vendor bugs, crashes, Wi-Fi, touchscreens, logins** (9 + 5 rows). This includes R29, whose forwarded emails silently never became events. GoCasa has no email-to-event import at all, so that one is not a selling point. Each product's own reliability problems. The lesson for GoCasa is the one it already follows: render from local SQLite, so a dead upstream degrades sync and never the screen (`docs/skylite-go-spec.md` §3 principle 3).
 - **Shopping-list drift** (3): "Keeps re-adding items that I've checked off and deleting other items that I've added." ([Mcblake91, Skylight, 2026-07-05][sky-ios]) A vendor bug. GoCasa's Mirrored lists treat Mealie as the source of truth with no offline queue (spec §3 principle 4).
 - **Voice, Alexa, Shortcuts, AI "Add From Image"** (5). Each needs a cloud assistant or an AI service, or at least a documented write API.
   - *Inference, untested:* GoCasa's CSRF guard (`http.NewCrossOriginProtection`, `internal/app/app.go`) lets through requests that carry no browser headers. So an iOS Shortcut posting the `note` form field to `POST /lists/{id}/items` might already add a list item. That is undocumented and unsupported.
@@ -303,7 +304,7 @@ Partly solved:
 
 ## 7. Open questions
 
-1. **Web Push vs. the spec's "no push" rule.** Delivery is outbound through the browser vendor's push service, so the server needn't be exposed. But reminder text would pass, encrypted, through Apple, Google or Mozilla. Is that acceptable as an opt-in, or do reminders stay on the wall, plus Google's and the phone calendar's own alarms (steps 1–2 of §4.1)?
+1. **Reminders on phones: new scope?** The spec allows only "in-app display" for reminders in v1 (§2). Web Push would send reminder text, encrypted, through Apple's, Google's or Mozilla's push service. Is that acceptable as an opt-in, or do reminders stay on the wall, plus Google's and the phone calendar's own alarms (steps 1–2 of §4.1)? The same channel would decide whether "tell me when an event changes" (R4) is possible.
 2. **Do phone calendars keep `VALARM`s from a subscribed ICS feed?** Test on iOS and Android before relying on step 1 for local calendars.
 3. **Mealie's meal-plan API.** Confirm the endpoint, fields and token scope against a live Mealie v2/v3, and whether "tonight's dinner" should also come from a Mealie recipe's link.
 4. **Child lock.** Kid PINs contradict "Only Admins have a PIN". Alternatives: completing only from the Member page or Member display (#112), or completions a parent confirms later. Which one?
@@ -385,7 +386,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R47 | Hearth Display | [katroot09][hearth], 2026-05-17 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
 | R48 | Hearth Display | [Potatospam7][hearth], 2026-03-05 | Notifications & reminders | Reminders wanted | gap |
 | R49 | Hearth Display | [CL0V3][hearth], 2026-02-04 | Integrations & automation | Voice, AI and automation entry | gap |
-| R50 | Hearth Display | [hubby415][hearth], 2025-11-16 | Display customization & accessibility | Display look and customisation | solved |
+| R50 | Hearth Display | [hubby415][hearth], 2025-11-16 | Display customization & accessibility | Display look and customisation | partly |
 | R51 | Hearth Display | [JordanMarieT][hearth], 2025-11-04 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
 | R52 | Hearth Display | [rbe2][hearth], 2025-11-03 | Account, setup & support | Accounts, logins, setup and privacy | solved |
 | R53 | Hearth Display | [Liz151922][hearth], 2025-10-28 | Display customization & accessibility | Display look and customisation | solved |
@@ -394,7 +395,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R56 | Hearth Display | [KF2][hearth], 2025-08-18 | Subscription & paywalls | Subscriptions and paywalls | solved |
 | R57 | Hearth Display | [sslaugh89][hearth], 2025-08-18 | Calendar sync & reliability | Multi-Member events and colours | solved |
 | R58 | Hearth Display | [ridelbi][hearth], 2025-08-16 | Meals, recipes & shopping | Meal planning and recipes | gap |
-| R59 | Hearth Display | [Finks_02][hearth], 2025-08-14 | Calendar sync & reliability | Two-way sync with other calendars | solved |
+| R59 | Hearth Display | [Finks_02][hearth], 2025-08-14 | Calendar sync & reliability | Two-way sync with other calendars | partly |
 | R60 | Hearth Display | [Stephen_C82][hearth], 2025-08-14 | Display customization & accessibility | Photos and screensaver | solved |
 | R61 | Hearth Display | [aelbery][hearth], 2025-08-11 | Meals, recipes & shopping | Meal planning and recipes | gap |
 | R62 | Hearth Display | [Addicted2dci][hearth], 2025-08-11 | Meals, recipes & shopping | Reminders wanted | gap |
@@ -448,7 +449,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R110 | Cozyla | [ThatParksGuy][cozyla], 2026-06-29 | Display customization & accessibility | Display look and customisation | solved |
 | R111 | Cozyla | [Guitarbanae][cozyla], 2026-05-14 | Meals, recipes & shopping | Meal planning and recipes | n/a |
 | R112 | Cozyla | [FjffjdjtjousSfhudg][cozyla], 2026-05-08 | Mobile/web access & widgets | Phone, laptop and widget access | solved |
-| R113 | Cozyla | [Broken Game Spotter][cozyla], 2026-05-05 | Calendar sync & reliability | Two-way sync with other calendars | solved |
+| R113 | Cozyla | [Broken Game Spotter][cozyla], 2026-05-05 | Calendar sync & reliability | Two-way sync with other calendars | partly |
 | R114 | Cozyla | [Alberto G-mez][cozyla], 2026-04-25 | Mobile/web access & widgets | Phone, laptop and widget access | solved |
 | R115 | Cozyla | [Lucius Maximus Aurelius][cozyla], 2026-04-19 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
 | R116 | Cozyla | [JKinkoph][cozyla], 2026-04-12 | Meals, recipes & shopping | Shopping-list drift (vendor bug) | n/a |
