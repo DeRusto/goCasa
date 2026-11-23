@@ -298,7 +298,15 @@ Adopting that *shape* for a `window.gocasaDisplay` bridge gives GoCasa a bridge 
 | Remote admin live screenshots and logs ([docs/remote-api.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/remote-api.md)) | Belong to a native app on the device, not a server-rendered page |
 | Analytics on by default ([docs/analytics.md](https://github.com/jxlarrea/kiosk-satellite/blob/d78aac9/docs/analytics.md)) | GoCasa promises no telemetry |
 
-## 7. Not verified
+## 7. Open questions for whoever designs these
+
+From the last review round. These are design gaps in GoCasa-side proposals, not facts about Kiosk Satellite:
+
+- **Exclude tags, reconnect (§4.1).** A display that was offline can miss the gate closing *and* reopening. On reconnect it should clear its Immich slides, drop pending slide work and fetch a fresh eligible slide, not just check whether the gate is open.
+- **Exclude tags, browser cache (§4.1).** Changing cache headers only affects requests that reach GoCasa; a fresh `max-age=86400` copy from before exclusions were on can still be used. Immich image URLs, including the server-rendered first slide and its blurred background, probably need a part tied to the eligibility revision, served `no-store` while exclusions are active.
+- **Kiosk Satellite opt-in wording (§4.2).** "Keeps its black Night page" should read "keeps its existing idle behaviour and the Household's configured Night mode (black, dim clock or off)" until an Admin opts that display in.
+
+## 8. Not verified
 
 - That GoCasa's fixed-threshold motion-wake false-wakes on crossfades or misses people in a dark room, and that §3.1 fixes it, on a real tablet.
 - That an automatic reload during a GoCasa restart leaves a browser-based Wall display stuck on a 502 page (§3.3 is an inference; Kiosk Satellite's comment describes the same thing in a WebView).
