@@ -71,7 +71,7 @@ One primary theme per review. Counts are within this sample only.
 | Meal planning and recipes | 9 | 8 | | | 1 | **Gap** (§4.3) |
 | Reminders and change alerts | 8 | 8 | | | | **Gap** (§4.1): 7 reminders, 1 change alert |
 | Accounts, logins, setup and privacy | 8 | | 3 | | 5 | Mostly n/a. No logins for the family is a selling point |
-| Chores, routines and child access | 6 | 2 | 1 | 2 | 1 | Mixed. Sibling-chore guard **gap** (§4.7); steps inside a chore: gap, not ranked (§6) |
+| Chores, routines and child access | 6 | 3 | 1 | 2 | | Mixed. Sibling-chore guard and screen freeze **gap** (§4.7); steps inside a chore: gap, not ranked (§6) |
 | Display look and customisation | 6 | | 3 | 2 | 1 | **Selling point** (dark mode, default view, holiday feeds, any orientation) |
 | Photos and screensaver | 6 | 1 | 4 | 1 | | **Selling point**. No video (gap, not ranked) |
 | Two-way sync with other calendars | 6 | 3 | | 3 | | Google: covered. Apple/iCloud and other providers: **gap** (§4.5) |
@@ -83,7 +83,7 @@ One primary theme per review. Counts are within this sample only.
 | Event search | 2 | 2 | | | | **Gap** (§4.4). 4 reviews counting secondary asks |
 | Out of scope (budgeting, store APIs) | 2 | | | | 2 | n/a |
 | On-screen note | 1 | 1 | | | | **Gap** (§4.8). 2 reviews counting secondary asks |
-| **Total** | **117** | **38** | **48** | **8** | **23** | |
+| **Total** | **117** | **39** | **48** | **8** | **22** | |
 
 **How this differs from the spreadsheet's 16 "Calendar sync & reliability" rows:**
 - 6 are real sync complaints with other calendars: R35, R40, R44, R59, R84, R113.
@@ -100,7 +100,7 @@ One primary theme per review. Counts are within this sample only.
 | 4 | Event search | 2 primary + 2 secondary, Hearth only | None | Small | High |
 | 5 | Two-way Apple/iCloud (CalDAV) | 2 name Apple/iPhone; 2 broader; 1 iOS setup ask | iCal read-only in, ICS out | Large | High (pure-Go library exists) |
 | 6 | Show location in the views | 3 asks for a feature that exists but can't be seen | Stored, synced, not displayed | Tiny | High |
-| 7 | Child can't complete a sibling's chores | 1 direct (+1 "freeze the screen") | Device-wide unlock; can't tell siblings apart | Small–medium | Unclear: clashes with "only Admins have PINs" |
+| 7 | Child can't complete a sibling's chores, or play on the screen | 1 direct, 1 ambiguous ("freeze the screen") | Device-wide unlock; can't tell siblings apart | Small–medium | Unclear: clashes with "only Admins have PINs" |
 | 8 | An on-screen note | 1 primary + 1 secondary | None | Small | High, but #107 excluded parent messages |
 
 ### 4.1 Event reminders, several per event, with no nagging
@@ -137,7 +137,7 @@ One primary theme per review. Counts are within this sample only.
 
 ### 4.2 Phone access: an installable web app, quick add and a widget path
 
-**Evidence** (8 gap reviews, 3 products. 4 want a *calendar* widget (R1, R51, R81, R91); R47, R55 and R109 want calendar and tasks or the day; R13 wants a *task* widget, which nothing here answers. 3 more reviews filed under other themes also mention widgets: R42, R49, R53. None asks to install a web app; that is my inference of the nearest thing a web app can do):
+**Evidence** (8 gap reviews, 3 products. 4 want a *calendar* widget (R1, R51, R81, R91); R47, R55 and R109 want calendar and tasks or the day; R13 wants a *task* widget, which nothing here answers. 3 more reviews also mention widgets: R42 (in this theme, n/a as a vendor app complaint), and R49 and R53 under other themes. None asks to install a web app; that is my inference of the nearest thing a web app can do):
 - "The app needs a phone widget option to be able to look at the family calendar at a glance" ([Kailey Taylor, Skylight, 2025-03-24][sky-play])
 - "please provide a widget that gives you a weekly view" ([JordanMarieT, Hearth, 2025-11-04][hearth])
 - "Would love a widget option for a quick overview of the day without needing to open the app!" ([brandeella, Hearth, 2025-08-22][hearth])
@@ -238,7 +238,7 @@ GoCasa already **stores** a location (§2), so these are solved. But it never **
 
 ### 4.7 A child can't complete a sibling's chores
 
-**Evidence** (1 direct; R106 wants the whole screen frozen, which a page can't do):
+**Evidence** (1 direct; R106 is ambiguous: it may mean freezing GoCasa's page, which a web app could do, or the whole tablet):
 - "We do wish there was a screen lock so the littles wouldn't be able to mark off their siblings' chores" ([TLAS11, Skylight, 2026-06-25][sky-ios])
 - "not being able to freeze the screen so the kids cant play on it." ([TroutKrewMama, Cozyla, 2026-07-15][cozyla])
 
@@ -252,7 +252,7 @@ GoCasa already **stores** a location (§2), so these are solved. But it never **
 
 **Effort:** small–medium. **Fit:** depends on a domain decision (open question 4), since any kid PIN contradicts "Only Admins have a PIN".
 
-"Freezing the screen" is outside a web page's reach. Remote device control is covered in `docs/research/kiosk-satellite.md` §5.
+A page-wide "kid lock" that ignores taps until an Admin unlocks it is within a web page's reach, but it collides with "Viewing is never locked" (`docs/skylite-go-spec.md` §9; `GLOSSARY.md` **Lock**). Locking the whole tablet is not a page's job. R106's other ask, changing the screen remotely from a phone, is covered in `docs/research/kiosk-satellite.md` §5.
 
 ### 4.8 An on-screen note
 
@@ -284,11 +284,11 @@ These are things paying owners complain about or wish for, and GoCasa already do
 | Dark mode, default view, landscape, holidays (3 + 2 partly) | Per-device theme and Default view (`POST /device/theme`, `POST /device/default-view` in `internal/app/app.go`); a responsive layout that switches at 760 px wide rather than on orientation (the `min-[760px]` classes in `internal/web/today.templ` and `internal/web/calendar.templ`); holiday or birthday calendars as iCal feeds (`internal/app/ical.go`) or yearly events (`EventForm.Repeat` in `internal/web/calendar.templ`). Not: filling a date with a colour (R50), holidays listed automatically, or colours by event type rather than by Member or calendar (R79, `eventFill` in `internal/web/calendar.templ`) | "my eyes are begging for a dark mode option." ([ThatParksGuy, Cozyla, 2026-06-29][cozyla]) |
 | Marketing pushes, forced update pop-ups (2) | No notification code anywhere in `internal/`; no telemetry (README) | see §4.1 |
 | Separate logins, deleting profiles, forced photo-library access (3) | No family logins; Admins delete or archive Members (`POST /settings/members/{id}/delete` in `internal/app/app.go`); no phone app asking for permissions | "the fact I need to contact support to delete a profile is burdensome." ([rbe2, Hearth, 2025-11-03][hearth]) |
-| "Up for grabs" chores; household maintenance without a person; ticking off yesterday's (1 + 2 partly) | Anyone chores (`GLOSSARY.md` **Anyone chore**). Partly: maintenance as Recurring to-dos in a per-room column, since every Chore needs a person assigned (`internal/app/chores.go` `choreForm`); yesterday's Round stays claimable until the next Round ends (`GLOSSARY.md` **Late**), older ones need an Adjustment | "options for all general maintenance things around the home … without having to create a 'person' to assign it to." ([SkitzyOne1, Cozyla, 2026-08-05][cozyla]) |
+| "Up for grabs" chores; household maintenance without a person; ticking off yesterday's (1 + 2 partly) | Anyone chores (`GLOSSARY.md` **Anyone chore**). Partly: maintenance as Recurring to-dos in a per-room column, since every Chore needs a person assigned (`internal/app/chores.go` `choreForm`); yesterday's Round stays claimable until the next Round ends (`GLOSSARY.md` **Late**). After that it is Missed and can't be completed; an Admin can only change the points balance by hand (`GLOSSARY.md` **Missed**, **Adjustment**) | "options for all general maintenance things around the home … without having to create a 'person' to assign it to." ([SkitzyOne1, Cozyla, 2026-08-05][cozyla]) |
 | Silent sync failures (no review in this sample asks directly) | "Sync failing (N in a row)" in Settings (`internal/web/settings.templ` `syncStatus`); stale banner on the calendar (`internal/web/calendar.templ` `StaleCalendar`) | — |
 
 Partly solved, or not done:
-- The screensaver shows **images only**, no videos (R24, [JBL Listener, Skylight, 2026-08-20][sky-ios]): a gap, not ranked (§6).
+- The screensaver shows **images only** (R24, [JBL Listener, Skylight, 2026-08-20][sky-ios], a 25 MB video upload limit; that they want the videos played on the frame is my inference): a gap, not ranked (§6).
 - Photos show on the screensaver, not behind the calendar ([OreoMME, Cozyla, 2026-08-10][cozyla]).
 
 ## 6. Not applicable, or not worth pursuing
@@ -300,8 +300,7 @@ Partly solved, or not done:
   - A documented JSON API is already planned in the spec's route table (`/api/*`, §8). That is the right home for automation if it's ever wanted.
 - **Budgeting, grocery-store cart APIs, video messages for kids** (3). Outside a family calendar, or cloud-bound.
 - **Steps inside one chore** ([JustVerasThoughtsAndOpinions, Skylight, 2026-09-21][sky-ios]): a gap on one review, not ranked. The planned Routines are different: they order whole daily Each chores under Morning, Afternoon and Evening (#109, #107; `GLOSSARY.md` **Routine**), with no steps inside a chore.
-- **Videos on the screensaver** (R24): a gap on one review, not ranked. Immich photos are fetched as images only (`docs/skylite-go-spec.md` §10, `type:{eq:"IMAGE"}`).
-- **Freezing the whole screen** (R106): not something a web page can do; remote device control is in `docs/research/kiosk-satellite.md` §5.
+- **Videos on the screensaver** (R24, inferred from a video-upload complaint): a gap on one review, not ranked. Immich photos are fetched as images only (`docs/skylite-go-spec.md` §10, `type:{eq:"IMAGE"}`).
 - **Remote control of the display from a phone; motion wake; face crops; display recovery.** Covered in `docs/research/kiosk-satellite.md`.
 
 ## 7. Open questions
@@ -309,7 +308,7 @@ Partly solved, or not done:
 1. **Reminders on phones: new scope?** The spec allows only "in-app display" for reminders in v1 (§2). Web Push would send reminder text, encrypted, through Apple's, Google's or Mozilla's push service. Is that acceptable as an opt-in, or do reminders stay on the wall, plus Google's and the phone calendar's own alarms (steps 1–2 of §4.1)? The same channel would decide whether "tell me when an event changes" (R4) is possible.
 2. **Do phone calendars keep `VALARM`s from a subscribed ICS feed?** Test on iOS and Android before relying on step 1 for local calendars.
 3. **Mealie's meal-plan API.** Confirm the endpoint, fields and token scope against a live Mealie v2/v3, and whether "tonight's dinner" should also come from a Mealie recipe's link.
-4. **Child lock.** Kid PINs contradict "Only Admins have a PIN". Alternatives: completing only from the Member page or Member display (#112), or completions a parent confirms later. Which one?
+4. **Child lock.** Kid PINs contradict "Only Admins have a PIN". Alternatives: completing only from the Member page or Member display (#112), or completions a parent confirms later. Which one? And is a page-wide "kid lock" (R106) worth an exception to "Viewing is never locked"?
 5. **Search scope.** Should search cover to-dos and chores too, or only events? Google events are kept only 3 months back and 12 months ahead.
 6. **Location as a link.** A maps link from the location (Apple Maps or Google Maps URL) is a link out of the house. Fine on a phone; on a Wall display it would leave the kiosk. Show it as text only on Wall displays?
 7. **A better sample.** If the roadmap leans on this, a second pass should sample the *display's* reviews (Amazon or vendor sites) and self-hosted forums with a login, rather than the companion apps only.
@@ -444,7 +443,7 @@ R*n* is the *n*th row of the spreadsheet's "Paid display feedback" sheet, in its
 | R103 | Cozyla | [MAdramma][cozyla], 2026-07-21 | Display customization & accessibility | Multi-Member events and colours | solved |
 | R104 | Cozyla | [IveTriedEmAll][cozyla], 2026-07-16 | Subscription & paywalls | Subscriptions and paywalls | solved |
 | R105 | Cozyla | [VicRum3][cozyla], 2026-07-15 | Calendar entry & navigation | Calendar entry, editing and navigation | solved |
-| R106 | Cozyla | [TroutKrewMama][cozyla], 2026-07-15 | Chores, routines & child access | Chores, routines and child access | n/a |
+| R106 | Cozyla | [TroutKrewMama][cozyla], 2026-07-15 | Chores, routines & child access | Chores, routines and child access | gap |
 | R107 | Cozyla | [davidrit2][cozyla], 2026-07-05 | Meals, recipes & shopping | Meal planning and recipes | gap |
 | R108 | Cozyla | [cleogenia42][cozyla], 2026-07-02 | Calendar sync & reliability | Vendor bugs, crashes, Wi-Fi, hardware | n/a |
 | R109 | Cozyla | [Anna antique][cozyla], 2026-07-01 | Mobile/web access & widgets | Phone, laptop and widget access | gap |
