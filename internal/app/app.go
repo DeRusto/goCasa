@@ -195,6 +195,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /todos/{id}/delete", a.deleteTodo)
 	mux.HandleFunc("GET /chores", a.getChores)
 	mux.HandleFunc("POST /chores", a.requireUnlock(a.saveChore))
+	mux.HandleFunc("POST /chores/routines", a.requireUnlock(a.saveRoutines))
 	mux.HandleFunc("GET /chores/{id}", a.requireUnlock(a.getChore))
 	mux.HandleFunc("POST /chores/{id}", a.requireUnlock(a.saveChore))
 	mux.HandleFunc("POST /chores/{id}/archive", a.requireUnlock(a.setChoreArchived(true)))

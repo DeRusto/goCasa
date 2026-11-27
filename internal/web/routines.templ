@@ -1,0 +1,131 @@
+package web
+
+import (
+	"fmt"
+	"slices"
+)
+
+// Routines are the three Routines in the order of the day.
+var Routines = []string{"morning", "afternoon", "evening"}
+
+// routineName is a Routine's name as people read it.
+func routineName(r string) string {
+	switch r {
+	case "morning":
+		return "Morning"
+	case "afternoon":
+		return "Afternoon"
+	case "evening":
+		return "Evening"
+	}
+	return "Not in a Routine"
+}
+
+// slotTime is minutes after midnight as HH:MM, a time input's value.
+func slotTime(min int) string { return fmt.Sprintf("%02d:%02d", min/60, min%60) }
+
+// routineLists is the Chores that can be in a Routine, by Routine in its
+// order, and under "none" the eligible ones in no Routine, by name.
+func routineLists(chores []Chore) map[string][]Chore {
+	ls := map[string][]Chore{}
+	for _, c := range chores {
+		if c.Archived || c.Anyone || (c.Schedule != "daily" && c.Schedule != "weekdays") {
+			continue
+		}
+		rt := c.Routine
+		if rt == "" {
+			rt = "none"
+		}
+		ls[rt] = append(ls[rt], c)
+	}
+	for _, rt := range Routines {
+		slices.SortStableFunc(ls[rt], func(a, b Chore) int { return a.RoutinePosition - b.RoutinePosition })
+	}
+	return ls
+}
+
+// slotTag names a Routine Chore's Routine on the chore board.
+templ slotTag(c Chore) {
+	if c.Routine != "" {
+		<span data-slot={ c.Routine } class="rounded-full bg-soft px-2.5 py-0.5 text-sm">{ routineName(c.Routine) }</span>
+	}
+}
+
+// routineBuilder is the Routine builder pop-up: each Routine's Chores in one
+// order for the whole Household, dragged by their handle (or moved with the
+// arrow buttons) between and within the lists, saved at once. A locked
+// device only sees the Routines, with a way to unlock.
+templ routineBuilder(chores []Chore, unlocked bool) {
+	<div id="routine-builder" popover class="flyout">
+		<h2>Routines</h2>
+		<p class="text-muted">Daily and chosen-weekdays Each chores, in the order everyone does them. A Chore is in one Routine at most.</p>
+		if unlocked {
+			<form method="post" action="/chores/routines" class="flex flex-col gap-3">
+				@routineListsView(chores, true)
+				<button class="btn-primary">Save Routines</button>
+			</form>
+			@routineBuilderScript()
+		} else {
+			@routineListsView(chores, false)
+			<p><a href="/lock?next=/chores" class="btn-primary">Unlock to change Routines</a></p>
+		}
+	</div>
+}
+
+// routineListsView is the builder's lists, one per Routine and one for the
+// eligible Chores in none; editable ones carry their Routine as a field.
+templ routineListsView(chores []Chore, editable bool) {
+	for _, rt := range append(slices.Clone(Routines), "none") {
+		<section class="flex flex-col gap-2">
+			<h3>{ routineName(rt) }</h3>
+			<ul data-routine-list={ rt } class="flex min-h-11 flex-col gap-2 rounded-[10px] bg-soft p-2">
+				for _, c := range routineLists(chores)[rt] {
+					<li data-routine-chore={ id(c.ID) } class="flex items-center gap-2 rounded-[10px] bg-card px-2.5 py-1">
+						if editable {
+							<input type="hidden" name={ rt } value={ id(c.ID) }/>
+							<span class="handle" aria-hidden="true">⠿</span>
+						}
+						<span class="flex-1">{ c.Name }</span>
+						if editable {
+							<button type="button" data-step="-1" aria-label={ "Move " + c.Name + " up" } class="border-0 bg-transparent">↑</button>
+							<button type="button" data-step="1" aria-label={ "Move " + c.Name + " down" } class="border-0 bg-transparent">↓</button>
+						}
+					</li>
+				}
+			</ul>
+		</section>
+	}
+}
+
+// routineBuilderScript arms the builder's lists with the vendored SortableJS
+// (see Static): a Chore dropped in another list takes that list's Routine. The
+// arrow buttons move a Chore one place, across into the next list at an end.
+templ routineBuilderScript() {
+	<script src="/static/Sortable-1.15.6.min.js"></script>
+	<style>.handle { touch-action: none; cursor: grab; }</style>
+	<script>
+	(() => {
+		const box = document.getElementById("routine-builder");
+		const lists = [...box.querySelectorAll("ul[data-routine-list]")];
+		const settle = li => { li.querySelector("input").name = li.closest("ul").dataset.routineList; };
+		lists.forEach(ul => Sortable.create(ul, {
+			group: "routines", handle: ".handle", forceFallback: true, animation: 150,
+			onEnd: e => settle(e.item),
+		}));
+		box.addEventListener("click", e => {
+			const b = e.target.closest("button[data-step]");
+			if (!b) return;
+			const li = b.closest("li"), ul = li.closest("ul"), up = b.dataset.step === "-1";
+			const sib = up ? li.previousElementSibling : li.nextElementSibling;
+			if (sib) up ? sib.before(li) : sib.after(li);
+			else {
+				const to = lists[lists.indexOf(ul) + (up ? -1 : 1)];
+				if (!to) return;
+				up ? to.append(li) : to.prepend(li);
+			}
+			settle(li);
+			b.focus();
+		});
+	})();
+	</script>
+}
