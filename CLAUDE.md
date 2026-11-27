@@ -11,3 +11,7 @@ Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 ### Domain docs
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Testing
+
+Page-script tests run JavaScript in goja (`github.com/dop251/goja`) inside `go test`; see `internal/web/bridge_test.go` for the fake-DOM pattern. CI has no Node.

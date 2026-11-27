@@ -4,6 +4,7 @@ go 1.27.2
 
 require (
 	github.com/a-h/templ v0.3.1070
+	github.com/brutella/dnssd v1.2.14
 	github.com/dop251/goja v0.0.0-20261125210501-5e92a7e24d0c
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/teambition/rrule-go v1.8.2
@@ -26,9 +27,12 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/miekg/dns v1.1.61 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
+	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect

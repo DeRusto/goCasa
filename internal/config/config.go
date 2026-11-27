@@ -6,12 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // DefaultAddr is ADDR when unset.
 const DefaultAddr = ":8080"
+
+// DefaultMDNSName is MDNS_NAME when unset.
+const DefaultMDNSName = "GoCasa"
 
 type Config struct {
 	Addr          string
@@ -23,6 +27,9 @@ type Config struct {
 	// The Household's own Google OAuth client; empty ID = Google not set up.
 	GoogleClientID, GoogleClientSecret string
 	GoogleRedirectURI                  string // default ${BASE_URL}/auth/google/callback
+	// MDNS turns on the DNS-SD advert the Display app finds GoCasa by.
+	MDNS     bool
+	MDNSName string // the advert's instance name, default GoCasa
 }
 
 // Load builds a Config from getenv (os.Getenv in main, a map in tests).
@@ -34,6 +41,8 @@ func Load(getenv func(string) string) (Config, error) {
 		GoogleClientID:     getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURI:  getenv("GOOGLE_REDIRECT_URI"),
+
+		MDNSName: getenv("MDNS_NAME"),
 	}
 	if c.Addr == "" {
 		c.Addr = DefaultAddr
@@ -41,7 +50,22 @@ func Load(getenv func(string) string) (Config, error) {
 	if c.DataDir == "" {
 		c.DataDir = "/data"
 	}
+	if c.MDNSName == "" {
+		c.MDNSName = DefaultMDNSName
+	}
 	var errs []error
+
+	if raw := getenv("MDNS"); raw != "" {
+		if on, err := strconv.ParseBool(raw); err != nil {
+			errs = append(errs, fmt.Errorf("MDNS %q must be 1 (advertise on the LAN) or 0", raw))
+		} else {
+			c.MDNS = on
+		}
+	}
+	// One DNS label is 63 bytes; leave room for the " (99)" a name conflict adds.
+	if c.MDNS && len(c.MDNSName) > 58 {
+		errs = append(errs, fmt.Errorf("MDNS_NAME must be at most 58 bytes, got %d", len(c.MDNSName)))
+	}
 
 	if raw := getenv("BASE_URL"); raw == "" {
 		errs = append(errs, errors.New("BASE_URL is required, e.g. https://casa.example.com"))
