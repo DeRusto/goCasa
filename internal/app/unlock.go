@@ -32,10 +32,11 @@ func unlockedAdmin(ctx context.Context) int64 {
 // The Member must still be an active Admin, so a demoted, archived or deleted
 // Admin is locked out. Automatic requests aren't activity: page scripts mark
 // their refetches with X-Background, and the change stream can't set headers.
+// The JSON API never sets the cookie: it serves the Display app, not a page.
 func (a *App) withUnlock(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id := a.checkUnlock(r); id != 0 {
-			if !background(r) {
+			if !background(r) && !strings.HasPrefix(r.URL.Path, "/api/") {
 				a.setUnlock(w, id)
 			}
 			r = r.WithContext(context.WithValue(r.Context(), adminKey{}, id))
