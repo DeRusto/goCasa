@@ -48,6 +48,9 @@ func TestServiceOnOneAddressAdvertisesOnlyItsInterface(t *testing.T) {
 			if err != nil || !slices.Equal(s.Ifaces, []string{ifi.Name}) {
 				t.Fatalf("listening on %v: Ifaces = %v, err = %v; want [%s]", ip.IP, s.Ifaces, err, ifi.Name)
 			}
+			if len(s.IPs) != 1 || !s.IPs[0].Equal(ip.IP) {
+				t.Fatalf("listening on %v, but advertised %v", ip.IP, s.IPs)
+			}
 			return
 		}
 	}
@@ -56,14 +59,18 @@ func TestServiceOnOneAddressAdvertisesOnlyItsInterface(t *testing.T) {
 
 func TestAdvertiseStopsWhenTheServerStops(t *testing.T) {
 	svc, _ := Service("GoCasa test", &net.TCPAddr{Port: 1}, "test")
+	var logs bytes.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
-	done := Advertise(ctx, slog.New(slog.DiscardHandler), svc)
+	done := Advertise(ctx, slog.New(slog.NewTextHandler(&logs, nil)), svc)
 	time.Sleep(2 * time.Second) // past probing and the first announcement
 	cancel()
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("advertising still running 10s after shutdown")
+	}
+	if !strings.Contains(logs.String(), "mdns advertising starting") || strings.Contains(logs.String(), "stopped") {
+		t.Fatalf("logs = %q, want a clean start and stop", logs.String())
 	}
 }
 

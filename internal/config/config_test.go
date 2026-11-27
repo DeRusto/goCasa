@@ -90,6 +90,10 @@ func TestLoadMDNSOnWithNameOverride(t *testing.T) {
 	if c, err := Load(env(e)); err != nil || c.MDNS {
 		t.Fatalf("MDNS=0: on = %v, err = %v", c.MDNS, err)
 	}
+	e["MDNS_NAME"] = strings.Repeat("n", 59) // too long, but not advertised
+	if _, err := Load(env(e)); err != nil {
+		t.Fatalf("MDNS=0 with a long MDNS_NAME: %v", err)
+	}
 }
 
 func TestLoadRejectsBadMDNSValues(t *testing.T) {

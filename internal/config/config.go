@@ -63,7 +63,7 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 	// One DNS label is 63 bytes; leave room for the " (99)" a name conflict adds.
-	if len(c.MDNSName) > 58 {
+	if c.MDNS && len(c.MDNSName) > 58 {
 		errs = append(errs, fmt.Errorf("MDNS_NAME must be at most 58 bytes, got %d", len(c.MDNSName)))
 	}
 

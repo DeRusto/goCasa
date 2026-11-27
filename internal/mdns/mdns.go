@@ -21,7 +21,7 @@ const Type = "_gocasa._tcp"
 // instance name (the library renames it on a LAN conflict, e.g. "GoCasa (2)").
 // The Display app opens http://<resolved address>:<port>/ and reads ver only to
 // say "GoCasa too old". A listener on one address is advertised only on that
-// address's interface; a loopback one can't be reached from the LAN, so it is
+// address, on its interface; a loopback one can't be reached from the LAN, so it is
 // refused.
 func Service(name string, ln *net.TCPAddr, version string) (dnssd.Config, error) {
 	cfg := dnssd.Config{
@@ -40,7 +40,7 @@ func Service(name string, ln *net.TCPAddr, version string) (dnssd.Config, error)
 	if err != nil {
 		return cfg, err
 	}
-	cfg.Ifaces = []string{iface}
+	cfg.Ifaces, cfg.IPs = []string{iface}, []net.IP{ln.IP}
 	return cfg, nil
 }
 
@@ -83,6 +83,9 @@ func respond(ctx context.Context, log *slog.Logger, cfg dnssd.Config) error {
 	svc, err := dnssd.NewService(cfg)
 	if err != nil {
 		return err
+	}
+	if len(svc.Interfaces()) == 0 {
+		return errors.New("no network interface is up with multicast to advertise on")
 	}
 	rp, err := dnssd.NewResponder()
 	if err != nil {
