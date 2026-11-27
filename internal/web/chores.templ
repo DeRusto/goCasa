@@ -154,8 +154,10 @@ templ ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) {
 						if !c.Archived {
 							<section data-chore={ id(c.ID) } class="card flex flex-col gap-2">
 								<div class="flex flex-wrap items-baseline justify-between gap-x-2">
-									<h3 class="text-lg"><a href={ templ.SafeURL("/chores/" + id(c.ID)) } class="text-ink">{ c.Name }</a></h3>
-									@slotTag(c)
+									<div class="flex flex-wrap items-baseline gap-2">
+										<h3 class="text-lg"><a href={ templ.SafeURL("/chores/" + id(c.ID)) } class="text-ink">{ c.Name }</a></h3>
+										@slotTag(c)
+									</div>
 									<span class="text-sm text-muted">
 										{ schedule(c) } · { strconv.Itoa(c.Points) } points
 										if c.Anyone {

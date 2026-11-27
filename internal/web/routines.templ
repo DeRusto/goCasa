@@ -67,7 +67,10 @@ templ routineBuilder(chores []Chore, unlocked bool) {
 			@routineBuilderScript()
 		} else {
 			@routineListsView(chores, false)
-			<p><a href="/lock?next=/chores" class="btn-primary">Unlock to change Routines</a></p>
+			<form method="get" action="/lock">
+				<input type="hidden" name="next" value="/chores"/>
+				<button class="btn-primary">Unlock to change Routines</button>
+			</form>
 		}
 	</div>
 }
@@ -78,9 +81,9 @@ templ routineListsView(chores []Chore, editable bool) {
 	for _, rt := range append(slices.Clone(Routines), "none") {
 		<section class="flex flex-col gap-2">
 			<h3>{ routineName(rt) }</h3>
-			<ul data-routine-list={ rt } class="flex min-h-11 flex-col gap-2 rounded-[10px] bg-soft p-2">
+			<ul data-routine-list={ rt } class="flex min-h-11 flex-col gap-2 rounded-[10px] bg-soft p-2.5">
 				for _, c := range routineLists(chores)[rt] {
-					<li data-routine-chore={ id(c.ID) } class="flex items-center gap-2 rounded-[10px] bg-card px-2.5 py-1">
+					<li data-routine-chore={ id(c.ID) } class="flex min-h-11 items-center gap-2 rounded-lg border border-line bg-card px-2.5">
 						if editable {
 							<input type="hidden" name={ rt } value={ id(c.ID) }/>
 							<span class="handle" aria-hidden="true">⠿</span>
