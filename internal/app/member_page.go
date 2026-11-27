@@ -80,8 +80,8 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 
 // memberChores is Member id's share of today's Chores: the active ones they're
 // assigned with a Round to show, each Round keeping only their own tap, or an
-// Anyone chore's completion by whoever did it. A Late Round shows only while
-// they can still claim it.
+// Anyone chore's completion by whoever did it. Like Today, a Late Round stays,
+// done or not, while anyone can still claim it.
 func memberChores(cs []web.Chore, member int64) []web.Chore {
 	var out []web.Chore
 	for _, c := range cs {
@@ -91,14 +91,12 @@ func memberChores(cs []web.Chore, member int64) []web.Chore {
 		var rounds []web.ChoreRound
 		for _, rd := range c.Rounds {
 			var taps []web.ChoreTap
-			open := false
 			for _, t := range rd.Taps {
 				if t.Member.ID == member || c.Anyone && t.CompletionID != 0 {
 					taps = append(taps, t)
-					open = open || t.CompletionID == 0
 				}
 			}
-			if len(taps) > 0 && (open || !rd.Late) {
+			if len(taps) > 0 {
 				rd.Taps = taps
 				rounds = append(rounds, rd)
 			}

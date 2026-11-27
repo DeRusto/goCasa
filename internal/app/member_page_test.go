@@ -167,6 +167,10 @@ func TestMemberPageListsTheMembersChoresAndTicksThem(t *testing.T) {
 	if cs := section(t, memberPage(t, h, "3"), "member-chores"); !strings.Contains(cs, "Late") {
 		t.Errorf("Carol's Late Round has no Late tag: %q", cs)
 	}
+	// Bob did his Sunday Dishes; while Carol still can, the Round stays on his page, done, as on Today.
+	if cs := section(t, memberPage(t, h, "2"), "member-chores"); strings.Count(cs, `data-round="2026-03-15"`) != 2 { // Dishes and the weekly Bins
+		t.Errorf("Bob's ticked Late Round left his page: %q", cs)
+	}
 }
 
 func TestTickingFromTheMemberPageFollowsTheChoresLock(t *testing.T) {
