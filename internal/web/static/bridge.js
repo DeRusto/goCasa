@@ -28,7 +28,8 @@
 			notice.setAttribute("role", "status");
 			notice.textContent = "Update the Display app";
 			Object.assign(notice.style, {
-				position: "fixed", left: "50%", bottom: "1rem", transform: "translateX(-50%)", zIndex: "50", margin: "0",
+				position: "fixed", left: "50%", bottom: "5rem", whiteSpace: "nowrap", // above the phone tab bar
+				transform: "translateX(-50%)", zIndex: "50", margin: "0",
 				padding: ".5rem 1rem", borderRadius: "999px", background: "rgba(20,20,20,.7)", color: "#ddd",
 				font: "1rem system-ui,sans-serif", pointerEvents: "none", // never in the way of a touch
 			});
