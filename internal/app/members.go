@@ -287,11 +287,11 @@ func (a *App) postLock(w http.ResponseWriter, r *http.Request) {
 	switch res {
 	case pinBlocked:
 		a.lockPage(w, r, http.StatusTooManyRequests, errPINBlocked)
-	case pinNo:
-		a.lockPage(w, r, http.StatusUnauthorized, "That PIN didn't match. Try again.")
-	default:
+	case pinYes:
 		a.setUnlock(w, id)
 		http.Redirect(w, r, cmp.Or(safeNext(r.PostFormValue("next")), "/settings"), http.StatusSeeOther)
+	default:
+		a.lockPage(w, r, http.StatusUnauthorized, "That PIN didn't match. Try again.")
 	}
 }
 
