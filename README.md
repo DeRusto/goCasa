@@ -80,7 +80,7 @@ Config comes from environment variables. Without Docker, the binary also reads a
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | (unset) | Your own Google OAuth client, to connect Google calendars. Set both or neither; see [Google calendars](#google-calendars) |
 | `GOOGLE_REDIRECT_URI` | `${BASE_URL}/auth/google/callback` | Override for the localhost / `ssh -L` route |
 | `MDNS` | `0` | `1` advertises GoCasa on the LAN so the Display app can find it; see [Finding GoCasa on the LAN](#finding-gocasa-on-the-lan) |
-| `MDNS_NAME` | `GoCasa` | The name the Display app lists. Up to 63 bytes |
+| `MDNS_NAME` | `GoCasa` | The name the Display app lists. Up to 58 bytes |
 
 The binary refuses to start if a required value is missing or malformed, and says which one.
 
@@ -117,7 +117,7 @@ Replace the image and start it. Migrations are embedded in the binary and run at
 
 ## Finding GoCasa on the LAN
 
-The [GoCasa Display app](https://github.com/DeRusto/gocasa-android) turns a tablet into a Wall display and can find GoCasa by itself over mDNS (DNS-SD, also called Bonjour or Zeroconf) instead of you typing an address. Advertising is off by default. With `MDNS=1` GoCasa announces itself as type `_gocasa._tcp`, named `GoCasa` (or `MDNS_NAME`), on the port it listens on, with TXT `txtvers=1` and `ver=<GoCasa version>`. If another GoCasa on the LAN already has the name, it becomes `GoCasa (2)`. It stops announcing when GoCasa shuts down. If advertising fails, GoCasa logs `mdns advertising stopped` and keeps serving; the app's "Enter address" option always works.
+The [GoCasa Display app](https://github.com/DeRusto/gocasa-android) turns a tablet into a Wall display and can find GoCasa by itself over mDNS (DNS-SD, also called Bonjour or Zeroconf) instead of you typing an address. Advertising is off by default. With `MDNS=1` GoCasa announces itself as type `_gocasa._tcp`, named `GoCasa` (or `MDNS_NAME`), on the port it listens on, with TXT `txtvers=1` and `ver=<GoCasa version>`. If another GoCasa on the LAN already has the name, it becomes `GoCasa (2)`. It stops announcing when GoCasa shuts down. If advertising fails, GoCasa logs `mdns advertising stopped` (or `mdns not advertising` when `ADDR` is a loopback address the LAN can't reach) and keeps serving; the app's "Enter address" option always works.
 
 The Display app opens `http://<the address it found>:<port>/`, never `BASE_URL`, so the advertised port must be one a tablet on the LAN can reach.
 
@@ -133,9 +133,9 @@ services:
       MDNS: "1"
 ```
 
-Remove the `ports:` section, since it doesn't apply with `network_mode: host`. `network_mode: host` does nothing on Docker Desktop for Mac or Windows; use the bare binary or the Avahi way there.
+Remove the `ports:` section, since it doesn't apply with `network_mode: host`. This recipe is for Docker Engine on Linux. Docker Desktop for Mac and Windows runs containers in a VM, where host networking doesn't reach the LAN the same way; run the bare binary there instead.
 
-**Docker bridge network (the default `compose.yaml`), with Avahi:** leave `MDNS` off and let the host's Avahi advertise GoCasa. Copy [`docs/avahi/gocasa.service`](docs/avahi/gocasa.service) to `/etc/avahi/services/gocasa.service` on the Docker host, set its `<port>` to the host port you publish (`8080` by default) and its `ver` to the GoCasa version you run. Avahi picks it up at once. Update `ver` when you upgrade, since the app uses it only to say GoCasa is too old.
+**Docker bridge network (the default `compose.yaml`), on a Linux host running Avahi:** leave `MDNS` off and let the host's Avahi advertise GoCasa. Copy [`docs/avahi/gocasa.service`](docs/avahi/gocasa.service) to `/etc/avahi/services/gocasa.service` on the Docker host, set its `<port>` to the host port you publish (`8080` by default) and its `ver` to the GoCasa version you run. Avahi picks it up at once. Update `ver` when you upgrade, since the app uses it only to say GoCasa is too old.
 
 ## HTTPS
 

@@ -5,13 +5,21 @@ import (
 	"context"
 	"log/slog"
 	"maps"
+	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestServiceDescribesGoCasaForTheDisplayApp(t *testing.T) {
-	s := Service("Casa Kitchen", 8080, "v1.2.0")
+	s, err := Service("Casa Kitchen", &net.TCPAddr{Port: 8080}, "v1.2.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Ifaces != nil {
+		t.Fatalf("listening on every address, but advertised only on %v", s.Ifaces)
+	}
 	if s.Name != "Casa Kitchen" || s.Type != "_gocasa._tcp" || s.Port != 8080 {
 		t.Fatalf("name %q type %q port %d", s.Name, s.Type, s.Port)
 	}
@@ -20,21 +28,49 @@ func TestServiceDescribesGoCasaForTheDisplayApp(t *testing.T) {
 	}
 }
 
+func TestServiceRefusesALoopbackListener(t *testing.T) {
+	_, err := Service("GoCasa", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8080}, "v1.2.0")
+	if err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("err = %v, want a loopback refusal", err)
+	}
+}
+
+func TestServiceOnOneAddressAdvertisesOnlyItsInterface(t *testing.T) {
+	ifaces, _ := net.Interfaces()
+	for _, ifi := range ifaces {
+		addrs, _ := ifi.Addrs()
+		for _, a := range addrs {
+			ip, ok := a.(*net.IPNet)
+			if !ok || ip.IP.IsLoopback() || ip.IP.To4() == nil {
+				continue
+			}
+			s, err := Service("GoCasa", &net.TCPAddr{IP: ip.IP, Port: 8080}, "v1.2.0")
+			if err != nil || !slices.Equal(s.Ifaces, []string{ifi.Name}) {
+				t.Fatalf("listening on %v: Ifaces = %v, err = %v; want [%s]", ip.IP, s.Ifaces, err, ifi.Name)
+			}
+			return
+		}
+	}
+	t.Skip("no non-loopback IPv4 address on this machine")
+}
+
 func TestAdvertiseStopsWhenTheServerStops(t *testing.T) {
+	svc, _ := Service("GoCasa test", &net.TCPAddr{Port: 1}, "test")
 	ctx, cancel := context.WithCancel(context.Background())
-	done := Advertise(ctx, slog.New(slog.DiscardHandler), Service("GoCasa test", 1, "test"))
-	time.Sleep(100 * time.Millisecond)
+	done := Advertise(ctx, slog.New(slog.DiscardHandler), svc)
+	time.Sleep(2 * time.Second) // past probing and the first announcement
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("advertising still running 5s after shutdown")
+	case <-time.After(10 * time.Second):
+		t.Fatal("advertising still running 10s after shutdown")
 	}
 }
 
 func TestAdvertiseLogsAFailureInsteadOfCrashing(t *testing.T) {
 	var logs bytes.Buffer
-	done := Advertise(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)), Service("", 8080, "test"))
+	svc, _ := Service("", &net.TCPAddr{Port: 8080}, "test")
+	done := Advertise(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)), svc)
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):

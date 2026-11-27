@@ -95,7 +95,7 @@ func TestLoadMDNSOnWithNameOverride(t *testing.T) {
 func TestLoadRejectsBadMDNSValues(t *testing.T) {
 	for name, tc := range map[string]struct{ key, val string }{
 		"mdns not a switch":  {"MDNS", "yes please"},
-		"name over 63 bytes": {"MDNS_NAME", strings.Repeat("n", 64)},
+		"name over 58 bytes": {"MDNS_NAME", strings.Repeat("n", 59)}, // leaves room for " (99)"
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := valid()

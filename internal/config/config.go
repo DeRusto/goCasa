@@ -62,8 +62,9 @@ func Load(getenv func(string) string) (Config, error) {
 			c.MDNS = on
 		}
 	}
-	if len(c.MDNSName) > 63 { // one DNS label
-		errs = append(errs, fmt.Errorf("MDNS_NAME must be at most 63 bytes, got %d", len(c.MDNSName)))
+	// One DNS label is 63 bytes; leave room for the " (99)" a name conflict adds.
+	if len(c.MDNSName) > 58 {
+		errs = append(errs, fmt.Errorf("MDNS_NAME must be at most 58 bytes, got %d", len(c.MDNSName)))
 	}
 
 	if raw := getenv("BASE_URL"); raw == "" {

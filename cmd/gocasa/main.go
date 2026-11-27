@@ -120,9 +120,12 @@ func run(log *slog.Logger) error {
 	go func() { errc <- srv.Serve(ln) }()
 	log.Info("gocasa listening", "addr", cfg.Addr, "base_url", cfg.BaseURL.String(), "version", appVersion())
 	if cfg.MDNS {
-		port := ln.Addr().(*net.TCPAddr).Port
-		advertised := mdns.Advertise(ctx, log, mdns.Service(cfg.MDNSName, port, appVersion()))
-		defer func() { stop(); <-advertised }() // the goodbye goes out before exit
+		if svc, err := mdns.Service(cfg.MDNSName, ln.Addr().(*net.TCPAddr), appVersion()); err != nil {
+			log.Error("mdns not advertising", "err", err)
+		} else {
+			advertised := mdns.Advertise(ctx, log, svc)
+			defer func() { stop(); <-advertised }() // the goodbye goes out before exit
+		}
 	}
 
 	select {
