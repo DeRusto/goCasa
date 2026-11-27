@@ -250,6 +250,10 @@ func page(title string, pill bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		templ_7745c5c3_Err = bridge("awake").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</head><body><div class=\"min-[760px]:flex\"><nav class=\"fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-line bg-card min-[760px]:sticky min-[760px]:top-0 min-[760px]:h-screen min-[760px]:w-[76px] min-[760px]:flex-none min-[760px]:flex-col min-[760px]:justify-start min-[760px]:gap-1 min-[760px]:border-t-0 min-[760px]:border-r min-[760px]:py-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -267,7 +271,7 @@ func page(title string, pill bool) templ.Component {
 			var templ_7745c5c3_Var11 templ.SafeURL
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(n.Path))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 98, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 99, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -311,7 +315,7 @@ func page(title string, pill bool) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(n.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 107, Col: 16}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 108, Col: 16}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -392,7 +396,7 @@ func pageHead(title string) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 131, Col: 13}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 132, Col: 13}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -447,7 +451,7 @@ func menuButton(target, label string) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(target)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 141, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 142, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -460,7 +464,7 @@ func menuButton(target, label string) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 141, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 142, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -514,7 +518,7 @@ func defaultViewButton(view string) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(view)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 154, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 155, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -607,7 +611,7 @@ func householdSection(h Household) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(h.IdleSeconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 191, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 192, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -620,7 +624,7 @@ func householdSection(h Household) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(h.SecondsPerPhoto))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 196, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 197, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
@@ -685,7 +689,7 @@ func householdSection(h Household) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(h.NightStart))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 232, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 233, Col: 79}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {
@@ -698,7 +702,7 @@ func householdSection(h Household) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(h.NightEnd))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 236, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 237, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 		if templ_7745c5c3_Err != nil {
@@ -711,7 +715,7 @@ func householdSection(h Household) templ.Component {
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(h.Timezone)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 241, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 242, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 		if templ_7745c5c3_Err != nil {
@@ -758,7 +762,7 @@ func thisDevice() templ.Component {
 			var templ_7745c5c3_Var28 templ.SafeURL
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 255, Col: 30}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 256, Col: 30}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 			if templ_7745c5c3_Err != nil {
@@ -771,7 +775,7 @@ func thisDevice() templ.Component {
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(v)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 255, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/home.templ`, Line: 256, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {
@@ -868,7 +872,7 @@ func thisDevice() templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if device(ctx).MotionWake {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<script>\n\t\t// Shows the camera permission without opening the camera, which runs only on the\n\t\t// screensaver and Dim clock (spec §8); the Admin asks for it here, by a button,\n\t\t// so the screensaver never waits on a prompt.\n\t\t(async () => {\n\t\t\tconst el = document.getElementById(\"motion-wake\"), status = s => el.textContent = s;\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!navigator.mediaDevices) return status(\"not supported by this browser\");\n\t\t\tconst ask = () => {\n\t\t\t\tconst b = document.createElement(\"button\");\n\t\t\t\tb.type = \"button\";\n\t\t\t\tb.textContent = \"Allow the camera\";\n\t\t\t\tb.onclick = async () => {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t(await navigator.mediaDevices.getUserMedia({ video: true })).getTracks().forEach(t => t.stop());\n\t\t\t\t\t\tstatus(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\tstatus(\"not yet allowed \");\n\t\t\t\tel.append(b);\n\t\t\t};\n\t\t\ttry {\n\t\t\t\tconst p = await navigator.permissions.query({ name: \"camera\" });\n\t\t\t\tif (p.state === \"granted\") return status(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t\tif (p.state === \"denied\") return status(\"not allowed: blocked in the browser's site settings\");\n\t\t\t} catch {} // a browser that can't say: ask\n\t\t\task();\n\t\t})();\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<script>\n\t\t// Shows the camera permission without opening the camera, which runs only on the\n\t\t// screensaver and Dim clock (spec §8); the Admin asks for it here, by a button,\n\t\t// so the screensaver never waits on a prompt.\n\t\t(async () => {\n\t\t\tconst el = document.getElementById(\"motion-wake\"), status = s => el.textContent = s;\n\t\t\tif (window.gocasaDisplay) return status(\"run by the Display app\"); // which asks for the camera itself\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!navigator.mediaDevices) return status(\"not supported by this browser\");\n\t\t\tconst ask = () => {\n\t\t\t\tconst b = document.createElement(\"button\");\n\t\t\t\tb.type = \"button\";\n\t\t\t\tb.textContent = \"Allow the camera\";\n\t\t\t\tb.onclick = async () => {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t(await navigator.mediaDevices.getUserMedia({ video: true })).getTracks().forEach(t => t.stop());\n\t\t\t\t\t\tstatus(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t\t\t}\n\t\t\t\t};\n\t\t\t\tstatus(\"not yet allowed \");\n\t\t\t\tel.append(b);\n\t\t\t};\n\t\t\ttry {\n\t\t\t\tconst p = await navigator.permissions.query({ name: \"camera\" });\n\t\t\t\tif (p.state === \"granted\") return status(\"allowed; runs on the screensaver and Dim clock\");\n\t\t\t\tif (p.state === \"denied\") return status(\"not allowed: blocked in the browser's site settings\");\n\t\t\t} catch {} // a browser that can't say: ask\n\t\t\task();\n\t\t})();\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

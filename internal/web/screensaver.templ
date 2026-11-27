@@ -52,6 +52,7 @@ templ Screensaver(p TodayPage, s Slides, nightSeconds int) {
 			<meta name="color-scheme" content="dark"/>
 			<title>Screensaver</title>
 			@htmx()
+			@bridge("screensaver")
 			@templ.Raw("<style>" + slideCSS + "</style>")
 		</head>
 		<body style="margin:0;background:#000;color:#ddd;font-family:system-ui,sans-serif">
@@ -187,6 +188,11 @@ templ Night(mode string, p TodayPage, reloadSeconds int) {
 			<meta name="color-scheme" content="dark"/>
 			<title>Night</title>
 			@htmx()
+			if mode == "black" {
+				@bridge("night-black")
+			} else {
+				@bridge("night-dim")
+			}
 		</head>
 		<body style="margin:0;background:#000;color:#333;font-family:system-ui,sans-serif">
 			<a id="wake" href="/" aria-label="Wake" data-night={ mode } style="position:fixed;inset:0;display:block;padding:2rem;color:inherit;text-decoration:none;cursor:none">
@@ -226,14 +232,24 @@ templ nightWatch(seconds int) {
 	</script>
 }
 
+// bridge loads the Bridge to the Display app (static/bridge.js) in the head,
+// before the page's own scripts. screen is
+// what the page shows: "awake", "screensaver", "night-black" or "night-dim";
+// cameraWake is this device's motion_wake cookie, which page script can't read.
+templ bridge(screen string) {
+	<script src={ bridgeURL } data-screen={ screen } data-camera-wake={ strconv.FormatBool(device(ctx).MotionWake) }></script>
+}
+
 // motionWake watches the camera on the screensaver and Dim clock: it compares
 // each frame, downscaled to 64×48, with the one before, and when enough
 // pixels change it wakes the page like a touch on #wake. Frames stay in this
-// page; #camera shows while it runs.
+// page; #camera shows while it runs. In the Display app (window.gocasaDisplay)
+// it doesn't run: the app watches its own camera and sends a wake.
 templ motionWake() {
 	<span id="camera" hidden role="img" aria-label="Camera motion-wake on" style="position:fixed;right:1rem;bottom:1rem;color:#555;font-size:1.25rem;pointer-events:none">&#x1F4F7;&#xFE0E;</span>
 	<script>
 	(async () => {
+		if (window.gocasaDisplay) return; // the Display app runs Camera wake
 		if (!window.isSecureContext || !navigator.mediaDevices) return; // Settings shows why
 		let stream;
 		try {
@@ -282,7 +298,9 @@ templ motionWake() {
 
 // wallDisplay holds a Screen Wake Lock where the browser allows it, showing
 // its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
-// screensaver after that long with no touch, pointer or key input.
+// screensaver after that long with no touch, pointer or key input. In the
+// Display app (window.gocasaDisplay) the app keeps the screen on instead, but the page still goes
+// to the screensaver when idle: the app has no idle timer of its own.
 templ wallDisplay(idleSeconds int) {
 	<script data-idle-seconds={ strconv.Itoa(idleSeconds) }>
 	(() => {
@@ -301,8 +319,11 @@ templ wallDisplay(idleSeconds int) {
 				status("not allowed: " + e.message);
 			}
 		};
-		document.addEventListener("visibilitychange", hold); // the browser drops the lock when the page hides
-		hold();
+		if (window.gocasaDisplay) status("kept on by the Display app");
+		else {
+			document.addEventListener("visibilitychange", hold); // the browser drops the lock when the page hides
+			hold();
+		}
 		if (idle > 0) {
 			let timer;
 			const reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign("/screensaver"), idle * 1000); };

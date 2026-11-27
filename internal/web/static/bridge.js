@@ -1,0 +1,60 @@
+// The Bridge to the Display app (gocasa-android), which injects
+// window.gocasaDisplay before the page's scripts run. Without it this script
+// does nothing. With it, after every load the page tells the app which screen
+// it shows ({type: "state"}) and a {type: "wake"} from the app's Camera wake
+// touches #wake. The page's own wake lock and camera scripts check
+// window.gocasaDisplay themselves and leave those to the app, whatever its
+// version. An app older than minimumVersion gets a notice and no messages.
+(() => {
+	const minimumVersion = [0, 1, 0]; // the oldest Display app GoCasa supports
+	const app = window.gocasaDisplay;
+	if (!app) return;
+	const tag = document.currentScript.dataset;
+	const whenLoaded = f => document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", f) : f();
+
+	// supported is whether version, a release's "X.Y.Z" or "X.Y.Z-rc.N", is at least minimumVersion.
+	const supported = version => {
+		const v = /^(\d+)\.(\d+)\.(\d+)(-rc\.\d+)?$/.exec(typeof version === "string" ? version : "");
+		if (!v) return false;
+		for (let i = 0; i < 3; i++) {
+			const d = Number(v[i + 1]) - minimumVersion[i];
+			if (d) return d > 0;
+		}
+		return !v[4]; // a release candidate comes before its release
+	};
+	if (!supported(app.version)) {
+		whenLoaded(() => {
+			const notice = document.createElement("p");
+			notice.setAttribute("role", "status");
+			notice.textContent = "Update the Display app";
+			Object.assign(notice.style, {
+				position: "fixed", left: "50%", bottom: "5rem", whiteSpace: "nowrap", // above the phone tab bar
+				transform: "translateX(-50%)", zIndex: "50", margin: "0",
+				padding: ".5rem 1rem", borderRadius: "999px", background: "rgba(20,20,20,.7)", color: "#ddd",
+				font: "1rem system-ui,sans-serif", pointerEvents: "none", // never in the way of a touch
+			});
+			document.body.append(notice);
+		});
+		return;
+	}
+	// message is what onmessage is given: the message, or a MessageEvent (whose
+	// own type is "message") with the message or its JSON text as its data.
+	// Anything else is null.
+	const message = m => {
+		if (m && typeof m === "object" && "data" in m && (m.type === undefined || m.type === "message")) m = m.data;
+		if (typeof m === "string") {
+			try { m = JSON.parse(m); } catch { return null; }
+		}
+		return m && typeof m === "object" ? m : null;
+	};
+	// Every message has a type; unknown types are ignored.
+	app.onmessage = e => {
+		const m = message(e);
+		if (m && m.type === "wake") document.getElementById("wake")?.click(); // as a touch on the screensaver or Night page
+	};
+
+	// After load, so a night-black screen-off waits for the page to be drawn.
+	const sendState = () => app.send({ type: "state", screen: tag.screen, cameraWake: tag.cameraWake === "true" });
+	if (document.readyState === "complete") sendState();
+	else addEventListener("load", sendState);
+})();
