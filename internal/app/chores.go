@@ -58,10 +58,11 @@ func claimable(schedule, days string, weekStart int, today, created time.Time) [
 	return rs
 }
 
-// back is where a chore action returns to: Today when it came from there.
+// back is where a chore or Reward action returns to: Today or a Member page
+// when it came from there, else the chore board.
 func back(r *http.Request) string {
-	if r.PostFormValue("next") == "/today" {
-		return "/today"
+	if next := r.PostFormValue("next"); next == "/today" || memberPagePath.MatchString(next) {
+		return next
 	}
 	return "/chores"
 }
@@ -134,6 +135,10 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 
 	for i := range cs {
 		c := &cs[i]
+		c.Assignees = map[int64]bool{}
+		for _, m := range assignees[c.ID] {
+			c.Assignees[m.ID] = true
+		}
 		if c.Archived {
 			continue
 		}

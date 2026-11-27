@@ -144,6 +144,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /settings/members/{id}/delete", a.requireUnlock(a.deleteMember))
 	mux.HandleFunc("POST /settings/members/{id}/avatar", a.requireUnlock(a.uploadAvatar))
 	mux.HandleFunc("POST /settings/members/{id}/avatar/delete", a.requireUnlock(a.deleteAvatar))
+	mux.HandleFunc("GET /members/{id}", a.getMemberPage)
 	mux.HandleFunc("GET /members/{id}/avatar", a.getAvatar)
 	mux.HandleFunc("POST /settings/weather", a.requireUnlock(a.saveWeather))
 	mux.HandleFunc("GET /settings/weather/places", a.requireUnlock(a.searchPlaces))

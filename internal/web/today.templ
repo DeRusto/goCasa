@@ -26,32 +26,7 @@ templ Today(p TodayPage) {
 					<p class="text-7xl font-light tabular-nums">@clock(p)</p>
 					<h1 class="text-xl font-normal text-muted">{ p.Now.Format("Monday 2 January") }</h1>
 				</div>
-				if w := p.Weather; w != nil {
-					<div class="flex flex-wrap items-center gap-6 min-[760px]:ml-auto">
-						@wxIcon(w.Conditions, w.Day, "size-16 flex-none")
-						<div>
-							<p class="text-5xl tabular-nums">{ deg(w.Current) + w.Unit }</p>
-							<p class="text-muted">
-								{ w.Conditions }
-								if w.HasToday {
-									· H { deg(w.High) } L { deg(w.Low) }
-								}
-							</p>
-						</div>
-						<ol class="flex flex-wrap gap-5">
-							for _, d := range w.Ahead {
-								<li class="flex flex-col items-center text-sm">
-									{ d.Day }
-									<span title={ d.Conditions }>
-										@wxIcon(d.Conditions, true, "my-1 size-7")
-										<span class="sr-only">{ d.Conditions }</span>
-									</span>
-									<b class="text-lg tabular-nums">{ deg(d.High) } / { deg(d.Low) }</b>
-								</li>
-							}
-						</ol>
-					</div>
-				}
+				@weatherSummary(p.Weather)
 			</header>
 			<main class="card gap-5">
 				@calendarDay(p.Days[0], "Today")
@@ -101,6 +76,37 @@ templ Today(p TodayPage) {
 		</div>
 		@liveDrafts()
 		@ticker()
+	}
+}
+
+// weatherSummary is the large weather of an at-a-glance page: now, today's
+// high and low, and the days ahead; nothing without cached weather.
+templ weatherSummary(w *WeatherHeader) {
+	if w != nil {
+		<div class="flex flex-wrap items-center gap-6 min-[760px]:ml-auto">
+			@wxIcon(w.Conditions, w.Day, "size-16 flex-none")
+			<div>
+				<p class="text-5xl tabular-nums">{ deg(w.Current) + w.Unit }</p>
+				<p class="text-muted">
+					{ w.Conditions }
+					if w.HasToday {
+						· H { deg(w.High) } L { deg(w.Low) }
+					}
+				</p>
+			</div>
+			<ol class="flex flex-wrap gap-5">
+				for _, d := range w.Ahead {
+					<li class="flex flex-col items-center text-sm">
+						{ d.Day }
+						<span title={ d.Conditions }>
+							@wxIcon(d.Conditions, true, "my-1 size-7")
+							<span class="sr-only">{ d.Conditions }</span>
+						</span>
+						<b class="text-lg tabular-nums">{ deg(d.High) } / { deg(d.Low) }</b>
+					</li>
+				}
+			</ol>
+		</div>
 	}
 }
 

@@ -1,0 +1,120 @@
+package web
+
+import "strconv"
+
+// MemberPage is one Member's today at a glance, in Standard style.
+type MemberPage struct {
+	Member  Member
+	Day     TodayPage    // the clock and weather; Days[0] is today's events, Days[1] tomorrow's
+	Chores  []Chore      // this Member's, with only their taps (and an Anyone chore's completer)
+	Balance int          // this Member's points
+	Rewards []Reward     // not archived, cheapest first
+	Waiting []Redemption // this Member's pending Redemptions, oldest first
+}
+
+// path is the Member page's own URL, where its actions return.
+func (p MemberPage) path() string { return "/members/" + id(p.Member.ID) }
+
+// MemberPageView is the Member page in Standard style: denser like Today, with
+// a one-line peek at tomorrow's first event. Nothing in GoCasa links to it.
+templ MemberPageView(p MemberPage) {
+	@page(p.Member.Name+" · Member page", false) {
+		<div id="live" data-member-page={ id(p.Member.ID) } { live(KindEvent, KindChore, KindPoints, KindMember, KindHousehold, KindIntegration)... } class="grid grid-cols-[minmax(0,1fr)] gap-4 p-5 min-[760px]:min-h-[calc(100vh-4rem)] min-[760px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] min-[760px]:grid-rows-[auto_1fr]">
+			<header class="flex flex-wrap items-center gap-x-7 gap-y-4 min-[760px]:col-span-full">
+				<div class="flex items-center gap-3">
+					@avatar(p.Member)
+					<div>
+						<h1 class="text-3xl">{ p.Member.Name }</h1>
+						<p class="text-xl text-muted">
+							<span class="tabular-nums">@clock(p.Day)</span> · { p.Day.Now.Format("Monday 2 January") }
+						</p>
+					</div>
+				</div>
+				@weatherSummary(p.Day.Weather)
+			</header>
+			<main class="card gap-5">
+				@calendarDay(p.Day.Days[0], "Today")
+				<section id="member-tomorrow" class="flex flex-wrap gap-x-2.5 text-muted">
+					<strong>Tomorrow</strong>
+					if evs := p.Day.Days[1].Events; len(evs) > 0 {
+						<span class="tabular-nums">{ evs[0].Time }</span> <span class="text-ink">{ evs[0].Title }</span>
+					} else {
+						<span>Nothing tomorrow.</span>
+					}
+				</section>
+			</main>
+			<div class="flex flex-col content-start gap-4">
+				<section id="member-chores" class="card flex flex-col gap-3">
+					<h2 class="text-muted">Chores today</h2>
+					if len(p.Chores) == 0 {
+						<p class="text-muted">No chores today.</p>
+					}
+					for _, c := range p.Chores {
+						<div class="flex flex-col gap-1.5">
+							<div class="flex items-baseline justify-between gap-2">
+								<h3>{ c.Name }</h3>
+								<span class="text-sm text-muted">
+									if c.Anyone {
+										Anyone ·
+									}
+									{ strconv.Itoa(c.Points) } pts
+								</span>
+							</div>
+							@choreRounds(c, p.path())
+						</div>
+					}
+				</section>
+				<section id="member-points" class="card flex flex-col gap-3">
+					<h2 class="flex items-baseline justify-between gap-2">
+						<span class="text-muted">Points</span>
+						<span><b class="text-lg tabular-nums" data-balance={ id(p.Member.ID) }>{ strconv.Itoa(p.Balance) }</b> points</span>
+					</h2>
+					for _, rd := range p.Waiting {
+						<p class="flex flex-wrap items-center gap-2 rounded-[10px] bg-soft px-2.5 py-2">
+							<span class="flex-1">{ rd.Reward.Name } ({ strconv.Itoa(rd.Reward.Cost) } points)</span>
+							<strong class="text-late">waiting</strong>
+						</p>
+					}
+					if len(p.Rewards) == 0 {
+						<p class="text-muted">No Rewards yet.</p>
+					}
+					for _, rw := range p.Rewards {
+						if p.Balance >= rw.Cost {
+							<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem") } class="contents">
+								<input type="hidden" name="member_id" value={ id(p.Member.ID) }/>
+								<input type="hidden" name="next" value={ p.path() }/>
+								<button aria-label={ "Ask for " + rw.Name } class="flex items-center justify-between gap-2 rounded-[10px] border-transparent px-2.5 py-2 text-left" style={ "background:" + pastel(p.Member.Color) }>
+									<b>{ rw.Name }</b>
+									<span class="tabular-nums">{ strconv.Itoa(rw.Cost) } points</span>
+								</button>
+							</form>
+						} else {
+							<div data-reward={ id(rw.ID) } class="flex items-center justify-between gap-2 rounded-[10px] bg-soft px-2.5 py-2 text-muted">
+								<span>{ rw.Name }</span>
+								<span class="text-sm tabular-nums">{ strconv.Itoa(rw.Cost - p.Balance) } more</span>
+							</div>
+						}
+					}
+				</section>
+			</div>
+		</div>
+		@liveDrafts()
+		@ticker()
+	}
+}
+
+// MemberUnavailable is the plain page for a Member with no Member page:
+// archived, deleted, unknown or a pet.
+templ MemberUnavailable() {
+	<!DOCTYPE html>
+	<html lang="en" data-theme={ device(ctx).Theme }>
+		<head>
+			@head("Member page")
+		</head>
+		<body>
+			<main class="grid min-h-dvh place-items-center p-5">
+				<p class="text-xl">This Member page isn't available. Ask an Admin to choose another Member.</p>
+			</main>
+		</body>
+	</html>
+}
