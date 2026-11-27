@@ -18,6 +18,7 @@ import (
 	"github.com/DeRusto/goCasa/internal/app"
 	"github.com/DeRusto/goCasa/internal/config"
 	"github.com/DeRusto/goCasa/internal/db"
+	"github.com/DeRusto/goCasa/internal/mdns"
 )
 
 func main() {
@@ -117,7 +118,12 @@ func run(log *slog.Logger) error {
 	srv.RegisterOnShutdown(a.Bus.Close) // SSE streams never finish on their own
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
-	log.Info("gocasa listening", "addr", cfg.Addr, "base_url", cfg.BaseURL.String())
+	log.Info("gocasa listening", "addr", cfg.Addr, "base_url", cfg.BaseURL.String(), "version", appVersion())
+	if cfg.MDNS {
+		port := ln.Addr().(*net.TCPAddr).Port
+		advertised := mdns.Advertise(ctx, log, mdns.Service(cfg.MDNSName, port, appVersion()))
+		defer func() { stop(); <-advertised }() // the goodbye goes out before exit
+	}
 
 	select {
 	case err := <-errc:
