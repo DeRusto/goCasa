@@ -5,6 +5,9 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    # Let the Display app find GoCasa on the LAN (Linux): swap ports: for
+    # network_mode: host and set MDNS=1. See README "Finding GoCasa on the LAN".
+    # network_mode: host
     env_file: .env
     volumes:
       - gocasa-data:/data

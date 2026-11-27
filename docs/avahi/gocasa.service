@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- GoCasa's DNS-SD advert, for Docker bridge setups where GoCasa's own MDNS=1
+     can't reach the LAN. Copy to /etc/avahi/services/gocasa.service on the
+     Docker host. port is the host port compose.yaml publishes; set ver to the
+     GoCasa version you run and update it when you upgrade. -->
+<service-group>
+  <name>GoCasa</name>
+  <service>
+    <type>_gocasa._tcp</type>
+    <port>8080</port>
+    <txt-record>txtvers=1</txt-record>
+    <txt-record>ver=v1.1.1</txt-record>
+  </service>
+</service-group>
