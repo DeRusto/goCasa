@@ -155,6 +155,9 @@ func TestAWakeOnAPageWithoutWakeDoesNothing(t *testing.T) {
 	t.Parallel()
 	vm := loadPage(t, pageOpts{screen: "awake", app: true, version: "1.0.0"})
 	run(t, vm, `gocasaDisplay.onmessage({type: "wake"})`)
+	if got := asJSON(t, vm, "[clicks, sent.length, appended.length]"); got != "[0,1,0]" {
+		t.Errorf("a wake with no #wake left [clicks, messages sent, notices] = %s, want only the load state", got)
+	}
 }
 
 // noticeText is what the bridge appended to the page, as text.
@@ -195,7 +198,7 @@ func TestASupportedDisplayAppGetsTheBridgeAndNoNotice(t *testing.T) {
 func TestWithoutTheDisplayAppTheBridgeDoesNothing(t *testing.T) {
 	t.Parallel()
 	vm := loadPage(t, pageOpts{screen: "screensaver", hasWake: true})
-	if got := asJSON(t, vm, "[appended.length, clicks, Object.keys(listeners)]"); got != "[0,0,[]]" {
+	if got := asJSON(t, vm, "[appended.length, clicks, Object.keys(listeners), Object.keys(windowListeners)]"); got != "[0,0,[],[]]" {
 		t.Errorf("with no Display app the bridge left %s", got)
 	}
 }
