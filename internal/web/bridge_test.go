@@ -14,7 +14,8 @@ import (
 // counts its clicks, and a body that keeps what's appended to it.
 const fakePage = `
 var window = globalThis;
-var listeners = {}, clicks = 0, appended = [];
+var listeners = {}, windowListeners = {}, clicks = 0, appended = [];
+function addEventListener(type, f) { (windowListeners[type] = windowListeners[type] || []).push(f); }
 var document = {
 	readyState: "loading",
 	currentScript: { dataset: { screen: SCREEN, cameraWake: CAMERA } },
@@ -25,6 +26,7 @@ var document = {
 };
 function getComputedPointerEvents(el) { return el && el.style.pointerEvents; }
 function loaded() { document.readyState = "interactive"; for (const f of listeners.DOMContentLoaded || []) f(); }
+function finished() { document.readyState = "complete"; for (const f of windowListeners.load || []) f(); }
 `
 
 // fakeApp is a Display app's window.gocasaDisplay that keeps what it is sent.
@@ -41,8 +43,18 @@ type pageOpts struct {
 	version    string // its version
 }
 
-// loadPage runs bridge.js on a fake page as the browser would, then fires DOMContentLoaded.
+// loadPage runs bridge.js on a fake page as the browser would, then fires
+// DOMContentLoaded and, once the page's pictures are in, load.
 func loadPage(t *testing.T, o pageOpts) *goja.Runtime {
+	t.Helper()
+	vm := startPage(t, o)
+	run(t, vm, "loaded()")
+	run(t, vm, "finished()")
+	return vm
+}
+
+// startPage runs bridge.js on a fake page that hasn't loaded yet.
+func startPage(t *testing.T, o pageOpts) *goja.Runtime {
 	t.Helper()
 	src, err := web.Static.ReadFile("static/bridge.js")
 	if err != nil {
@@ -59,7 +71,6 @@ func loadPage(t *testing.T, o pageOpts) *goja.Runtime {
 		run(t, vm, fakeApp)
 	}
 	run(t, vm, string(src))
-	run(t, vm, "loaded()")
 	return vm
 }
 
@@ -94,6 +105,21 @@ func TestTheBridgeSendsThePageStateToTheDisplayAppAfterLoad(t *testing.T) {
 		if got := asJSON(t, vm, "sent"); got != c.want {
 			t.Errorf("%s page sent %s, want %s", c.screen, got, c.want)
 		}
+	}
+}
+
+// The app may turn the screen off on night-black, so the state waits until
+// the page has finished loading.
+func TestTheBridgeSendsTheStateOnlyOnceThePageHasLoaded(t *testing.T) {
+	t.Parallel()
+	vm := startPage(t, pageOpts{screen: "night-black", hasWake: true, app: true, version: "1.0.0"})
+	run(t, vm, "loaded()")
+	if got := asJSON(t, vm, "sent"); got != "[]" {
+		t.Errorf("sent %s before the page finished loading", got)
+	}
+	run(t, vm, "finished()")
+	if got := asJSON(t, vm, "sent.length"); got != "1" {
+		t.Errorf("sent %s messages after load, want the state", got)
 	}
 }
 

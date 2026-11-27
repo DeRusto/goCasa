@@ -53,5 +53,8 @@
 		if (m && m.type === "wake") document.getElementById("wake")?.click(); // as a touch on the screensaver or Night page
 	};
 
-	whenLoaded(() => app.send({ type: "state", screen: tag.screen, cameraWake: tag.cameraWake === "true" }));
+	// After load, so a night-black screen-off waits for the page to be drawn.
+	const sendState = () => app.send({ type: "state", screen: tag.screen, cameraWake: tag.cameraWake === "true" });
+	if (document.readyState === "complete") sendState();
+	else addEventListener("load", sendState);
 })();
