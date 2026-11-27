@@ -1,10 +1,10 @@
 // The Bridge to the Display app (gocasa-android), which injects
 // window.gocasaDisplay before the page's scripts run. Without it this script
 // does nothing. With it, after every load the page tells the app which screen
-// it shows ({type: "state"}), a {type: "wake"} from the app's Camera wake
-// touches #wake, and window.gocasaBridge tells the page's own wake lock and
-// camera scripts that the app does their job. An app older than
-// minimumVersion gets a notice and no Bridge, so the page runs as in a browser.
+// it shows ({type: "state"}) and a {type: "wake"} from the app's Camera wake
+// touches #wake. The page's own wake lock and camera scripts check
+// window.gocasaDisplay themselves and leave those to the app, whatever its
+// version. An app older than minimumVersion gets a notice and no messages.
 (() => {
 	const minimumVersion = [0, 1, 0]; // the oldest Display app GoCasa supports
 	const app = window.gocasaDisplay;
@@ -12,9 +12,9 @@
 	const tag = document.currentScript.dataset;
 	const whenLoaded = f => document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", f) : f();
 
-	// supported is whether version, "X.Y.Z" (any suffix ignored), is at least minimumVersion.
+	// supported is whether version, a release's "X.Y.Z" or "X.Y.Z-rc.N", is at least minimumVersion.
 	const supported = version => {
-		const v = /^(\d+)\.(\d+)\.(\d+)/.exec(typeof version === "string" ? version : "");
+		const v = /^(\d+)\.(\d+)\.(\d+)(-rc\.\d+)?$/.exec(typeof version === "string" ? version : "");
 		if (!v) return false;
 		for (let i = 0; i < 3; i++) {
 			const d = Number(v[i + 1]) - minimumVersion[i];
@@ -37,12 +37,11 @@
 		});
 		return;
 	}
-	window.gocasaBridge = true;
-
-	// message is what onmessage is given: the message, or an event whose data
-	// is the message or its JSON text. Anything else is null.
+	// message is what onmessage is given: the message, or a MessageEvent (whose
+	// own type is "message") with the message or its JSON text as its data.
+	// Anything else is null.
 	const message = m => {
-		if (m && typeof m === "object" && "data" in m && !("type" in m)) m = m.data;
+		if (m && typeof m === "object" && "data" in m && (m.type === undefined || m.type === "message")) m = m.data;
 		if (typeof m === "string") {
 			try { m = JSON.parse(m); } catch { return null; }
 		}

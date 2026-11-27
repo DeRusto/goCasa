@@ -34,6 +34,11 @@ var scriptBody = regexp.MustCompile(`(?s)<script[^>]*>(.*?)</script>`)
 // runScripts renders c and runs its scripts in a fake browser, with the
 // Bridge active or not, and gives back what they did.
 func runScripts(t *testing.T, c templ.Component, bridged bool) string {
+	return runScriptsWith(t, c, bridged, false)
+}
+
+// runScriptsWith is runScripts with, if old, a Display app too old for the Bridge.
+func runScriptsWith(t *testing.T, c templ.Component, bridged, old bool) string {
 	t.Helper()
 	var b strings.Builder
 	if err := c.Render(WithDevice(context.Background(), Device{WallDisplay: true, MotionWake: true}), &b); err != nil {
@@ -43,7 +48,10 @@ func runScripts(t *testing.T, c templ.Component, bridged bool) string {
 	if err := vm.Set("BRIDGED", bridged); err != nil {
 		t.Fatal(err)
 	}
-	src := fakeBrowser + "if (BRIDGED) window.gocasaBridge = true;\n"
+	if err := vm.Set("OLD", old); err != nil {
+		t.Fatal(err)
+	}
+	src := fakeBrowser + "if (BRIDGED) window.gocasaDisplay = { version: OLD ? '0.0.1' : '1.0.0', send() {} };\n"
 	for _, m := range scriptBody.FindAllStringSubmatch(b.String(), -1) {
 		// document.currentScript is the tag being run; give each its data attributes.
 		src += "document.currentScript = { dataset: { idleSeconds: \"300\" } };\n" + m[1] + "\n"
@@ -82,5 +90,17 @@ func TestWithTheBridgeThisDeviceLeavesTheCameraPermissionToTheApp(t *testing.T) 
 	t.Parallel()
 	if got, want := runScripts(t, thisDevice(), true), `"motion-wake":"run by the Display app"`; !strings.Contains(got, want) {
 		t.Errorf("with the Bridge This device shows %s, want %s", got, want)
+	}
+}
+
+// An old Display app still owns the camera and keeps the screen on, so the
+// page's own scripts stand down for it too; only the Bridge's messages wait
+// for an update.
+func TestWithAnOldDisplayAppThePageStillLeavesTheCameraAndWakeLockToIt(t *testing.T) {
+	t.Parallel()
+	for _, c := range []templ.Component{wallDisplay(300), motionWake(), thisDevice()} {
+		if got := runScriptsWith(t, c, true, true); !strings.Contains(got, `"calls":{"camera":0,"wakeLock":0}`) {
+			t.Errorf("with an old Display app the page did %s", got)
+		}
 	}
 }

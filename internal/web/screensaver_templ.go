@@ -562,7 +562,7 @@ func nightWatch(seconds int) templ.Component {
 }
 
 // bridge loads the Bridge to the Display app (static/bridge.js) in the head,
-// before the page's own scripts, which check window.gocasaBridge. screen is
+// before the page's own scripts. screen is
 // what the page shows: "awake", "screensaver", "night-black" or "night-dim";
 // cameraWake is this device's motion_wake cookie, which page script can't read.
 func bridge(screen string) templ.Component {
@@ -636,8 +636,8 @@ func bridge(screen string) templ.Component {
 // motionWake watches the camera on the screensaver and Dim clock: it compares
 // each frame, downscaled to 64×48, with the one before, and when enough
 // pixels change it wakes the page like a touch on #wake. Frames stay in this
-// page; #camera shows while it runs. With the Bridge it doesn't run: the
-// Display app watches its own camera and sends a wake.
+// page; #camera shows while it runs. In the Display app (window.gocasaDisplay)
+// it doesn't run: the app watches its own camera and sends a wake.
 func motionWake() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -659,7 +659,7 @@ func motionWake() templ.Component {
 			templ_7745c5c3_Var24 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<span id=\"camera\" hidden role=\"img\" aria-label=\"Camera motion-wake on\" style=\"position:fixed;right:1rem;bottom:1rem;color:#555;font-size:1.25rem;pointer-events:none\">&#x1F4F7;&#xFE0E;</span><script>\n\t(async () => {\n\t\tif (window.gocasaBridge) return; // the Display app runs Camera wake\n\t\tif (!window.isSecureContext || !navigator.mediaDevices) return; // Settings shows why\n\t\tlet stream;\n\t\ttry {\n\t\t\tstream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });\n\t\t} catch {\n\t\t\treturn;\n\t\t}\n\t\tconst video = document.createElement(\"video\");\n\t\tvideo.muted = true;\n\t\tvideo.playsInline = true;\n\t\tvideo.srcObject = stream;\n\t\ttry {\n\t\t\tawait video.play();\n\t\t} catch { // playback blocked: stop the camera rather than run it with no icon\n\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\treturn;\n\t\t}\n\t\tconst w = 64, h = 48, canvas = document.createElement(\"canvas\");\n\t\tcanvas.width = w;\n\t\tcanvas.height = h;\n\t\tconst g = canvas.getContext(\"2d\", { willReadFrequently: true });\n\t\tdocument.getElementById(\"camera\").hidden = false;\n\t\t// Fixed sensitivity: a pixel changed when its R+G+B moves by over 96; motion is over 5% of pixels changed.\n\t\tconst pixelDelta = 96, motionShare = 0.05;\n\t\tlet prev;\n\t\tconst tick = () => {\n\t\t\tg.drawImage(video, 0, 0, w, h);\n\t\t\tconst d = g.getImageData(0, 0, w, h).data;\n\t\t\tif (prev) {\n\t\t\t\tlet changed = 0;\n\t\t\t\tfor (let i = 0; i < d.length; i += 4) {\n\t\t\t\t\tif (Math.abs(d[i] + d[i + 1] + d[i + 2] - prev[i] - prev[i + 1] - prev[i + 2]) > pixelDelta) changed++;\n\t\t\t\t}\n\t\t\t\tif (changed > w * h * motionShare) {\n\t\t\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\t\t\treturn document.getElementById(\"wake\").click();\n\t\t\t\t}\n\t\t\t}\n\t\t\tprev = d;\n\t\t\tsetTimeout(tick, 250); // 4 fps: enough to see someone walk up, and well under a video-activity rate\n\t\t};\n\t\tsetTimeout(tick, 2000); // let the camera's exposure settle first, or its first frames read as motion\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<span id=\"camera\" hidden role=\"img\" aria-label=\"Camera motion-wake on\" style=\"position:fixed;right:1rem;bottom:1rem;color:#555;font-size:1.25rem;pointer-events:none\">&#x1F4F7;&#xFE0E;</span><script>\n\t(async () => {\n\t\tif (window.gocasaDisplay) return; // the Display app runs Camera wake\n\t\tif (!window.isSecureContext || !navigator.mediaDevices) return; // Settings shows why\n\t\tlet stream;\n\t\ttry {\n\t\t\tstream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });\n\t\t} catch {\n\t\t\treturn;\n\t\t}\n\t\tconst video = document.createElement(\"video\");\n\t\tvideo.muted = true;\n\t\tvideo.playsInline = true;\n\t\tvideo.srcObject = stream;\n\t\ttry {\n\t\t\tawait video.play();\n\t\t} catch { // playback blocked: stop the camera rather than run it with no icon\n\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\treturn;\n\t\t}\n\t\tconst w = 64, h = 48, canvas = document.createElement(\"canvas\");\n\t\tcanvas.width = w;\n\t\tcanvas.height = h;\n\t\tconst g = canvas.getContext(\"2d\", { willReadFrequently: true });\n\t\tdocument.getElementById(\"camera\").hidden = false;\n\t\t// Fixed sensitivity: a pixel changed when its R+G+B moves by over 96; motion is over 5% of pixels changed.\n\t\tconst pixelDelta = 96, motionShare = 0.05;\n\t\tlet prev;\n\t\tconst tick = () => {\n\t\t\tg.drawImage(video, 0, 0, w, h);\n\t\t\tconst d = g.getImageData(0, 0, w, h).data;\n\t\t\tif (prev) {\n\t\t\t\tlet changed = 0;\n\t\t\t\tfor (let i = 0; i < d.length; i += 4) {\n\t\t\t\t\tif (Math.abs(d[i] + d[i + 1] + d[i + 2] - prev[i] - prev[i + 1] - prev[i + 2]) > pixelDelta) changed++;\n\t\t\t\t}\n\t\t\t\tif (changed > w * h * motionShare) {\n\t\t\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\t\t\treturn document.getElementById(\"wake\").click();\n\t\t\t\t}\n\t\t\t}\n\t\t\tprev = d;\n\t\t\tsetTimeout(tick, 250); // 4 fps: enough to see someone walk up, and well under a video-activity rate\n\t\t};\n\t\tsetTimeout(tick, 2000); // let the camera's exposure settle first, or its first frames read as motion\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -669,8 +669,8 @@ func motionWake() templ.Component {
 
 // wallDisplay holds a Screen Wake Lock where the browser allows it, showing
 // its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
-// screensaver after that long with no touch, pointer or key input. With the
-// Bridge the Display app keeps the screen on instead, but the page still goes
+// screensaver after that long with no touch, pointer or key input. In the
+// Display app (window.gocasaDisplay) the app keeps the screen on instead, but the page still goes
 // to the screensaver when idle: the app has no idle timer of its own.
 func wallDisplay(idleSeconds int) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -706,7 +706,7 @@ func wallDisplay(idleSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "\">\n\t(() => {\n\t\tconst idle = Number(document.currentScript.dataset.idleSeconds);\n\t\tconst status = s => { const el = document.getElementById(\"wake-lock\"); if (el) el.textContent = s; };\n\t\tlet lock;\n\t\tconst hold = async () => {\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!(\"wakeLock\" in navigator)) return status(\"not supported by this browser\");\n\t\t\tif (document.visibilityState !== \"visible\" || (lock && !lock.released)) return;\n\t\t\ttry {\n\t\t\t\tlock = await navigator.wakeLock.request(\"screen\");\n\t\t\t\tstatus(\"held\");\n\t\t\t\tlock.addEventListener(\"release\", () => status(\"released\"));\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t};\n\t\tif (window.gocasaBridge) status(\"kept on by the Display app\");\n\t\telse {\n\t\t\tdocument.addEventListener(\"visibilitychange\", hold); // the browser drops the lock when the page hides\n\t\t\thold();\n\t\t}\n\t\tif (idle > 0) {\n\t\t\tlet timer;\n\t\t\tconst reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign(\"/screensaver\"), idle * 1000); };\n\t\t\tfor (const e of [\"pointerdown\", \"pointermove\", \"touchstart\", \"keydown\", \"wheel\"]) addEventListener(e, reset, { capture: true, passive: true });\n\t\t\treset();\n\t\t}\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "\">\n\t(() => {\n\t\tconst idle = Number(document.currentScript.dataset.idleSeconds);\n\t\tconst status = s => { const el = document.getElementById(\"wake-lock\"); if (el) el.textContent = s; };\n\t\tlet lock;\n\t\tconst hold = async () => {\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!(\"wakeLock\" in navigator)) return status(\"not supported by this browser\");\n\t\t\tif (document.visibilityState !== \"visible\" || (lock && !lock.released)) return;\n\t\t\ttry {\n\t\t\t\tlock = await navigator.wakeLock.request(\"screen\");\n\t\t\t\tstatus(\"held\");\n\t\t\t\tlock.addEventListener(\"release\", () => status(\"released\"));\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t};\n\t\tif (window.gocasaDisplay) status(\"kept on by the Display app\");\n\t\telse {\n\t\t\tdocument.addEventListener(\"visibilitychange\", hold); // the browser drops the lock when the page hides\n\t\t\thold();\n\t\t}\n\t\tif (idle > 0) {\n\t\t\tlet timer;\n\t\t\tconst reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign(\"/screensaver\"), idle * 1000); };\n\t\t\tfor (const e of [\"pointerdown\", \"pointermove\", \"touchstart\", \"keydown\", \"wheel\"]) addEventListener(e, reset, { capture: true, passive: true });\n\t\t\treset();\n\t\t}\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

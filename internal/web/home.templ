@@ -310,7 +310,7 @@ templ thisDevice() {
 		// so the screensaver never waits on a prompt.
 		(async () => {
 			const el = document.getElementById("motion-wake"), status = s => el.textContent = s;
-			if (window.gocasaBridge) return status("run by the Display app"); // which asks for the camera itself
+			if (window.gocasaDisplay) return status("run by the Display app"); // which asks for the camera itself
 			if (!window.isSecureContext) return status("needs HTTPS");
 			if (!navigator.mediaDevices) return status("not supported by this browser");
 			const ask = () => {

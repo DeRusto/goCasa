@@ -101,8 +101,10 @@ func TestAWakeFromTheDisplayAppTouchesWake(t *testing.T) {
 	t.Parallel()
 	for _, msg := range []string{
 		`{type: "wake"}`,
-		`{data: {type: "wake"}}`,    // a MessageEvent
-		`{data: '{"type":"wake"}'}`, // a MessageEvent carrying JSON text, as Android's postMessage does
+		`{data: {type: "wake"}}`,                     // a MessageEvent
+		`{data: '{"type":"wake"}'}`,                  // a MessageEvent carrying JSON text, as Android's postMessage does
+		`{type: "message", data: {type: "wake"}}`,    // a real MessageEvent has a type of its own
+		`{type: "message", data: '{"type":"wake"}'}`, // and Android's carries JSON text
 	} {
 		vm := loadPage(t, pageOpts{screen: "screensaver", hasWake: true, app: true, version: "1.0.0"})
 		run(t, vm, "gocasaDisplay.onmessage("+msg+")")
@@ -134,7 +136,7 @@ const noticeText = `appended.map(e => e.textContent).join("|")`
 
 func TestAnOldDisplayAppGetsAnUpdateNoticeAndNoBridge(t *testing.T) {
 	t.Parallel()
-	for _, v := range []string{"0.0.9", "", "banana", "0.0"} { // older than GoCasa's minimum, 0.1.0, or no version at all
+	for _, v := range []string{"0.0.9", "", "banana", "0.0", "0.1.0garbage", "1.0.0-beta"} { // older than GoCasa's minimum, 0.1.0, or no version at all
 		vm := loadPage(t, pageOpts{screen: "screensaver", hasWake: true, app: true, version: v})
 		if got := run(t, vm, noticeText).String(); got != "Update the Display app" {
 			t.Errorf("version %q: page shows %q, want the update notice", v, got)
@@ -144,9 +146,6 @@ func TestAnOldDisplayAppGetsAnUpdateNoticeAndNoBridge(t *testing.T) {
 		}
 		if got := asJSON(t, vm, "sent"); got != "[]" {
 			t.Errorf("version %q: sent %s to an app it can't rely on", v, got)
-		}
-		if got := asJSON(t, vm, "!!window.gocasaBridge"); got != "false" {
-			t.Errorf("version %q: the page's own wake lock and camera were told to stand down", v)
 		}
 		if run(t, vm, `typeof gocasaDisplay.onmessage`).String() == "function" {
 			t.Errorf("version %q: the bridge listens for wakes", v)
@@ -161,9 +160,6 @@ func TestASupportedDisplayAppGetsTheBridgeAndNoNotice(t *testing.T) {
 		if got := run(t, vm, noticeText).String(); got != "" {
 			t.Errorf("version %q: page shows %q", v, got)
 		}
-		if got := asJSON(t, vm, "window.gocasaBridge"); got != "true" {
-			t.Errorf("version %q: gocasaBridge = %s, want true", v, got)
-		}
 		if got := asJSON(t, vm, "sent.length"); got != "1" {
 			t.Errorf("version %q: sent %s messages, want the state", v, got)
 		}
@@ -173,7 +169,7 @@ func TestASupportedDisplayAppGetsTheBridgeAndNoNotice(t *testing.T) {
 func TestWithoutTheDisplayAppTheBridgeDoesNothing(t *testing.T) {
 	t.Parallel()
 	vm := loadPage(t, pageOpts{screen: "screensaver", hasWake: true})
-	if got := asJSON(t, vm, "[!!window.gocasaBridge, appended.length, clicks, Object.keys(listeners)]"); got != "[false,0,0,[]]" {
+	if got := asJSON(t, vm, "[appended.length, clicks, Object.keys(listeners)]"); got != "[0,0,[]]" {
 		t.Errorf("with no Display app the bridge left %s", got)
 	}
 }
