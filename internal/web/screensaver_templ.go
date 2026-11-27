@@ -80,6 +80,10 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		templ_7745c5c3_Err = bridge("screensaver").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
 		templ_7745c5c3_Err = templ.Raw("<style>"+slideCSS+"</style>").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -91,7 +95,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(s.Fit)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 58, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 59, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -124,7 +128,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(ph.Src)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 63, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 64, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 				if templ_7745c5c3_Err != nil {
@@ -142,7 +146,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(ph.Src)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 65, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 66, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -160,7 +164,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(ph.Caption)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 67, Col: 42}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 68, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -199,7 +203,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 77, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 78, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -217,7 +221,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(templ.KV("opacity:.5", e.Past))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 81, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 82, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -235,7 +239,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(e.End, 10))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 83, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 84, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 				if templ_7745c5c3_Err != nil {
@@ -253,7 +257,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(e.Time)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 85, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 86, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -266,7 +270,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(e.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 85, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 86, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -289,7 +293,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(w.Conditions + ", " + deg(w.Current) + w.Unit)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 90, Col: 131}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 91, Col: 131}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 			if templ_7745c5c3_Err != nil {
@@ -310,7 +314,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(deg(w.Current))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 94, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 95, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -356,7 +360,7 @@ func Screensaver(p TodayPage, s Slides, nightSeconds int) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(s.Seconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 108, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 109, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -405,6 +409,17 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		if mode == "black" {
+			templ_7745c5c3_Err = bridge("night-black").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = bridge("night-dim").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</head><body style=\"margin:0;background:#000;color:#333;font-family:system-ui,sans-serif\"><a id=\"wake\" href=\"/\" aria-label=\"Wake\" data-night=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -412,7 +427,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(mode)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 192, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 198, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -438,7 +453,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 195, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 201, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -476,7 +491,7 @@ func Night(mode string, p TodayPage, reloadSeconds int) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue("sse:" + string(KindHousehold))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 205, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 211, Col: 100}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -532,7 +547,7 @@ func nightWatch(seconds int) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(seconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 218, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 224, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -546,11 +561,11 @@ func nightWatch(seconds int) templ.Component {
 	})
 }
 
-// motionWake watches the camera on the screensaver and Dim clock: it compares
-// each frame, downscaled to 64×48, with the one before, and when enough
-// pixels change it wakes the page like a touch on #wake. Frames stay in this
-// page; #camera shows while it runs.
-func motionWake() templ.Component {
+// bridge loads the Bridge to the Display app (static/bridge.js) in the head,
+// before the page's own scripts, which check window.gocasaBridge. screen is
+// what the page shows: "awake", "screensaver", "night-black" or "night-dim";
+// cameraWake is this device's motion_wake cookie, which page script can't read.
+func bridge(screen string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -571,7 +586,80 @@ func motionWake() templ.Component {
 			templ_7745c5c3_Var20 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<span id=\"camera\" hidden role=\"img\" aria-label=\"Camera motion-wake on\" style=\"position:fixed;right:1rem;bottom:1rem;color:#555;font-size:1.25rem;pointer-events:none\">&#x1F4F7;&#xFE0E;</span><script>\n\t(async () => {\n\t\tif (!window.isSecureContext || !navigator.mediaDevices) return; // Settings shows why\n\t\tlet stream;\n\t\ttry {\n\t\t\tstream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });\n\t\t} catch {\n\t\t\treturn;\n\t\t}\n\t\tconst video = document.createElement(\"video\");\n\t\tvideo.muted = true;\n\t\tvideo.playsInline = true;\n\t\tvideo.srcObject = stream;\n\t\ttry {\n\t\t\tawait video.play();\n\t\t} catch { // playback blocked: stop the camera rather than run it with no icon\n\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\treturn;\n\t\t}\n\t\tconst w = 64, h = 48, canvas = document.createElement(\"canvas\");\n\t\tcanvas.width = w;\n\t\tcanvas.height = h;\n\t\tconst g = canvas.getContext(\"2d\", { willReadFrequently: true });\n\t\tdocument.getElementById(\"camera\").hidden = false;\n\t\t// Fixed sensitivity: a pixel changed when its R+G+B moves by over 96; motion is over 5% of pixels changed.\n\t\tconst pixelDelta = 96, motionShare = 0.05;\n\t\tlet prev;\n\t\tconst tick = () => {\n\t\t\tg.drawImage(video, 0, 0, w, h);\n\t\t\tconst d = g.getImageData(0, 0, w, h).data;\n\t\t\tif (prev) {\n\t\t\t\tlet changed = 0;\n\t\t\t\tfor (let i = 0; i < d.length; i += 4) {\n\t\t\t\t\tif (Math.abs(d[i] + d[i + 1] + d[i + 2] - prev[i] - prev[i + 1] - prev[i + 2]) > pixelDelta) changed++;\n\t\t\t\t}\n\t\t\t\tif (changed > w * h * motionShare) {\n\t\t\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\t\t\treturn document.getElementById(\"wake\").click();\n\t\t\t\t}\n\t\t\t}\n\t\t\tprev = d;\n\t\t\tsetTimeout(tick, 250); // 4 fps: enough to see someone walk up, and well under a video-activity rate\n\t\t};\n\t\tsetTimeout(tick, 2000); // let the camera's exposure settle first, or its first frames read as motion\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<script src=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var21 string
+		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(bridgeURL)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 240, Col: 24}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "\" data-screen=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var22 string
+		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(screen)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 240, Col: 47}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\" data-camera-wake=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var23 string
+		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatBool(device(ctx).MotionWake))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 240, Col: 111}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "\"></script>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// motionWake watches the camera on the screensaver and Dim clock: it compares
+// each frame, downscaled to 64×48, with the one before, and when enough
+// pixels change it wakes the page like a touch on #wake. Frames stay in this
+// page; #camera shows while it runs. With the Bridge it doesn't run: the
+// Display app watches its own camera and sends a wake.
+func motionWake() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var24 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var24 == nil {
+			templ_7745c5c3_Var24 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<span id=\"camera\" hidden role=\"img\" aria-label=\"Camera motion-wake on\" style=\"position:fixed;right:1rem;bottom:1rem;color:#555;font-size:1.25rem;pointer-events:none\">&#x1F4F7;&#xFE0E;</span><script>\n\t(async () => {\n\t\tif (window.gocasaBridge) return; // the Display app runs Camera wake\n\t\tif (!window.isSecureContext || !navigator.mediaDevices) return; // Settings shows why\n\t\tlet stream;\n\t\ttry {\n\t\t\tstream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });\n\t\t} catch {\n\t\t\treturn;\n\t\t}\n\t\tconst video = document.createElement(\"video\");\n\t\tvideo.muted = true;\n\t\tvideo.playsInline = true;\n\t\tvideo.srcObject = stream;\n\t\ttry {\n\t\t\tawait video.play();\n\t\t} catch { // playback blocked: stop the camera rather than run it with no icon\n\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\treturn;\n\t\t}\n\t\tconst w = 64, h = 48, canvas = document.createElement(\"canvas\");\n\t\tcanvas.width = w;\n\t\tcanvas.height = h;\n\t\tconst g = canvas.getContext(\"2d\", { willReadFrequently: true });\n\t\tdocument.getElementById(\"camera\").hidden = false;\n\t\t// Fixed sensitivity: a pixel changed when its R+G+B moves by over 96; motion is over 5% of pixels changed.\n\t\tconst pixelDelta = 96, motionShare = 0.05;\n\t\tlet prev;\n\t\tconst tick = () => {\n\t\t\tg.drawImage(video, 0, 0, w, h);\n\t\t\tconst d = g.getImageData(0, 0, w, h).data;\n\t\t\tif (prev) {\n\t\t\t\tlet changed = 0;\n\t\t\t\tfor (let i = 0; i < d.length; i += 4) {\n\t\t\t\t\tif (Math.abs(d[i] + d[i + 1] + d[i + 2] - prev[i] - prev[i + 1] - prev[i + 2]) > pixelDelta) changed++;\n\t\t\t\t}\n\t\t\t\tif (changed > w * h * motionShare) {\n\t\t\t\t\tstream.getTracks().forEach(t => t.stop());\n\t\t\t\t\treturn document.getElementById(\"wake\").click();\n\t\t\t\t}\n\t\t\t}\n\t\t\tprev = d;\n\t\t\tsetTimeout(tick, 250); // 4 fps: enough to see someone walk up, and well under a video-activity rate\n\t\t};\n\t\tsetTimeout(tick, 2000); // let the camera's exposure settle first, or its first frames read as motion\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -581,7 +669,9 @@ func motionWake() templ.Component {
 
 // wallDisplay holds a Screen Wake Lock where the browser allows it, showing
 // its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
-// screensaver after that long with no touch, pointer or key input.
+// screensaver after that long with no touch, pointer or key input. With the
+// Bridge the Display app keeps the screen on instead, but the page still goes
+// to the screensaver when idle: the app has no idle timer of its own.
 func wallDisplay(idleSeconds int) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -598,25 +688,25 @@ func wallDisplay(idleSeconds int) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var21 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var21 == nil {
-			templ_7745c5c3_Var21 = templ.NopComponent
+		templ_7745c5c3_Var25 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var25 == nil {
+			templ_7745c5c3_Var25 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<script data-idle-seconds=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<script data-idle-seconds=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var22 string
-		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(idleSeconds))
+		var templ_7745c5c3_Var26 string
+		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(idleSeconds))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 287, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/screensaver.templ`, Line: 305, Col: 54}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\">\n\t(() => {\n\t\tconst idle = Number(document.currentScript.dataset.idleSeconds);\n\t\tconst status = s => { const el = document.getElementById(\"wake-lock\"); if (el) el.textContent = s; };\n\t\tlet lock;\n\t\tconst hold = async () => {\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!(\"wakeLock\" in navigator)) return status(\"not supported by this browser\");\n\t\t\tif (document.visibilityState !== \"visible\" || (lock && !lock.released)) return;\n\t\t\ttry {\n\t\t\t\tlock = await navigator.wakeLock.request(\"screen\");\n\t\t\t\tstatus(\"held\");\n\t\t\t\tlock.addEventListener(\"release\", () => status(\"released\"));\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t};\n\t\tdocument.addEventListener(\"visibilitychange\", hold); // the browser drops the lock when the page hides\n\t\thold();\n\t\tif (idle > 0) {\n\t\t\tlet timer;\n\t\t\tconst reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign(\"/screensaver\"), idle * 1000); };\n\t\t\tfor (const e of [\"pointerdown\", \"pointermove\", \"touchstart\", \"keydown\", \"wheel\"]) addEventListener(e, reset, { capture: true, passive: true });\n\t\t\treset();\n\t\t}\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "\">\n\t(() => {\n\t\tconst idle = Number(document.currentScript.dataset.idleSeconds);\n\t\tconst status = s => { const el = document.getElementById(\"wake-lock\"); if (el) el.textContent = s; };\n\t\tlet lock;\n\t\tconst hold = async () => {\n\t\t\tif (!window.isSecureContext) return status(\"needs HTTPS\");\n\t\t\tif (!(\"wakeLock\" in navigator)) return status(\"not supported by this browser\");\n\t\t\tif (document.visibilityState !== \"visible\" || (lock && !lock.released)) return;\n\t\t\ttry {\n\t\t\t\tlock = await navigator.wakeLock.request(\"screen\");\n\t\t\t\tstatus(\"held\");\n\t\t\t\tlock.addEventListener(\"release\", () => status(\"released\"));\n\t\t\t} catch (e) {\n\t\t\t\tstatus(\"not allowed: \" + e.message);\n\t\t\t}\n\t\t};\n\t\tif (window.gocasaBridge) status(\"kept on by the Display app\");\n\t\telse {\n\t\t\tdocument.addEventListener(\"visibilitychange\", hold); // the browser drops the lock when the page hides\n\t\t\thold();\n\t\t}\n\t\tif (idle > 0) {\n\t\t\tlet timer;\n\t\t\tconst reset = () => { clearTimeout(timer); timer = setTimeout(() => location.assign(\"/screensaver\"), idle * 1000); };\n\t\t\tfor (const e of [\"pointerdown\", \"pointermove\", \"touchstart\", \"keydown\", \"wheel\"]) addEventListener(e, reset, { capture: true, passive: true });\n\t\t\treset();\n\t\t}\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
