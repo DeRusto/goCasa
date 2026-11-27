@@ -162,7 +162,7 @@ const noticeText = `appended.map(e => e.textContent).join("|")`
 
 func TestAnOldDisplayAppGetsAnUpdateNoticeAndNoBridge(t *testing.T) {
 	t.Parallel()
-	for _, v := range []string{"0.0.9", "", "banana", "0.0", "0.1.0garbage", "1.0.0-beta"} { // older than GoCasa's minimum, 0.1.0, or no version at all
+	for _, v := range []string{"0.0.9", "", "banana", "0.0", "0.1.0garbage", "1.0.0-beta", "0.1.0-rc.1"} { // older than GoCasa's minimum, 0.1.0, or no version at all
 		vm := loadPage(t, pageOpts{screen: "screensaver", hasWake: true, app: true, version: v})
 		if got := run(t, vm, noticeText).String(); got != "Update the Display app" {
 			t.Errorf("version %q: page shows %q, want the update notice", v, got)
@@ -181,7 +181,7 @@ func TestAnOldDisplayAppGetsAnUpdateNoticeAndNoBridge(t *testing.T) {
 
 func TestASupportedDisplayAppGetsTheBridgeAndNoNotice(t *testing.T) {
 	t.Parallel()
-	for _, v := range []string{"0.1.0", "0.1.1", "0.10.0", "1.0.0", "1.0.0-rc.2", "12.3.4"} {
+	for _, v := range []string{"0.1.0", "0.1.1", "0.1.1-rc.1", "0.10.0", "1.0.0", "1.0.0-rc.2", "12.3.4"} {
 		vm := loadPage(t, pageOpts{screen: "awake", app: true, version: v})
 		if got := run(t, vm, noticeText).String(); got != "" {
 			t.Errorf("version %q: page shows %q", v, got)

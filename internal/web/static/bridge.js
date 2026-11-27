@@ -20,7 +20,7 @@
 			const d = Number(v[i + 1]) - minimumVersion[i];
 			if (d) return d > 0;
 		}
-		return true;
+		return !v[4]; // a release candidate comes before its release
 	};
 	if (!supported(app.version)) {
 		whenLoaded(() => {
