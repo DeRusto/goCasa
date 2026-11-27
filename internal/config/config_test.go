@@ -64,3 +64,46 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadMDNSIsOffByDefaultWithNameGoCasa(t *testing.T) {
+	c, err := Load(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.MDNS || c.MDNSName != "GoCasa" {
+		t.Fatalf("MDNS = %v, MDNSName = %q; want off and GoCasa", c.MDNS, c.MDNSName)
+	}
+}
+
+func TestLoadMDNSOnWithNameOverride(t *testing.T) {
+	e := valid()
+	e["MDNS"] = "1"
+	e["MDNS_NAME"] = "Casa Kitchen"
+	c, err := Load(env(e))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.MDNS || c.MDNSName != "Casa Kitchen" {
+		t.Fatalf("MDNS = %v, MDNSName = %q", c.MDNS, c.MDNSName)
+	}
+	e["MDNS"] = "0"
+	if c, err := Load(env(e)); err != nil || c.MDNS {
+		t.Fatalf("MDNS=0: on = %v, err = %v", c.MDNS, err)
+	}
+}
+
+func TestLoadRejectsBadMDNSValues(t *testing.T) {
+	for name, tc := range map[string]struct{ key, val string }{
+		"mdns not a switch":  {"MDNS", "yes please"},
+		"name over 63 bytes": {"MDNS_NAME", strings.Repeat("n", 64)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := valid()
+			e["MDNS"] = "1"
+			e[tc.key] = tc.val
+			if _, err := Load(env(e)); err == nil || !strings.Contains(err.Error(), tc.key) {
+				t.Fatalf("err = %v, want mention of %s", err, tc.key)
+			}
+		})
+	}
+}
