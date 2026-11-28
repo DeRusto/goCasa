@@ -60,11 +60,14 @@ func claimable(schedule, days string, weekStart int, today, created time.Time) [
 
 // back is where a chore or Reward action returns to: Today or a Member page
 // when it came from there, else the chore board.
-func back(r *http.Request) string {
+func back(r *http.Request) string { return returnTo(r, "/chores") }
+
+// returnTo is the form's next when it is Today or a Member page, else fallback.
+func returnTo(r *http.Request, fallback string) string {
 	if next := r.PostFormValue("next"); next == "/today" || memberPagePath.MatchString(next) {
 		return next
 	}
-	return "/chores"
+	return fallback
 }
 
 // chores is every Chore with, for active ones, its claimable Rounds and who

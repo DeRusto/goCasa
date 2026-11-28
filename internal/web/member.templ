@@ -4,12 +4,14 @@ import "strconv"
 
 // MemberPage is one Member's today at a glance, in Standard style.
 type MemberPage struct {
-	Member  Member
-	Day     TodayPage    // the clock and weather; Days[0] is today's events, Days[1] tomorrow's
-	Chores  []Chore      // this Member's, with only their taps (and an Anyone chore's completer)
-	Balance int          // this Member's points
-	Rewards []Reward     // not archived, cheapest first
-	Waiting []Redemption // this Member's pending Redemptions, oldest first
+	Member    Member
+	Day       TodayPage    // the clock and weather; Days[0] is today's events, Days[1] tomorrow's
+	Chores    []Chore      // this Member's, with only their taps (and an Anyone chore's completer)
+	Todos     []Todo       // their columns' open to-dos due by today or undated, capped
+	MoreTodos int          // how many more the cap leaves for the To-dos page
+	Balance   int          // this Member's points
+	Rewards   []Reward     // not archived, cheapest first
+	Waiting   []Redemption // this Member's pending Redemptions, oldest first
 }
 
 // path is the Member page's own URL, where its actions return.
@@ -19,7 +21,7 @@ func (p MemberPage) path() string { return "/members/" + id(p.Member.ID) }
 // a one-line peek at tomorrow's first event. Nothing in GoCasa links to it.
 templ MemberPageView(p MemberPage) {
 	@page(p.Member.Name+" · Member page", false) {
-		<div id="live" data-member-page={ id(p.Member.ID) } { live(KindEvent, KindChore, KindPoints, KindMember, KindHousehold, KindIntegration)... } class="grid grid-cols-[minmax(0,1fr)] gap-4 p-5 min-[760px]:min-h-[calc(100vh-4rem)] min-[760px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] min-[760px]:grid-rows-[auto_1fr]">
+		<div id="live" data-member-page={ id(p.Member.ID) } { live(KindEvent, KindChore, KindTodo, KindPoints, KindMember, KindHousehold, KindIntegration)... } class="grid grid-cols-[minmax(0,1fr)] gap-4 p-5 min-[760px]:min-h-[calc(100vh-4rem)] min-[760px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] min-[760px]:grid-rows-[auto_1fr]">
 			<header class="flex flex-wrap items-center gap-x-7 gap-y-4 min-[760px]:col-span-full">
 				<div class="flex items-center gap-3">
 					@avatar(p.Member)
@@ -53,6 +55,7 @@ templ MemberPageView(p MemberPage) {
 						@choreRow(c, p.path())
 					}
 				</section>
+				@memberTodos(p)
 				<section id="member-points" class="card flex flex-col gap-3">
 					<h2 class="flex items-baseline justify-between gap-2">
 						<span class="text-muted">Points</span>
@@ -90,6 +93,34 @@ templ MemberPageView(p MemberPage) {
 		@liveDrafts()
 		@ticker()
 	}
+}
+
+// memberTodos is the Member's columns' to-dos for today; ticking one comes back here.
+templ memberTodos(p MemberPage) {
+	<section id="member-todos" class="card flex flex-col gap-3">
+		<h2 class="text-muted">To-dos</h2>
+		if len(p.Todos) == 0 {
+			<p class="text-muted">No to-dos today.</p>
+		} else {
+			<ul class="flex flex-col gap-1.5">
+				for _, t := range p.Todos {
+					<li data-todo={ id(t.ID) } class="flex flex-wrap items-center gap-x-2 rounded-lg bg-soft py-1 pr-1 pl-3">
+						<span class="min-w-0 flex-1 py-2">{ t.Title }</span>
+						if t.Overdue {
+							<span class="text-sm text-late">overdue</span>
+						}
+						<form method="post" action={ templ.SafeURL("/todos/" + id(t.ID) + "/complete") }>
+							<input type="hidden" name="next" value={ p.path() }/>
+							<button aria-label={ "Done: " + t.Title } class="rounded-full">Done</button>
+						</form>
+					</li>
+				}
+			</ul>
+		}
+		if p.MoreTodos > 0 {
+			<a href="/todos" class="text-muted">{ strconv.Itoa(p.MoreTodos) } more on To-dos</a>
+		}
+	</section>
 }
 
 // MemberUnavailable is the plain page for a Member with no Member page:

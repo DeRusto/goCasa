@@ -20,9 +20,10 @@ type Todo struct {
 }
 
 type TodoColumn struct {
-	ID    int64
-	Name  string
-	Todos []Todo
+	ID       int64
+	Name     string
+	MemberID int64 // the Member whose page shows its to-dos, or 0
+	Todos    []Todo
 }
 
 // TodosPage is the to-do board with its filter. Dragging is offered only on
@@ -30,6 +31,7 @@ type TodoColumn struct {
 // shows every to-do whose place it would set.
 type TodosPage struct {
 	Columns                     []TodoColumn
+	Members                     []Member // who a column can belong to: not pets; Archived only to keep one
 	Status, Due, From, To, Sort string
 	Draggable                   bool
 }
@@ -96,7 +98,18 @@ templ TodosBoard(p TodosPage) {
 							<h2>Column</h2>
 							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10)) }>
 								<label>Name <input name="name" required maxlength="50" value={ c.Name }/></label>
-								<button class="btn-primary">Rename</button>
+								<label>
+									Member
+									<select name="member_id">
+										<option value="" selected?={ c.MemberID == 0 }>No one</option>
+										for _, m := range p.Members {
+											if !m.Archived || m.ID == c.MemberID {
+												<option value={ strconv.FormatInt(m.ID, 10) } selected?={ m.ID == c.MemberID }>{ memberChoice(m) }</option>
+											}
+										}
+									</select>
+								</label>
+								<button class="btn-primary">Save</button>
 							</form>
 							<form method="post" action={ templ.SafeURL("/todo-columns/" + strconv.FormatInt(c.ID, 10) + "/delete") } onsubmit="return confirm('Delete this column and all its to-dos?')">
 								<button class="btn-danger">Delete column</button>
@@ -147,6 +160,14 @@ templ TodosBoard(p TodosPage) {
 		}
 		@liveDrafts()
 	}
+}
+
+// memberChoice is a Member as a column's picker names them.
+func memberChoice(m Member) string {
+	if m.Archived {
+		return m.Name + " (archived)"
+	}
+	return m.Name
 }
 
 func repeatFrom(t Todo) string {
