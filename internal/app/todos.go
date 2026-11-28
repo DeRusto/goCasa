@@ -68,6 +68,16 @@ func (a *App) getTodos(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p.Columns = cols
+	ms, err := a.members(r, false)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	for _, mb := range ms {
+		if !mb.Pet {
+			p.Members = append(p.Members, mb)
+		}
+	}
 	a.render(w, r, http.StatusOK, web.TodosBoard(p))
 }
 
@@ -95,13 +105,30 @@ func (a *App) createTodoColumn(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/todos", http.StatusSeeOther)
 }
 
+// renameTodoColumn renames a column and, when the form has the field, sets
+// or clears its Member.
 func (a *App) renameTodoColumn(w http.ResponseWriter, r *http.Request) {
 	name, ok := columnName(r)
 	if !ok {
 		http.Error(w, "A column needs a name of 1 to 50 characters.", http.StatusBadRequest)
 		return
 	}
-	a.todoDone(w, r, true, todos{a}.RenameColumn(r.Context(), pathID(r), name))
+	member, keep, ok := columnMemberField(r.PostForm)
+	if !ok {
+		http.Error(w, "Pick a Member, or no one.", http.StatusBadRequest)
+		return
+	}
+	m := todos{a}
+	if !keep {
+		if err := m.SetColumnMember(r.Context(), pathID(r), member); errors.Is(err, errNotPickable) {
+			http.Error(w, "Pick a Member, or no one.", http.StatusBadRequest)
+			return
+		} else if err != nil {
+			a.todoDone(w, r, true, err)
+			return
+		}
+	}
+	a.todoDone(w, r, true, m.RenameColumn(r.Context(), pathID(r), name))
 }
 
 func (a *App) deleteTodoColumn(w http.ResponseWriter, r *http.Request) {
@@ -129,12 +156,13 @@ func (a *App) todoDone(w http.ResponseWriter, r *http.Request, column bool, err 
 	}
 }
 
-// completeTodo completes an open to-do (see todos.Complete). Completing a
-// completed to-do changes nothing.
+// completeTodo completes an open to-do (see todos.Complete), returning to the
+// Member page it came from, else the board. Completing a completed to-do
+// changes nothing.
 func (a *App) completeTodo(w http.ResponseWriter, r *http.Request) {
 	_, err := todos{a}.Complete(r.Context(), pathID(r))
-	if errors.Is(err, errTodoCompleted) {
-		http.Redirect(w, r, "/todos", http.StatusSeeOther)
+	if err == nil || errors.Is(err, errTodoCompleted) {
+		http.Redirect(w, r, returnTo(r, "/todos"), http.StatusSeeOther)
 		return
 	}
 	a.todoDone(w, r, false, err)
