@@ -31,7 +31,8 @@ type ChoreRound struct {
 	Taps  []ChoreTap
 }
 
-// ChoreTap is a Member's avatar on a Round: done when CompletionID is set.
+// ChoreTap shows a Member's tap on a Round. A completion earns points;
+// a provisional tick counts toward Routine progress while it awaits a PIN.
 type ChoreTap struct {
 	Member       Member
 	CompletionID int64

@@ -316,6 +316,10 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO chore_assignees (chore_id, member_id) VALUES (?, ?)", c.ID, m)
 		}
 	}
+	if err == nil && r.PathValue("id") != "" {
+		_, err = tx.ExecContext(r.Context(), `DELETE FROM routine_ticks WHERE chore_id = ?
+			AND NOT EXISTS (SELECT 1 FROM chore_assignees ca WHERE ca.chore_id = routine_ticks.chore_id AND ca.member_id = routine_ticks.member_id)`, c.ID)
+	}
 	if err == nil {
 		err = a.commit(tx, web.KindChore)
 	}
@@ -384,7 +388,10 @@ func (a *App) choreExec(w http.ResponseWriter, r *http.Request, kinds []web.Kind
 func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	member, _ := strconv.ParseInt(r.PostFormValue("member_id"), 10, 64)
-	round := r.PostFormValue("round")
+	a.completeChoreRound(w, r, id, member, r.PostFormValue("round"), back(r))
+}
+
+func (a *App) completeChoreRound(w http.ResponseWriter, r *http.Request, id, member int64, round, next string) {
 	var schedule, days string
 	var at int64
 	err := a.DB.QueryRowContext(r.Context(), "SELECT schedule, days, created_at FROM chores WHERE id = ? AND NOT archived", id).Scan(&schedule, &days, &at)
@@ -427,7 +434,7 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, back(r), http.StatusSeeOther)
+	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 // creditChoreRound records a completion after the caller checks claimability.

@@ -58,7 +58,7 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	p.Groups, err = a.memberChoreGroups(ctx, cs, p.Member.ID, hh.Routine(now))
+	p.Groups, err = a.memberChoreGroups(ctx, memberChores(cs, p.Member.ID), p.Member.ID, hh.Routine(now), today.Format(dateLayout))
 	if err != nil {
 		a.serverError(w, r, err)
 		return

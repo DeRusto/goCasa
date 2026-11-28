@@ -107,21 +107,24 @@ templ Setup(errMsg string) {
 
 // PINPad is the Admin PIN pad: pick your avatar, enter your PIN.
 templ PINPad(admins []Member, errMsg, next string) {
-	@pinPad(admins, errMsg, next, "/lock", "Unlock", "")
+	@pinPad(admins, errMsg, next, "/lock", "Unlock Settings", "Unlock", "", "")
 }
 
-templ RoutinePINPad(admins []Member, errMsg, action, cancel string) {
-	@pinPad(admins, errMsg, "", action, "Confirm", cancel)
+templ RoutinePINPad(admins []Member, errMsg, action, cancel, ticks string) {
+	@pinPad(admins, errMsg, "", action, "Confirm Routine", "Confirm", cancel, ticks)
 }
 
-templ pinPad(admins []Member, errMsg, next, action, submit, cancel string) {
-	@layout("Unlock Settings") {
+templ pinPad(admins []Member, errMsg, next, action, title, submit, cancel, ticks string) {
+	@layout(title) {
 		<main class="items-center">
 			<form method="post" action={ templ.SafeURL(action) } class="form-card max-w-md">
 				<h1>Enter your PIN</h1>
 				@formError(errMsg)
 				if next != "" {
 					<input type="hidden" name="next" value={ next }/>
+				}
+				if ticks != "" {
+					<input type="hidden" name="ticks" value={ ticks }/>
 				}
 				<fieldset class="border-0 p-0">
 					<legend>Who are you?</legend>

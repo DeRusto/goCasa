@@ -103,6 +103,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 		d.Close()
 		return nil, fmt.Errorf("startup backup: %w", err)
 	}
+	a.Scheduler.Add("expired Routine ticks", func(time.Time) bool { return true }, a.pruneRoutineTicks)
 	a.Scheduler.Add("integrations", func(time.Time) bool { return true }, a.syncDue)
 	a.Scheduler.Add("fallback folder", a.folderScanDue, a.scanFolder)
 	a.Scheduler.Add("photo prefetch", func(time.Time) bool { return true }, a.prefetchPhotos)

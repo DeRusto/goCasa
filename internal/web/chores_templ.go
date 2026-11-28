@@ -39,7 +39,8 @@ type ChoreRound struct {
 	Taps  []ChoreTap
 }
 
-// ChoreTap is a Member's avatar on a Round: done when CompletionID is set.
+// ChoreTap shows a Member's tap on a Round. A completion earns points;
+// a provisional tick counts toward Routine progress while it awaits a PIN.
 type ChoreTap struct {
 	Member       Member
 	CompletionID int64
@@ -113,7 +114,7 @@ func choreRounds(c Chore, next string) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(rd.Start)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 63, Col: 160}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 64, Col: 160}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -131,7 +132,7 @@ func choreRounds(c Chore, next string) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(rd.Start)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 65, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 66, Col: 68}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -159,7 +160,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(t.Member.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 71, Col: 25}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 72, Col: 25}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -177,7 +178,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var7 templ.SafeURL
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(choreTickPath(c, next))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 74, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 75, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -190,7 +191,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(t.Member.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 75, Col: 67}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 76, Col: 67}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 					if templ_7745c5c3_Err != nil {
@@ -203,7 +204,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(rd.Start)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 76, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 77, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 					if templ_7745c5c3_Err != nil {
@@ -216,7 +217,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(next)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 77, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 78, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 					if templ_7745c5c3_Err != nil {
@@ -229,7 +230,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue("Complete " + c.Name + " for " + t.Member.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 78, Col: 73}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 79, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 					if templ_7745c5c3_Err != nil {
@@ -250,7 +251,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var12 string
 					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(t.Member.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 80, Col: 22}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 81, Col: 22}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 					if templ_7745c5c3_Err != nil {
@@ -276,7 +277,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var13 string
 					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(t.Member.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 86, Col: 21}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 87, Col: 21}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 					if templ_7745c5c3_Err != nil {
@@ -289,7 +290,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var14 templ.SafeURL
 					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/chores/completions/" + id(t.CompletionID) + "/delete"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 88, Col: 104}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 89, Col: 104}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 					if templ_7745c5c3_Err != nil {
@@ -302,7 +303,7 @@ func choreRounds(c Chore, next string) templ.Component {
 					var templ_7745c5c3_Var15 string
 					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(next)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 89, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 90, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 					if templ_7745c5c3_Err != nil {
@@ -351,7 +352,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 99, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 100, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -364,7 +365,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Emoji)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 100, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 101, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -402,7 +403,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(d)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 113, Col: 67}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 114, Col: 67}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 			if templ_7745c5c3_Err != nil {
@@ -425,7 +426,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(d)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 113, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 114, Col: 116}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -463,7 +464,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(c.Points))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 123, Col: 109}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 124, Col: 109}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -481,7 +482,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(memberChip(m))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 127, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 128, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -494,7 +495,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(m.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 128, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 129, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 			if templ_7745c5c3_Err != nil {
@@ -525,7 +526,7 @@ func choreFields(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 130, Col: 12}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 131, Col: 12}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -654,7 +655,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(c.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 173, Col: 37}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 174, Col: 37}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 					if templ_7745c5c3_Err != nil {
@@ -667,7 +668,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var29 templ.SafeURL
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/chores/" + id(c.ID)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 176, Col: 76}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 177, Col: 76}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -680,7 +681,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var30 string
 					templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 176, Col: 104}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 177, Col: 104}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 					if templ_7745c5c3_Err != nil {
@@ -701,7 +702,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var31 string
 					templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(schedule(c))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 180, Col: 23}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 181, Col: 23}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 					if templ_7745c5c3_Err != nil {
@@ -714,7 +715,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var32 string
 					templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(c.Points))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 180, Col: 53}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 181, Col: 53}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 					if templ_7745c5c3_Err != nil {
@@ -762,7 +763,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 				var templ_7745c5c3_Var33 string
 				templ_7745c5c3_Var33, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("background:" + pastel(m.Color))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 199, Col: 105}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 200, Col: 105}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 				if templ_7745c5c3_Err != nil {
@@ -783,7 +784,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 201, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 202, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {
@@ -796,7 +797,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 				var templ_7745c5c3_Var35 string
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(m.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 201, Col: 110}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 202, Col: 110}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 				if templ_7745c5c3_Err != nil {
@@ -809,7 +810,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 				var templ_7745c5c3_Var36 string
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(p.Balances[m.ID]))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 201, Col: 145}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 202, Col: 145}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -845,7 +846,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var37 string
 					templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(rd.Member.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 212, Col: 54}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 213, Col: 54}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 					if templ_7745c5c3_Err != nil {
@@ -858,7 +859,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var38 string
 					templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(rd.Reward.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 212, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 213, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 					if templ_7745c5c3_Err != nil {
@@ -871,7 +872,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var39 string
 					templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(rd.Reward.Cost))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 212, Col: 116}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 213, Col: 116}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 					if templ_7745c5c3_Err != nil {
@@ -884,7 +885,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var40 templ.SafeURL
 					templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/redemptions/" + id(rd.ID) + "/approve"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 213, Col: 93}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 214, Col: 93}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 					if templ_7745c5c3_Err != nil {
@@ -897,7 +898,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var41 templ.SafeURL
 					templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/redemptions/" + id(rd.ID) + "/decline"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 216, Col: 93}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 217, Col: 93}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 					if templ_7745c5c3_Err != nil {
@@ -926,7 +927,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var42 string
 					templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(rw.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 227, Col: 36}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 228, Col: 36}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 					if templ_7745c5c3_Err != nil {
@@ -939,7 +940,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var43 string
 					templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(rw.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 228, Col: 22}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 229, Col: 22}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 					if templ_7745c5c3_Err != nil {
@@ -952,7 +953,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var44 string
 					templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(rw.Cost))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 228, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 229, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 					if templ_7745c5c3_Err != nil {
@@ -971,7 +972,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 							var templ_7745c5c3_Var45 templ.SafeURL
 							templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem"))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 232, Col: 91}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 233, Col: 91}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 							if templ_7745c5c3_Err != nil {
@@ -984,7 +985,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 							var templ_7745c5c3_Var46 string
 							templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(m.ID))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 233, Col: 67}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 234, Col: 67}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 							if templ_7745c5c3_Err != nil {
@@ -997,7 +998,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 							var templ_7745c5c3_Var47 string
 							templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Name + " asks for " + rw.Name)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 234, Col: 65}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 235, Col: 65}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 							if templ_7745c5c3_Err != nil {
@@ -1010,7 +1011,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 							var templ_7745c5c3_Var48 string
 							templ_7745c5c3_Var48, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("background:" + pastel(m.Color))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 234, Col: 205}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 235, Col: 205}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 							if templ_7745c5c3_Err != nil {
@@ -1031,7 +1032,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 							var templ_7745c5c3_Var49 string
 							templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 236, Col: 22}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 237, Col: 22}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 							if templ_7745c5c3_Err != nil {
@@ -1050,7 +1051,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var50 templ.SafeURL
 					templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/rewards/" + id(rw.ID) + "/archive"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 241, Col: 90}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 242, Col: 90}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 					if templ_7745c5c3_Err != nil {
@@ -1063,7 +1064,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var51 string
 					templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(rw.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 242, Col: 87}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 243, Col: 87}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 					if templ_7745c5c3_Err != nil {
@@ -1103,7 +1104,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 				var templ_7745c5c3_Var52 string
 				templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(m.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 277, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 278, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var52)
 				if templ_7745c5c3_Err != nil {
@@ -1116,7 +1117,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 				var templ_7745c5c3_Var53 string
 				templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 277, Col: 44}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 278, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 				if templ_7745c5c3_Err != nil {
@@ -1140,7 +1141,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var54 templ.SafeURL
 					templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/chores/" + id(c.ID) + "/restore"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 291, Col: 86}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 292, Col: 86}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 					if templ_7745c5c3_Err != nil {
@@ -1153,7 +1154,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var55 string
 					templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 292, Col: 17}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 293, Col: 17}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 					if templ_7745c5c3_Err != nil {
@@ -1166,7 +1167,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var56 string
 					templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 292, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 293, Col: 44}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 					if templ_7745c5c3_Err != nil {
@@ -1187,7 +1188,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var57 templ.SafeURL
 					templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/rewards/" + id(rw.ID) + "/restore"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 298, Col: 88}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 299, Col: 88}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 					if templ_7745c5c3_Err != nil {
@@ -1200,7 +1201,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var58 string
 					templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(rw.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 299, Col: 18}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 300, Col: 18}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 					if templ_7745c5c3_Err != nil {
@@ -1213,7 +1214,7 @@ func ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) templ
 					var templ_7745c5c3_Var59 string
 					templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(rw.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 299, Col: 46}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 300, Col: 46}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 					if templ_7745c5c3_Err != nil {
@@ -1292,7 +1293,7 @@ func ChorePage(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var62 templ.SafeURL
 			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/chores/" + id(c.ID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 317, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 318, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 			if templ_7745c5c3_Err != nil {
@@ -1305,7 +1306,7 @@ func ChorePage(c Chore, people []Member) templ.Component {
 			var templ_7745c5c3_Var63 string
 			templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 318, Col: 16}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 319, Col: 16}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 			if templ_7745c5c3_Err != nil {
@@ -1331,7 +1332,7 @@ func ChorePage(c Chore, people []Member) templ.Component {
 				var templ_7745c5c3_Var64 templ.SafeURL
 				templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/chores/" + id(c.ID) + "/archive"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 323, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 324, Col: 82}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 				if templ_7745c5c3_Err != nil {
@@ -1344,7 +1345,7 @@ func ChorePage(c Chore, people []Member) templ.Component {
 				var templ_7745c5c3_Var65 string
 				templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 324, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/chores.templ`, Line: 325, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 				if templ_7745c5c3_Err != nil {
