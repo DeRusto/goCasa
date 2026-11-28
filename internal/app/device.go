@@ -94,7 +94,7 @@ func clockLayout(h24 bool) string {
 
 // saveHousehold sets the household Default view, clock, week start and
 // screensaver idle time, seconds per photo, their fit, captions and slow
-// zoom, and Night mode (each kept when not sent); it sits behind requireUnlock.
+// zoom, Night mode and the slot times (each kept when not sent); it sits behind requireUnlock.
 func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 	view := r.PostFormValue("default_view")
 	start, err := strconv.Atoi(r.PostFormValue("week_start"))
@@ -124,6 +124,11 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		}
 		night, nightStart, nightEnd = &v, &s, &e
 	}
+	morningEnd, afternoonEnd, ok := slotTimes(r)
+	if !ok {
+		a.settingsPage(w, r, http.StatusBadRequest, "Morning ends before Afternoon does, both after midnight.")
+		return
+	}
 	var tz *string
 	if r.PostForm.Has("timezone") {
 		v := strings.TrimSpace(r.PostFormValue("timezone"))
@@ -141,8 +146,8 @@ func (a *App) saveHousehold(w http.ResponseWriter, r *http.Request) {
 		screensaver_idle_seconds = coalesce(?, screensaver_idle_seconds), seconds_per_photo = coalesce(?, seconds_per_photo),
 		photo_fit = coalesce(?, photo_fit), photo_captions = coalesce(?, photo_captions), photo_zoom = coalesce(?, photo_zoom),
 		night_mode = coalesce(?, night_mode), night_start = coalesce(?, night_start), night_end = coalesce(?, night_end),
-		timezone = coalesce(?, timezone)`,
-		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, fit, captions, zoom, night, nightStart, nightEnd, tz); err != nil {
+		timezone = coalesce(?, timezone), morning_end = coalesce(?, morning_end), afternoon_end = coalesce(?, afternoon_end)`,
+		view, r.PostForm.Has("clock_24h"), start, idle, perPhoto, fit, captions, zoom, night, nightStart, nightEnd, tz, morningEnd, afternoonEnd); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

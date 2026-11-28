@@ -51,10 +51,10 @@ func (a *App) loadHousehold(ctx context.Context) (Household, error) {
 	h := Household{Zone: a.Config.Location}
 	err := a.DB.QueryRowContext(ctx, `SELECT default_view, clock_24h, week_start, screensaver_idle_seconds, seconds_per_photo, photo_fit, photo_captions, photo_zoom,
 		night_mode, night_start, night_end, timezone, units, weather_lat, weather_lon, weather_place, fallback_folder_enabled,
-		lock_calendar, lock_chores, lock_todos FROM household_settings`).
+		lock_calendar, lock_chores, lock_todos, morning_end, afternoon_end FROM household_settings`).
 		Scan(&h.DefaultView, &h.Clock24, &h.WeekStart, &h.IdleSeconds, &h.SecondsPerPhoto, &h.PhotoFit, &h.PhotoCaptions, &h.PhotoZoom,
 			&h.NightMode, &h.NightStart, &h.NightEnd, &h.Timezone, &h.Units, &h.WeatherLat, &h.WeatherLon, &h.WeatherPlace, &h.FallbackFolder,
-			&h.Locks.Calendar, &h.Locks.Chores, &h.Locks.Todos)
+			&h.Locks.Calendar, &h.Locks.Chores, &h.Locks.Todos, &h.MorningEnd, &h.AfternoonEnd)
 	if loc, lerr := time.LoadLocation(h.Timezone); err == nil && h.Timezone != "" && lerr == nil {
 		h.Zone = loc
 	}
