@@ -25,6 +25,20 @@ func (h Household) Routine(now time.Time) string {
 	return "evening"
 }
 
+// RoutineEnd is when the current Routine at now ends under the slot times:
+// Evening ends at midnight, when Morning starts.
+func (h Household) RoutineEnd(now time.Time) time.Time {
+	t := now.In(h.Zone)
+	at := func(min int) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, min, 0, 0, h.Zone) }
+	switch h.Routine(now) {
+	case "morning":
+		return at(h.MorningEnd)
+	case "afternoon":
+		return at(h.AfternoonEnd)
+	}
+	return dayAt(t, 1)
+}
+
 // routineEligible is the SQL condition for a Chore that can be in a Routine:
 // an active Each chore on a daily or chosen-weekdays schedule.
 const routineEligible = "NOT archived AND kind = 'each' AND schedule IN ('daily', 'weekdays')"
