@@ -19,3 +19,5 @@ Page-script tests run JavaScript in goja (`github.com/dop251/goja`) inside `go t
 Run GoCasa locally (a task worktree has no `.env`): `ADDR=127.0.0.1:PORT DATA_DIR=... BASE_URL=http://127.0.0.1:PORT MDNS=0 APP_ENCRYPTION_KEY=$(openssl rand -base64 32) SESSION_SECRET=$(openssl rand -base64 32) go run ./cmd/gocasa`.
 
 After changing Tailwind classes, run `go generate ./internal/web` to rebuild the committed `static/app.css`; it needs the Tailwind v4 standalone CLI on PATH as `tailwindcss` (see README).
+
+Make dev data quickly by POSTing the app's forms with `curl`, a cookie jar and the header `Sec-Fetch-Site: same-origin` (cross-origin protection rejects requests without it). On a fresh `DATA_DIR`, `/setup` creates and unlocks the first Admin. The household timezone defaults to UTC, so use UTC dates for Rounds and events.
