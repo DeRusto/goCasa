@@ -1,8 +1,8 @@
 package web_test
 
 import (
+	"regexp"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -45,7 +45,7 @@ window.gocasaDisplay = { build: BUILD, version: VERSION, send(m) { sent.push(JSO
 type pageOpts struct {
 	member        bool
 	build         string
-	memberRelease bool
+	memberMinimum string
 	screen        string
 	cameraWake    bool
 	hasWake       bool
@@ -63,6 +63,8 @@ func loadPage(t *testing.T, o pageOpts) *goja.Runtime {
 	return vm
 }
 
+var memberMinimumLine = regexp.MustCompile(`(?m)^[\t ]*const minimumMemberDisplayVersion = [^;]+;`)
+
 // startPage runs bridge.js on a fake page that hasn't loaded yet.
 func startPage(t *testing.T, o pageOpts) *goja.Runtime {
 	t.Helper()
@@ -71,9 +73,13 @@ func startPage(t *testing.T, o pageOpts) *goja.Runtime {
 		t.Fatal(err)
 	}
 	script := string(src)
-	if o.memberRelease {
-		// Exercise the same code with the release minimum set to a test version.
-		script = strings.Replace(script, "const minimumMemberDisplayVersion = null;", "const minimumMemberDisplayVersion = [1, 2, 0];", 1)
+	if o.memberMinimum != "" {
+		// Exercise both sides of the release gate regardless of the shipped minimum.
+		loc := memberMinimumLine.FindStringIndex(script)
+		if loc == nil {
+			t.Fatal("could not find the Member display release minimum")
+		}
+		script = script[:loc[0]] + "\tconst minimumMemberDisplayVersion = " + o.memberMinimum + ";" + script[loc[1]:]
 	}
 	if o.build == "" {
 		o.build = "apk"
@@ -210,6 +216,9 @@ func TestASupportedDisplayAppGetsTheBridgeAndNoNotice(t *testing.T) {
 		if got := asJSON(t, vm, "sent.length"); got != "1" {
 			t.Errorf("version %q: sent %s messages, want the state", v, got)
 		}
+		if run(t, vm, "nav.hidden").ToBoolean() {
+			t.Errorf("version %q: main navigation was hidden outside a Member page", v)
+		}
 	}
 }
 
@@ -237,7 +246,11 @@ func TestMemberPageBridge(t *testing.T) {
 		{name: "Member display APK", build: "apk", version: "1.2.0", released: true, hideNav: true, showBedtime: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			vm := loadPage(t, pageOpts{screen: "awake", member: true, app: c.build != "", build: c.build, version: c.version, memberRelease: c.released})
+			minimum := "null"
+			if c.released {
+				minimum = "[1, 2, 0]"
+			}
+			vm := loadPage(t, pageOpts{screen: "awake", member: true, app: c.build != "", build: c.build, version: c.version, memberMinimum: minimum})
 			if got := run(t, vm, "nav.hidden").ToBoolean(); got != c.hideNav {
 				t.Errorf("main navigation hidden = %t, want %t", got, c.hideNav)
 			}
