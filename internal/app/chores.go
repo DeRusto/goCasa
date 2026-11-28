@@ -316,6 +316,10 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.ExecContext(r.Context(), "INSERT OR IGNORE INTO chore_assignees (chore_id, member_id) VALUES (?, ?)", c.ID, m)
 		}
 	}
+	if err == nil && r.PathValue("id") != "" {
+		_, err = tx.ExecContext(r.Context(), `DELETE FROM routine_ticks WHERE chore_id = ?
+			AND NOT EXISTS (SELECT 1 FROM chore_assignees ca WHERE ca.chore_id = routine_ticks.chore_id AND ca.member_id = routine_ticks.member_id)`, c.ID)
+	}
 	if err == nil {
 		err = a.commit(tx, web.KindChore)
 	}
@@ -384,7 +388,10 @@ func (a *App) choreExec(w http.ResponseWriter, r *http.Request, kinds []web.Kind
 func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	member, _ := strconv.ParseInt(r.PostFormValue("member_id"), 10, 64)
-	round := r.PostFormValue("round")
+	a.completeChoreRound(w, r, id, member, r.PostFormValue("round"), back(r))
+}
+
+func (a *App) completeChoreRound(w http.ResponseWriter, r *http.Request, id, member int64, round, next string) {
 	var schedule, days string
 	var at int64
 	err := a.DB.QueryRowContext(r.Context(), "SELECT schedule, days, created_at FROM chores WHERE id = ? AND NOT archived", id).Scan(&schedule, &days, &at)
@@ -410,12 +417,7 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = a.inTx(r.Context(), func(tx *sql.Tx) error {
-		return execOne(r.Context(), tx, `INSERT INTO chore_completions (chore_id, member_id, round_start, completed_at, points_awarded)
-		SELECT c.id, m.id, ?3, ?4, coalesce((SELECT points_awarded FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 ORDER BY x.id LIMIT 1), c.points) FROM chores c
-			JOIN chore_assignees ca ON ca.chore_id = c.id JOIN members m ON m.id = ca.member_id
-		WHERE c.id = ?1 AND m.id = ?2 AND NOT m.archived AND NOT m.pet
-			AND NOT EXISTS (SELECT 1 FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 AND (c.kind = 'anyone' OR x.member_id = m.id))`,
-			id, member, round, a.Now().Unix())
+		return creditChoreRound(r.Context(), tx, id, member, round, a.Now().Unix())
 	}, web.KindChore, web.KindPoints)
 	if errors.Is(err, sql.ErrNoRows) {
 		var assigned bool
@@ -432,7 +434,17 @@ func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, back(r), http.StatusSeeOther)
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+// creditChoreRound records a completion after the caller checks claimability.
+func creditChoreRound(ctx context.Context, tx *sql.Tx, id, member int64, round string, at int64) error {
+	return execOne(ctx, tx, `INSERT INTO chore_completions (chore_id, member_id, round_start, completed_at, points_awarded)
+		SELECT c.id, m.id, ?3, ?4, coalesce((SELECT points_awarded FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 ORDER BY x.id LIMIT 1), c.points) FROM chores c
+			JOIN chore_assignees ca ON ca.chore_id = c.id JOIN members m ON m.id = ca.member_id
+		WHERE c.id = ?1 AND NOT c.archived AND m.id = ?2 AND NOT m.archived AND NOT m.pet
+			AND NOT EXISTS (SELECT 1 FROM chore_completions x WHERE x.chore_id = c.id AND x.round_start = ?3 AND (c.kind = 'anyone' OR x.member_id = m.id))`,
+		id, member, round, at)
 }
 
 // undoCompletion is an Admin removing a completion, and so its points.

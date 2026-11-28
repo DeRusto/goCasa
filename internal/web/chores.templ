@@ -31,10 +31,21 @@ type ChoreRound struct {
 	Taps  []ChoreTap
 }
 
-// ChoreTap is a Member's avatar on a Round: done when CompletionID is set.
+// ChoreTap shows a Member's tap on a Round. A completion earns points;
+// a provisional tick counts toward Routine progress while it awaits a PIN.
 type ChoreTap struct {
 	Member       Member
 	CompletionID int64
+	Provisional  bool // only on the Member page
+}
+
+func (t ChoreTap) Ticked() bool { return t.CompletionID != 0 || t.Provisional }
+
+func choreTickPath(c Chore, next string) templ.SafeURL {
+	if c.Routine != "" && strings.HasPrefix(next, "/members/") {
+		return templ.SafeURL(next + "/routine-chores/" + id(c.ID))
+	}
+	return templ.SafeURL("/chores/" + id(c.ID) + "/complete")
 }
 
 func schedule(c Chore) string {
@@ -55,8 +66,13 @@ templ choreRounds(c Chore, next string) {
 				<span><strong>Late</strong> <span class="text-muted">({ rd.Start })</span></span>
 			}
 			for _, t := range rd.Taps {
-				if t.CompletionID == 0 {
-					<form method="post" action={ templ.SafeURL("/chores/" + id(c.ID) + "/complete") } class="contents">
+				if t.Provisional {
+					<span class="done flex items-center gap-2">
+						@avatar(t.Member)
+						✓ { t.Member.Name } pending PIN
+					</span>
+				} else if t.CompletionID == 0 {
+					<form method="post" action={ choreTickPath(c, next) } class="contents">
 						<input type="hidden" name="member_id" value={ id(t.Member.ID) }/>
 						<input type="hidden" name="round" value={ rd.Start }/>
 						<input type="hidden" name="next" value={ next }/>
