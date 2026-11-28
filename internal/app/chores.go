@@ -76,7 +76,7 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, schedule, days, kind = 'anyone', points, archived, created_at, coalesce(routine, ''), coalesce(routine_position, 0) FROM chores ORDER BY name, id")
+	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, schedule, days, kind = 'anyone', points, archived, created_at, emoji, coalesce(routine, ''), coalesce(routine_position, 0) FROM chores ORDER BY name, id")
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 	for rows.Next() {
 		var c web.Chore
 		var at int64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Schedule, &c.Days, &c.Anyone, &c.Points, &c.Archived, &at, &c.Routine, &c.RoutinePosition); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Schedule, &c.Days, &c.Anyone, &c.Points, &c.Archived, &at, &c.Emoji, &c.Routine, &c.RoutinePosition); err != nil {
 			return nil, err
 		}
 		created[c.ID] = at
@@ -227,6 +227,7 @@ func (a *App) getChores(w http.ResponseWriter, r *http.Request) {
 // choreForm reads and checks the Chore form, or returns a message for the person.
 func (a *App) choreForm(r *http.Request) (c web.Chore, assignees []int64, msg string) {
 	c.Name = strings.TrimSpace(r.PostFormValue("name"))
+	c.Emoji = strings.TrimSpace(r.PostFormValue("emoji"))
 	c.Schedule = r.PostFormValue("schedule")
 	c.Anyone = r.PostFormValue("kind") == "anyone"
 	var days []string
@@ -291,14 +292,14 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	if r.PathValue("id") == "" {
-		err = tx.QueryRowContext(r.Context(), "INSERT INTO chores (name, schedule, days, kind, points, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-			c.Name, c.Schedule, c.Days, kind, c.Points, a.Now().Unix()).Scan(&c.ID)
+		err = tx.QueryRowContext(r.Context(), "INSERT INTO chores (name, schedule, days, kind, points, created_at, emoji) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+			c.Name, c.Schedule, c.Days, kind, c.Points, a.Now().Unix(), c.Emoji).Scan(&c.ID)
 	} else {
 		c.ID, _ = strconv.ParseInt(r.PathValue("id"), 10, 64)
 		// A Chore that stops being a daily or chosen-weekdays Each chore leaves its Routine.
-		err = tx.QueryRowContext(r.Context(), `UPDATE chores SET name = ?, schedule = ?, days = ?, kind = ?, points = ?,
+		err = tx.QueryRowContext(r.Context(), `UPDATE chores SET name = ?, schedule = ?, days = ?, kind = ?, points = ?, emoji = ?,
 			routine = CASE WHEN ? THEN routine END, routine_position = CASE WHEN ? THEN routine_position END WHERE id = ? RETURNING id`,
-			c.Name, c.Schedule, c.Days, kind, c.Points, inRoutine(c.Schedule, c.Anyone), inRoutine(c.Schedule, c.Anyone), c.ID).Scan(&c.ID)
+			c.Name, c.Schedule, c.Days, kind, c.Points, c.Emoji, inRoutine(c.Schedule, c.Anyone), inRoutine(c.Schedule, c.Anyone), c.ID).Scan(&c.ID)
 		if err == nil {
 			_, err = tx.ExecContext(r.Context(), "DELETE FROM chore_assignees WHERE chore_id = ?", c.ID)
 		}
@@ -325,8 +326,8 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 func (a *App) getChore(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	c := web.Chore{ID: id, Assignees: map[int64]bool{}}
-	err := a.DB.QueryRowContext(r.Context(), "SELECT name, schedule, days, kind = 'anyone', points, archived FROM chores WHERE id = ?", id).
-		Scan(&c.Name, &c.Schedule, &c.Days, &c.Anyone, &c.Points, &c.Archived)
+	err := a.DB.QueryRowContext(r.Context(), "SELECT name, schedule, days, kind = 'anyone', points, archived, emoji FROM chores WHERE id = ?", id).
+		Scan(&c.Name, &c.Schedule, &c.Days, &c.Anyone, &c.Points, &c.Archived, &c.Emoji)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return

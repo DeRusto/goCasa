@@ -12,6 +12,7 @@ var Weekdays = []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
 type Chore struct {
 	ID        int64
 	Name      string
+	Emoji     string
 	Schedule  string // daily, weekdays, weekly or monthly
 	Days      string // chosen weekdays, e.g. "MO,WE"
 	Anyone    bool   // else an Each chore
@@ -81,6 +82,7 @@ templ choreRounds(c Chore, next string) {
 
 templ choreFields(c Chore, people []Member) {
 	<label>Name <input name="name" required maxlength="100" value={ c.Name }/></label>
+	<label>Emoji (optional) <input type="text" name="emoji" value={ c.Emoji }/></label>
 	<label>
 		Comes back
 		<select name="schedule">
@@ -127,6 +129,7 @@ type Points struct {
 type Reward struct {
 	ID       int64
 	Name     string
+	Emoji    string
 	Cost     int
 	Archived bool
 }
@@ -244,6 +247,7 @@ templ ChoresBoard(chores []Chore, people []Member, p Points, unlocked bool) {
 					<summary class="flex min-h-11 cursor-pointer items-center font-semibold">Add a Reward (Admin)</summary>
 					<form method="post" action="/rewards">
 						<label>Name <input name="name" required maxlength="100"/></label>
+						<label>Emoji (optional) <input type="text" name="emoji"/></label>
 						<label>Costs <input type="number" name="points" min="1" max="100000" required class="w-28"/> points</label>
 						<button class="btn-primary">Add Reward</button>
 					</form>

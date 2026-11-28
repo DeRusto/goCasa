@@ -348,3 +348,22 @@ func TestTodaysChoresAreOnTodayButNeverOnTheCalendar(t *testing.T) {
 		}
 	}
 }
+
+func TestChoreEmojiCanBeSetChangedAndCleared(t *testing.T) {
+	t.Parallel()
+	h := household(t)
+	form := chore("Dishes", "daily", "each", "5", "2")
+
+	for _, step := range []struct{ path, emoji string }{
+		{"/chores", "🍽️"},
+		{"/chores/1", "🧽"},
+		{"/chores/1", ""},
+	} {
+		form.Set("emoji", step.emoji)
+		post(t, h, step.path, form)
+		code, page := h.Get(t, "/chores/1")
+		if code != http.StatusOK || !strings.Contains(page, `name="emoji" value="`+step.emoji+`"`) {
+			t.Fatalf("edit form after POST %s with emoji %q: status %d, emoji field missing or incorrect", step.path, step.emoji, code)
+		}
+	}
+}
