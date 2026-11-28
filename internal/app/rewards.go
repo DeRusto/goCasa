@@ -32,10 +32,10 @@ func (a *App) points(ctx context.Context) (web.Points, error) {
 	if err == nil {
 		err = a.eachRow(ctx, func(s func(...any) error) error {
 			var rd web.Redemption
-			err := s(&rd.ID, &rd.Reward.Name, &rd.Reward.Cost, &rd.Member.ID, &rd.Member.Name, &rd.Member.Color, &rd.Member.HasAvatar)
+			err := s(&rd.ID, &rd.Reward.ID, &rd.Reward.Name, &rd.Reward.Cost, &rd.Member.ID, &rd.Member.Name, &rd.Member.Color, &rd.Member.HasAvatar)
 			p.Pending = append(p.Pending, rd)
 			return err
-		}, `SELECT rd.id, rw.name, rw.points_cost, m.id, m.name, m.color, m.avatar IS NOT NULL
+		}, `SELECT rd.id, rw.id, rw.name, rw.points_cost, m.id, m.name, m.color, m.avatar IS NOT NULL
 			FROM redemptions rd JOIN rewards rw ON rw.id = rd.reward_id JOIN members m ON m.id = rd.member_id
 			WHERE rd.status = 'pending' AND NOT m.archived ORDER BY rd.requested_at, rd.id`)
 	}

@@ -82,3 +82,20 @@ func TestTickerWithoutARoutineRefreshesAtMidnightOnly(t *testing.T) {
 		t.Fatalf("refreshes at midnight = %d, want 1", n)
 	}
 }
+
+// Kid style's clock is plain text: in 12-hour it drops am/pm ("1:46").
+func TestTickerDropsAmPmWhenTheClockSaysSo(t *testing.T) {
+	vm := startTicker(t)
+	v, err := vm.RunString(`Date.prototype.toLocaleTimeString = () => "1:46 AM";
+		clock.dataset.h24 = "false"; clock.dataset.ampm = "false"; after(0); clock.textContent`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := v.String(); got != "1:46" {
+		t.Errorf("a plain 12-hour clock reads %q, want 1:46", got)
+	}
+	v, _ = vm.RunString(`clock.dataset.ampm = "true"; after(1); clock.textContent`)
+	if got := v.String(); got != "1:46 AM" {
+		t.Errorf("Today's 12-hour clock reads %q, want 1:46 AM", got)
+	}
+}

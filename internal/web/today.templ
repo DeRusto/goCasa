@@ -10,6 +10,7 @@ type TodayPage struct {
 	Now        time.Time // in the household's timezone
 	Clock      string    // Now's time, 12- or 24-hour as the Household has it
 	Clock24    bool
+	NoAmPm     bool           // a 12-hour clock without am/pm, as Kid style shows it
 	MidnightIn int            // seconds to the household's next midnight, when the day turns
 	Weather    *WeatherHeader // nil: no cached weather
 	Days       [2]CalendarDay // today and tomorrow
@@ -118,7 +119,7 @@ templ choreRow(c Chore, next string) {
 
 // clock is the household's time, ticked by ticker in the browser.
 templ clock(p TodayPage) {
-	<time id="clock" data-tz={ p.Now.Location().String() } data-offset={ p.Now.Format("-07:00") } data-h24={ strconv.FormatBool(p.Clock24) } data-midnight-in={ strconv.Itoa(p.MidnightIn) }>{ p.Clock }</time>
+	<time id="clock" data-tz={ p.Now.Location().String() } data-offset={ p.Now.Format("-07:00") } data-h24={ strconv.FormatBool(p.Clock24) } data-ampm={ strconv.FormatBool(!p.NoAmPm) } data-midnight-in={ strconv.Itoa(p.MidnightIn) }>{ p.Clock }</time>
 }
 
 // ticker runs a page's day in the browser, with no request: it ticks #clock
@@ -158,6 +159,7 @@ templ ticker() {
 			}
 			// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).
 			clock.textContent = at.toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
+			if (clock.dataset.ampm === "false") clock.textContent = clock.textContent.replace(/ [AP]M$/, "");
 			const now = Date.now();
 			const dayTurned = midnight(clock, now), routineTurned = routine(document.querySelector("[data-routine-in]"), now);
 			if (dayTurned || routineTurned) document.dispatchEvent(new Event("refresh-live"));

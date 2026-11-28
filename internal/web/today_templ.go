@@ -18,6 +18,7 @@ type TodayPage struct {
 	Now        time.Time // in the household's timezone
 	Clock      string    // Now's time, 12- or 24-hour as the Household has it
 	Clock24    bool
+	NoAmPm     bool           // a 12-hour clock without am/pm, as Kid style shows it
 	MidnightIn int            // seconds to the household's next midnight, when the day turns
 	Weather    *WeatherHeader // nil: no cached weather
 	Days       [2]CalendarDay // today and tomorrow
@@ -82,7 +83,7 @@ func Today(p TodayPage) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(p.Now.Format("Monday 2 January"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 27, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 28, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -146,7 +147,7 @@ func Today(p TodayPage) templ.Component {
 				var templ_7745c5c3_Var4 templ.SafeURL
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/todos/" + id(t.ID)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 53, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 54, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -159,7 +160,7 @@ func Today(p TodayPage) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(t.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 53, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 54, Col: 89}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -177,7 +178,7 @@ func Today(p TodayPage) templ.Component {
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(t.Due)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 55, Col: 111}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 56, Col: 111}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -262,7 +263,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(deg(w.Current) + w.Unit)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 78, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 79, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -275,7 +276,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(w.Conditions)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 80, Col: 19}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 81, Col: 19}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -293,7 +294,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(deg(w.High))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 82, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 83, Col: 24}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -306,7 +307,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(deg(w.Low))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 82, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 83, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -325,7 +326,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(d.Day)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 89, Col: 13}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 90, Col: 13}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -338,7 +339,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.Conditions)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 90, Col: 32}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 91, Col: 32}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 				if templ_7745c5c3_Err != nil {
@@ -359,7 +360,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(d.Conditions)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 92, Col: 43}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 93, Col: 43}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -372,7 +373,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(deg(d.High))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 94, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 95, Col: 51}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -385,7 +386,7 @@ func weatherSummary(w *WeatherHeader) templ.Component {
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(deg(d.Low))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 94, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 95, Col: 68}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -435,7 +436,7 @@ func choreRow(c Chore, next string) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 107, Col: 15}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 108, Col: 15}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -454,7 +455,7 @@ func choreRow(c Chore, next string) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(c.Points))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 112, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 113, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -505,7 +506,7 @@ func clock(p TodayPage) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.Now.Location().String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 121, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 122, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -518,7 +519,7 @@ func clock(p TodayPage) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.Now.Format("-07:00"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 121, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 122, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -531,39 +532,52 @@ func clock(p TodayPage) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatBool(p.Clock24))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 121, Col: 135}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 122, Col: 135}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\" data-midnight-in=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\" data-ampm=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 string
-		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(p.MidnightIn))
+		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatBool(!p.NoAmPm))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 121, Col: 183}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 122, Col: 179}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "\" data-midnight-in=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var25 string
-		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(p.Clock)
+		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(p.MidnightIn))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 121, Col: 195}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 122, Col: 227}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</time>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var26 string
+		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(p.Clock)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/today.templ`, Line: 122, Col: 239}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</time>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -592,12 +606,12 @@ func ticker() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var26 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var26 == nil {
-			templ_7745c5c3_Var26 = templ.NopComponent
+		templ_7745c5c3_Var27 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var27 == nil {
+			templ_7745c5c3_Var27 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<script>\n\t(() => {\n\t\t// countdown is due once el's data-<key> seconds have passed since it first appeared.\n\t\tconst countdown = key => {\n\t\t\tlet seen, due;\n\t\t\treturn (el, now) => {\n\t\t\t\tif (el !== seen) {\n\t\t\t\t\tseen = el;\n\t\t\t\t\tdue = el && Number(el.dataset[key]) > 0 ? now + Number(el.dataset[key]) * 1000 : 0;\n\t\t\t\t} else if (due && now >= due) {\n\t\t\t\t\tdue = 0;\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\treturn false;\n\t\t\t};\n\t\t};\n\t\tconst midnight = countdown(\"midnightIn\"), routine = countdown(\"routineIn\");\n\t\tsetInterval(() => {\n\t\t\tconst clock = document.getElementById(\"clock\");\n\t\t\tif (!clock) return;\n\t\t\tconst opts = clock.dataset.h24 === \"true\" ? { hour: \"2-digit\", minute: \"2-digit\", hourCycle: \"h23\" } : { hour: \"numeric\", minute: \"2-digit\", hourCycle: \"h12\" };\n\t\t\tlet at = new Date();\n\t\t\ttry { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat(\"en-US\", opts); } catch {\n\t\t\t\t// A zone the browser can't name (Go's \"Local\"): the household's offset at render, shown as UTC.\n\t\t\t\t// shortcut: a DST change before the next refetch (at midnight) shows an hour off until then; send a named zone if that bites.\n\t\t\t\tconst [, sign, h, m] = /([+-])(\\d\\d):(\\d\\d)/.exec(clock.dataset.offset) || [, \"+\", \"00\", \"00\"];\n\t\t\t\tat = new Date(at.getTime() + (sign === \"-\" ? -1 : 1) * (h * 60 + Number(m)) * 6e4); // minutes to ms\n\t\t\t\topts.timeZone = \"UTC\";\n\t\t\t}\n\t\t\t// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).\n\t\t\tclock.textContent = at.toLocaleTimeString(\"en-US\", opts).replace(/\\s/g, \" \");\n\t\t\tconst now = Date.now();\n\t\t\tconst dayTurned = midnight(clock, now), routineTurned = routine(document.querySelector(\"[data-routine-in]\"), now);\n\t\t\tif (dayTurned || routineTurned) document.dispatchEvent(new Event(\"refresh-live\"));\n\t\t\tfor (const li of document.querySelectorAll(\"[data-end]\")) {\n\t\t\t\tif (Number(li.dataset.end) <= now) {\n\t\t\t\t\tli.classList.add(\"past\");\n\t\t\t\t\tli.style.opacity = \".5\";\n\t\t\t\t}\n\t\t\t}\n\t\t}, 1000);\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<script>\n\t(() => {\n\t\t// countdown is due once el's data-<key> seconds have passed since it first appeared.\n\t\tconst countdown = key => {\n\t\t\tlet seen, due;\n\t\t\treturn (el, now) => {\n\t\t\t\tif (el !== seen) {\n\t\t\t\t\tseen = el;\n\t\t\t\t\tdue = el && Number(el.dataset[key]) > 0 ? now + Number(el.dataset[key]) * 1000 : 0;\n\t\t\t\t} else if (due && now >= due) {\n\t\t\t\t\tdue = 0;\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\treturn false;\n\t\t\t};\n\t\t};\n\t\tconst midnight = countdown(\"midnightIn\"), routine = countdown(\"routineIn\");\n\t\tsetInterval(() => {\n\t\t\tconst clock = document.getElementById(\"clock\");\n\t\t\tif (!clock) return;\n\t\t\tconst opts = clock.dataset.h24 === \"true\" ? { hour: \"2-digit\", minute: \"2-digit\", hourCycle: \"h23\" } : { hour: \"numeric\", minute: \"2-digit\", hourCycle: \"h12\" };\n\t\t\tlet at = new Date();\n\t\t\ttry { opts.timeZone = clock.dataset.tz; new Intl.DateTimeFormat(\"en-US\", opts); } catch {\n\t\t\t\t// A zone the browser can't name (Go's \"Local\"): the household's offset at render, shown as UTC.\n\t\t\t\t// shortcut: a DST change before the next refetch (at midnight) shows an hour off until then; send a named zone if that bites.\n\t\t\t\tconst [, sign, h, m] = /([+-])(\\d\\d):(\\d\\d)/.exec(clock.dataset.offset) || [, \"+\", \"00\", \"00\"];\n\t\t\t\tat = new Date(at.getTime() + (sign === \"-\" ? -1 : 1) * (h * 60 + Number(m)) * 6e4); // minutes to ms\n\t\t\t\topts.timeZone = \"UTC\";\n\t\t\t}\n\t\t\t// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).\n\t\t\tclock.textContent = at.toLocaleTimeString(\"en-US\", opts).replace(/\\s/g, \" \");\n\t\t\tif (clock.dataset.ampm === \"false\") clock.textContent = clock.textContent.replace(/ [AP]M$/, \"\");\n\t\t\tconst now = Date.now();\n\t\t\tconst dayTurned = midnight(clock, now), routineTurned = routine(document.querySelector(\"[data-routine-in]\"), now);\n\t\t\tif (dayTurned || routineTurned) document.dispatchEvent(new Event(\"refresh-live\"));\n\t\t\tfor (const li of document.querySelectorAll(\"[data-end]\")) {\n\t\t\t\tif (Number(li.dataset.end) <= now) {\n\t\t\t\t\tli.classList.add(\"past\");\n\t\t\t\t\tli.style.opacity = \".5\";\n\t\t\t\t}\n\t\t\t}\n\t\t}, 1000);\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

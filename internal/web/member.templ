@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// MemberPage is one Member's today at a glance, in Standard style.
+// MemberPage is one Member's today at a glance, in their style.
 type MemberPage struct {
 	Member    Member
 	Day       TodayPage    // the clock and weather; Days[0] is today's events, Days[1] tomorrow's
@@ -16,6 +16,7 @@ type MemberPage struct {
 	Balance   int          // this Member's points
 	Rewards   []Reward     // not archived, cheapest first
 	Waiting   []Redemption // this Member's pending Redemptions, oldest first
+	Weather   *WeatherNow  // Kid style's weather view; nil without a forecast or in Standard style
 }
 
 // ChoreGroup is one Routine's share of a Member's Chores today, in the

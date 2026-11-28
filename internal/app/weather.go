@@ -345,14 +345,18 @@ func (a *App) getWeather(w http.ResponseWriter, r *http.Request) {
 	}
 	p := web.WeatherPage{Place: hh.WeatherPlace, Off: !hh.WeatherLat.Valid}
 	if f != nil {
-		p.Now = weatherNow(hh, f, hh.Today(a.Now()).Format(dateLayout))
+		hour := "15:04"
+		if !hh.Clock24 {
+			hour = "3 PM"
+		}
+		p.Now = weatherNow(hh, f, hh.Today(a.Now()).Format(dateLayout), hour)
 	}
 	a.render(w, r, http.StatusOK, web.WeatherFull(p))
 }
 
-// weatherNow is f as the Weather page shows it: now, the next 24 hours, and
-// today onwards.
-func weatherNow(hh Household, f *forecast, today string) *web.WeatherNow {
+// weatherNow is f as the Weather page shows it: now, the next 24 hours (each
+// labelled in the hour layout), and today onwards.
+func weatherNow(hh Household, f *forecast, today, hour string) *web.WeatherNow {
 	c := f.Current
 	n := &web.WeatherNow{
 		Temp: round(c.Temperature), Unit: "C", Conditions: conditions(c.Code), Day: c.IsDay == 1,
@@ -361,10 +365,7 @@ func weatherNow(hh Household, f *forecast, today string) *web.WeatherNow {
 	if hh.Units == "imperial" {
 		n.Unit, n.WindUnit = "F", "mph"
 	}
-	clock, hour := hh.Clock(), "15:04"
-	if !hh.Clock24 {
-		hour = "3 PM"
-	}
+	clock := hh.Clock()
 	// Open-Meteo's times are local wall-clock times with no zone; parse them as UTC and only reformat.
 	at := func(layout, s string) string {
 		t, err := time.Parse("2006-01-02T15:04", s)

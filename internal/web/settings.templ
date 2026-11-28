@@ -13,7 +13,8 @@ type Member struct {
 	Role      string // "admin" or "member"
 	Archived  bool
 	HasAvatar bool // else initials on colour
-	Pet       bool // can't be an Admin or do Chores
+	Pet       bool   // can't be an Admin or do Chores
+	Style     string // their Member page's: "standard" or "kid"
 }
 
 // Feed is an iCal feed as Settings shows it.
@@ -161,6 +162,16 @@ templ memberFields(m Member) {
 		</select>
 	</label>
 	<label><input type="checkbox" name="pet" checked?={ m.Pet }/> Pet</label>
+	if !m.Pet {
+		// Pets have no Member page; ticking Pet hides the choice before saving.
+		<label class="[form:has([name=pet]:checked)_&]:hidden">
+			Member page
+			<select name="style">
+				<option value="standard" selected?={ m.Style != "kid" }>Standard style</option>
+				<option value="kid" selected?={ m.Style == "kid" }>Kid style</option>
+			</select>
+		</label>
+	}
 }
 
 // Settings is the unlocked Settings page; sections are the Integrations' own, in order.
