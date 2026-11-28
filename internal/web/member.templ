@@ -33,12 +33,24 @@ func (g ChoreGroup) Progress() (done, total int) {
 	for _, c := range g.Chores {
 		for _, rd := range c.Rounds {
 			total++
-			if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.CompletionID != 0 }) {
+			if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.Ticked() }) {
 				done++
 			}
 		}
 	}
 	return done, total
+}
+
+// Pending reports whether any claimable Round still needs confirmation.
+func (g ChoreGroup) Pending() bool {
+	for _, c := range g.Chores {
+		for _, rd := range c.Rounds {
+			if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.Provisional }) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // progressText is a group's progress as people read it, "2 of 4".
@@ -148,6 +160,9 @@ templ choreGroup(g ChoreGroup, p MemberPage) {
 				<span class="text-sm tabular-nums text-muted">{ progressText(g) }</span>
 			}
 		</h3>
+		if g.Pending() {
+			<a class="btn" href={ templ.SafeURL(p.path() + "/routines/" + g.Routine + "/confirm") }>Confirm</a>
+		}
 		if len(g.Chores) == 0 {
 			<p class="text-muted">No chores.</p>
 		}

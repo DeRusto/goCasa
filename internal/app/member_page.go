@@ -58,7 +58,11 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	p.Groups = choreGroups(memberChores(cs, p.Member.ID), hh.Routine(now))
+	p.Groups, err = a.memberChoreGroups(ctx, cs, p.Member.ID, hh.Routine(now))
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	p.RoutineIn = secondsTo(now, hh.RoutineEnd(now))
 
 	if p.Todos, p.MoreTodos, err = (todos{a}).ForMember(ctx, p.Member.ID, today.Format(dateLayout)); err != nil {
