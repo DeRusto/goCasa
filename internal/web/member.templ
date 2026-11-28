@@ -86,6 +86,7 @@ templ MemberPageView(p MemberPage) {
 					</div>
 				</div>
 				@weatherSummary(p.Day.Weather)
+				<button id="member-bedtime" type="button" hidden hx-preserve="true" class="ml-auto">Bedtime</button>
 			</header>
 			<main class="card gap-5">
 				@calendarDay(p.Day.Days[0], "Today")

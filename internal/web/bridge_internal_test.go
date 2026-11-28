@@ -21,11 +21,13 @@ var navigator = {
 };
 function setTimeout() { timers++; }
 function clearTimeout() {}
+function setInterval() {}
 function addEventListener(type) { inputs.push(type); }
 var document = {
 	visibilityState: "visible",
+	querySelector: selector => selector === "[data-member-page]" && MEMBER ? {} : null,
 	addEventListener() {},
-	getElementById: id => ({ set textContent(s) { statuses[id] = s; }, hidden: true }),
+	getElementById: id => ({ addEventListener() {}, set textContent(s) { statuses[id] = s; }, hidden: true }),
 };
 `
 
@@ -45,6 +47,9 @@ func runScriptsWith(t *testing.T, c templ.Component, bridged, old bool) string {
 		t.Fatal(err)
 	}
 	vm := goja.New()
+	if err := vm.Set("MEMBER", strings.Contains(b.String(), "data-member-page=")); err != nil {
+		t.Fatal(err)
+	}
 	if err := vm.Set("BRIDGED", bridged); err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +106,19 @@ func TestWithAnOldDisplayAppThePageStillLeavesTheCameraAndWakeLockToIt(t *testin
 	for _, c := range []templ.Component{wallDisplay(300), motionWake(), thisDevice()} {
 		if got := runScriptsWith(t, c, true, true); !strings.Contains(got, `"calls":{"camera":0,"wakeLock":0}`) {
 			t.Errorf("with an old Display app the page did %s", got)
+		}
+	}
+}
+
+func TestAMemberPageInTheDisplayAppNeverStartsTheWallDisplayIdleTimer(t *testing.T) {
+	t.Parallel()
+	page := MemberPageView(MemberPage{})
+	if got := runScripts(t, page, false); !strings.Contains(got, `"idle":true`) {
+		t.Errorf("the Wall display in a browser did %s, want its idle timer", got)
+	}
+	for _, old := range []bool{false, true} {
+		if got := runScriptsWith(t, page, true, old); !strings.Contains(got, `"idle":false`) {
+			t.Errorf("the Member page with the Bridge (old=%t) did %s, want no idle timer", old, got)
 		}
 	}
 }
