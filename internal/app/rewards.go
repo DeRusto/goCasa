@@ -24,10 +24,10 @@ func (a *App) points(ctx context.Context) (web.Points, error) {
 	if err == nil {
 		err = a.eachRow(ctx, func(s func(...any) error) error {
 			var rw web.Reward
-			err := s(&rw.ID, &rw.Name, &rw.Cost, &rw.Archived)
+			err := s(&rw.ID, &rw.Name, &rw.Cost, &rw.Archived, &rw.Emoji)
 			p.Rewards = append(p.Rewards, rw)
 			return err
-		}, "SELECT id, name, points_cost, archived FROM rewards ORDER BY points_cost, name, id")
+		}, "SELECT id, name, points_cost, archived, emoji FROM rewards ORDER BY points_cost, name, id")
 	}
 	if err == nil {
 		err = a.eachRow(ctx, func(s func(...any) error) error {
@@ -57,12 +57,13 @@ func (a *App) person(r *http.Request) (int64, error) {
 // approved Redemptions keep counting what they cost.
 func (a *App) createReward(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
+	emoji := strings.TrimSpace(r.PostFormValue("emoji"))
 	cost, err := strconv.Atoi(r.PostFormValue("points"))
 	if name == "" || len([]rune(name)) > 100 || err != nil || cost < 1 || cost > 100000 {
 		http.Error(w, "A Reward needs a name of 1 to 100 characters and a cost from 1 to 100000 points.", http.StatusBadRequest)
 		return
 	}
-	if _, err := a.exec(r.Context(), web.KindPoints, "INSERT INTO rewards (name, points_cost) VALUES (?, ?)", name, cost); err != nil {
+	if _, err := a.exec(r.Context(), web.KindPoints, "INSERT INTO rewards (name, points_cost, emoji) VALUES (?, ?, ?)", name, cost, emoji); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

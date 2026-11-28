@@ -169,3 +169,30 @@ func TestRewardsArchiveRatherThanDelete(t *testing.T) {
 		t.Fatal("a restored Reward isn't on the board")
 	}
 }
+
+func TestNewRewardEmojiIsOptionalAndSaved(t *testing.T) {
+	t.Parallel()
+	h := household(t)
+
+	for _, tc := range []struct{ name, emoji string }{
+		{"Movie night", "🍿"},
+		{"Extra story", ""},
+	} {
+		form := url.Values{"name": {tc.name}, "points": {"5"}}
+		if tc.emoji != "" {
+			form.Set("emoji", tc.emoji)
+		}
+		post(t, h, "/rewards", form)
+		var got string
+		err := h.App.DB.QueryRow("SELECT emoji FROM rewards WHERE name = ?", tc.name).Scan(&got)
+		if err != nil || got != tc.emoji {
+			t.Fatalf("saved emoji for %s = %q, err %v; want %q", tc.name, got, err, tc.emoji)
+		}
+	}
+	code, page := h.Get(t, "/chores")
+	_, rewardForm, found := strings.Cut(page, `action="/rewards"`)
+	rewardForm, _, _ = strings.Cut(rewardForm, "</form>")
+	if code != http.StatusOK || !found || !strings.Contains(rewardForm, `name="emoji"`) {
+		t.Fatalf("new-Reward form has no emoji field (status %d)", code)
+	}
+}
