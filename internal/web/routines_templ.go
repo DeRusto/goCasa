@@ -135,7 +135,7 @@ func routineBuilder(chores []Chore, unlocked bool) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div id=\"routine-builder\" popover class=\"flyout\"><h2>Routines</h2><p class=\"text-muted\">Daily and chosen-weekdays Each chores, in the order everyone does them. A Chore is in one Routine at most.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div id=\"routine-builder\" popover class=\"flyout\"><h2>Routines</h2><p class=\"text-muted\">Daily and chosen-weekdays Each chores, in the order everyone does them. A Chore is in one Routine at most.</p><p data-routine-status role=\"status\">Loading Routines…</p><div data-routine-content hidden>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -152,10 +152,6 @@ func routineBuilder(chores []Chore, unlocked bool) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = routineBuilderScript().Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
 		} else {
 			templ_7745c5c3_Err = routineListsView(chores, false).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
@@ -166,7 +162,17 @@ func routineBuilder(chores []Chore, unlocked bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if unlocked {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<script src=\"/static/Sortable-1.15.6.min.js\"></script> <style>.handle { touch-action: none; cursor: grab; }</style>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = routineBuilderScript().Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -198,141 +204,141 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		for _, rt := range append(slices.Clone(Routines), "none") {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<section class=\"flex flex-col gap-2\"><h3>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<section class=\"flex flex-col gap-2\"><h3>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(routineName(rt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 83, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 90, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</h3><ul data-routine-list=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</h3><ul data-routine-list=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(rt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 84, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 91, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\" class=\"flex min-h-11 flex-col gap-2 rounded-[10px] bg-soft p-2.5\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" class=\"flex min-h-11 flex-col gap-2 rounded-[10px] bg-soft p-2.5\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, c := range routineLists(chores)[rt] {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<li data-routine-chore=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<li data-routine-chore=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(c.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 86, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 93, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" class=\"flex min-h-11 items-center gap-2 rounded-lg border border-line bg-card px-2.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\" class=\"flex min-h-11 items-center gap-2 rounded-lg border border-line bg-card px-2.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if editable {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<input type=\"hidden\" name=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<input type=\"hidden\" name=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(rt)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 88, Col: 37}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 95, Col: 37}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" value=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" value=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(c.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 88, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 95, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\"> <span class=\"handle\" aria-hidden=\"true\">⠿</span> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"> <span class=\"handle\" aria-hidden=\"true\">⠿</span> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"flex-1\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<span class=\"flex-1\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 91, Col: 35}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 98, Col: 35}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if editable {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<button type=\"button\" data-step=\"-1\" aria-label=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<button type=\"button\" data-step=\"-1\" aria-label=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var12 string
 					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue("Move " + c.Name + " up")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 93, Col: 81}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 100, Col: 81}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\" class=\"border-0 bg-transparent\">↑</button> <button type=\"button\" data-step=\"1\" aria-label=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" class=\"border-0 bg-transparent\">↑</button> <button type=\"button\" data-step=\"1\" aria-label=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var13 string
 					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue("Move " + c.Name + " down")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 94, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 101, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" class=\"border-0 bg-transparent\">↓</button>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\" class=\"border-0 bg-transparent\">↓</button>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</li>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</li>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</ul></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</ul></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -344,6 +350,8 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 // routineBuilderScript arms the builder's lists with the vendored SortableJS
 // (see Static): a Chore dropped in another list takes that list's Routine. The
 // arrow buttons move a Chore one place, across into the next list at an end.
+// The builder sits outside #live to preserve edits while open. Fetch current
+// Chores before showing its lists on each opening.
 func routineBuilderScript() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -365,7 +373,7 @@ func routineBuilderScript() templ.Component {
 			templ_7745c5c3_Var14 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<script src=\"/static/Sortable-1.15.6.min.js\"></script><style>.handle { touch-action: none; cursor: grab; }</style><script>\n\t(() => {\n\t\tconst box = document.getElementById(\"routine-builder\");\n\t\tconst lists = [...box.querySelectorAll(\"ul[data-routine-list]\")];\n\t\tconst settle = li => { li.querySelector(\"input\").name = li.closest(\"ul\").dataset.routineList; };\n\t\tlists.forEach(ul => Sortable.create(ul, {\n\t\t\tgroup: \"routines\", handle: \".handle\", forceFallback: true, animation: 150,\n\t\t\tonEnd: e => settle(e.item),\n\t\t}));\n\t\tbox.addEventListener(\"click\", e => {\n\t\t\tconst b = e.target.closest(\"button[data-step]\");\n\t\t\tif (!b) return;\n\t\t\tconst li = b.closest(\"li\"), ul = li.closest(\"ul\"), up = b.dataset.step === \"-1\";\n\t\t\tconst sib = up ? li.previousElementSibling : li.nextElementSibling;\n\t\t\tif (sib) up ? sib.before(li) : sib.after(li);\n\t\t\telse {\n\t\t\t\tconst to = lists[lists.indexOf(ul) + (up ? -1 : 1)];\n\t\t\t\tif (!to) return;\n\t\t\t\tup ? to.append(li) : to.prepend(li);\n\t\t\t}\n\t\t\tsettle(li);\n\t\t\tb.focus();\n\t\t});\n\t})();\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<script>\n\t(() => {\n\t\tconst box = document.getElementById(\"routine-builder\");\n\t\tconst content = box.querySelector(\"[data-routine-content]\");\n\t\tconst status = box.querySelector(\"[data-routine-status]\");\n\t\tconst lists = () => [...content.querySelectorAll(\"ul[data-routine-list]\")];\n\t\tconst settle = li => { li.querySelector(\"input\").name = li.closest(\"ul\").dataset.routineList; };\n\t\tlet opening;\n\t\tlet sortables = [];\n\t\tbox.addEventListener(\"beforetoggle\", async e => {\n\t\t\topening?.abort();\n\t\t\tif (e.newState !== \"open\") return;\n\t\t\topening = new AbortController();\n\t\t\tconst { signal } = opening;\n\t\t\tcontent.hidden = true;\n\t\t\tstatus.hidden = false;\n\t\t\tstatus.textContent = \"Loading Routines…\";\n\t\t\ttry {\n\t\t\t\tconst res = await fetch(\"/chores\", { cache: \"no-store\", headers: { \"X-Background\": \"1\" }, signal });\n\t\t\t\tif (!res.ok) throw new Error();\n\t\t\t\tconst page = new DOMParser().parseFromString(await res.text(), \"text/html\");\n\t\t\t\tconst fresh = page.querySelector(\"#routine-builder [data-routine-content]\");\n\t\t\t\tif (!fresh) throw new Error();\n\t\t\t\tif (signal.aborted) return;\n\t\t\t\tsortables.forEach(sortable => sortable.destroy());\n\t\t\t\tcontent.replaceChildren(...fresh.children);\n\t\t\t\tsortables = [];\n\t\t\t\tif (content.querySelector('form[method=\"post\"]') && typeof Sortable !== \"undefined\") {\n\t\t\t\t\tsortables = lists().map(ul => Sortable.create(ul, {\n\t\t\t\t\t\tgroup: \"routines\", handle: \".handle\", forceFallback: true, animation: 150,\n\t\t\t\t\t\tonEnd: e => settle(e.item),\n\t\t\t\t\t}));\n\t\t\t\t}\n\t\t\t\tcontent.hidden = false;\n\t\t\t\tstatus.hidden = true;\n\t\t\t} catch {\n\t\t\t\tif (!signal.aborted) status.textContent = \"Couldn’t load Routines. Close and reopen to try again.\";\n\t\t\t}\n\t\t});\n\t\tbox.addEventListener(\"click\", e => {\n\t\t\tconst b = e.target.closest(\"button[data-step]\");\n\t\t\tif (!b) return;\n\t\t\tconst li = b.closest(\"li\"), ul = li.closest(\"ul\"), up = b.dataset.step === \"-1\";\n\t\t\tconst sib = up ? li.previousElementSibling : li.nextElementSibling;\n\t\t\tif (sib) up ? sib.before(li) : sib.after(li);\n\t\t\telse {\n\t\t\t\tconst all = lists(), to = all[all.indexOf(ul) + (up ? -1 : 1)];\n\t\t\t\tif (!to) return;\n\t\t\t\tup ? to.append(li) : to.prepend(li);\n\t\t\t}\n\t\t\tsettle(li);\n\t\t\tb.focus();\n\t\t});\n\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

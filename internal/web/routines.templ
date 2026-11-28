@@ -59,20 +59,27 @@ templ routineBuilder(chores []Chore, unlocked bool) {
 	<div id="routine-builder" popover class="flyout">
 		<h2>Routines</h2>
 		<p class="text-muted">Daily and chosen-weekdays Each chores, in the order everyone does them. A Chore is in one Routine at most.</p>
-		if unlocked {
-			<form method="post" action="/chores/routines" class="flex flex-col gap-3">
-				@routineListsView(chores, true)
-				<button class="btn-primary">Save Routines</button>
-			</form>
-			@routineBuilderScript()
-		} else {
-			@routineListsView(chores, false)
-			<form method="get" action="/lock">
-				<input type="hidden" name="next" value="/chores"/>
-				<button class="btn-primary">Unlock to change Routines</button>
-			</form>
-		}
+		<p data-routine-status role="status">Loading Routines…</p>
+		<div data-routine-content hidden>
+			if unlocked {
+				<form method="post" action="/chores/routines" class="flex flex-col gap-3">
+					@routineListsView(chores, true)
+					<button class="btn-primary">Save Routines</button>
+				</form>
+			} else {
+				@routineListsView(chores, false)
+				<form method="get" action="/lock">
+					<input type="hidden" name="next" value="/chores"/>
+					<button class="btn-primary">Unlock to change Routines</button>
+				</form>
+			}
+		</div>
 	</div>
+	if unlocked {
+		<script src="/static/Sortable-1.15.6.min.js"></script>
+		<style>.handle { touch-action: none; cursor: grab; }</style>
+	}
+	@routineBuilderScript()
 }
 
 // routineListsView is the builder's lists, one per Routine and one for the
@@ -103,18 +110,48 @@ templ routineListsView(chores []Chore, editable bool) {
 // routineBuilderScript arms the builder's lists with the vendored SortableJS
 // (see Static): a Chore dropped in another list takes that list's Routine. The
 // arrow buttons move a Chore one place, across into the next list at an end.
+// The builder sits outside #live to preserve edits while open. Fetch current
+// Chores before showing its lists on each opening.
 templ routineBuilderScript() {
-	<script src="/static/Sortable-1.15.6.min.js"></script>
-	<style>.handle { touch-action: none; cursor: grab; }</style>
 	<script>
 	(() => {
 		const box = document.getElementById("routine-builder");
-		const lists = [...box.querySelectorAll("ul[data-routine-list]")];
+		const content = box.querySelector("[data-routine-content]");
+		const status = box.querySelector("[data-routine-status]");
+		const lists = () => [...content.querySelectorAll("ul[data-routine-list]")];
 		const settle = li => { li.querySelector("input").name = li.closest("ul").dataset.routineList; };
-		lists.forEach(ul => Sortable.create(ul, {
-			group: "routines", handle: ".handle", forceFallback: true, animation: 150,
-			onEnd: e => settle(e.item),
-		}));
+		let opening;
+		let sortables = [];
+		box.addEventListener("beforetoggle", async e => {
+			opening?.abort();
+			if (e.newState !== "open") return;
+			opening = new AbortController();
+			const { signal } = opening;
+			content.hidden = true;
+			status.hidden = false;
+			status.textContent = "Loading Routines…";
+			try {
+				const res = await fetch("/chores", { cache: "no-store", headers: { "X-Background": "1" }, signal });
+				if (!res.ok) throw new Error();
+				const page = new DOMParser().parseFromString(await res.text(), "text/html");
+				const fresh = page.querySelector("#routine-builder [data-routine-content]");
+				if (!fresh) throw new Error();
+				if (signal.aborted) return;
+				sortables.forEach(sortable => sortable.destroy());
+				content.replaceChildren(...fresh.children);
+				sortables = [];
+				if (content.querySelector('form[method="post"]') && typeof Sortable !== "undefined") {
+					sortables = lists().map(ul => Sortable.create(ul, {
+						group: "routines", handle: ".handle", forceFallback: true, animation: 150,
+						onEnd: e => settle(e.item),
+					}));
+				}
+				content.hidden = false;
+				status.hidden = true;
+			} catch {
+				if (!signal.aborted) status.textContent = "Couldn’t load Routines. Close and reopen to try again.";
+			}
+		});
 		box.addEventListener("click", e => {
 			const b = e.target.closest("button[data-step]");
 			if (!b) return;
@@ -122,7 +159,7 @@ templ routineBuilderScript() {
 			const sib = up ? li.previousElementSibling : li.nextElementSibling;
 			if (sib) up ? sib.before(li) : sib.after(li);
 			else {
-				const to = lists[lists.indexOf(ul) + (up ? -1 : 1)];
+				const all = lists(), to = all[all.indexOf(ul) + (up ? -1 : 1)];
 				if (!to) return;
 				up ? to.append(li) : to.prepend(li);
 			}
