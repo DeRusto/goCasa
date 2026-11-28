@@ -299,11 +299,6 @@ func (m todos) AddColumn(ctx context.Context, name string) (id int64, err error)
 	return id, err
 }
 
-// RenameColumn renames column id, or returns errNoColumn.
-func (m todos) RenameColumn(ctx context.Context, id int64, name string) error {
-	return columnChanged(m.exec(ctx, web.KindTodo, "UPDATE todo_columns SET name = ? WHERE id = ?", name, id))
-}
-
 // DeleteColumn deletes column id with its to-dos, or returns errNoColumn.
 func (m todos) DeleteColumn(ctx context.Context, id int64) error {
 	return columnChanged(m.exec(ctx, web.KindTodo, "DELETE FROM todo_columns WHERE id = ?", id))

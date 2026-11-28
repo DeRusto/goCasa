@@ -118,17 +118,12 @@ func (a *App) renameTodoColumn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Pick a Member, or no one.", http.StatusBadRequest)
 		return
 	}
-	m := todos{a}
-	if !keep {
-		if err := m.SetColumnMember(r.Context(), pathID(r), member); errors.Is(err, errNotPickable) {
-			http.Error(w, "Pick a Member, or no one.", http.StatusBadRequest)
-			return
-		} else if err != nil {
-			a.todoDone(w, r, true, err)
-			return
-		}
+	err := todos{a}.SaveColumn(r.Context(), pathID(r), name, member, keep)
+	if errors.Is(err, errNotPickable) {
+		http.Error(w, "Pick a Member, or no one.", http.StatusBadRequest)
+		return
 	}
-	a.todoDone(w, r, true, m.RenameColumn(r.Context(), pathID(r), name))
+	a.todoDone(w, r, true, err)
 }
 
 func (a *App) deleteTodoColumn(w http.ResponseWriter, r *http.Request) {

@@ -101,21 +101,22 @@ templ memberTodos(p MemberPage) {
 		<h2 class="text-muted">To-dos</h2>
 		if len(p.Todos) == 0 {
 			<p class="text-muted">No to-dos today.</p>
+		} else {
+			<ul class="flex flex-col gap-1.5">
+				for _, t := range p.Todos {
+					<li data-todo={ id(t.ID) } class="flex flex-wrap items-center gap-x-2 rounded-lg bg-soft py-1 pr-1 pl-3">
+						<span class="min-w-0 flex-1 py-2">{ t.Title }</span>
+						if t.Overdue {
+							<span class="text-sm text-late">overdue</span>
+						}
+						<form method="post" action={ templ.SafeURL("/todos/" + id(t.ID) + "/complete") }>
+							<input type="hidden" name="next" value={ p.path() }/>
+							<button aria-label={ "Done: " + t.Title } class="rounded-full">Done</button>
+						</form>
+					</li>
+				}
+			</ul>
 		}
-		<ul class="flex flex-col gap-1.5">
-			for _, t := range p.Todos {
-				<li data-todo={ id(t.ID) } class="flex flex-wrap items-center gap-x-2 rounded-lg bg-soft py-1 pr-1 pl-3">
-					<span class="min-w-0 flex-1 py-2">{ t.Title }</span>
-					if t.Overdue {
-						<span class="text-sm text-late">overdue</span>
-					}
-					<form method="post" action={ templ.SafeURL("/todos/" + id(t.ID) + "/complete") }>
-						<input type="hidden" name="next" value={ p.path() }/>
-						<button aria-label={ "Done: " + t.Title } class="rounded-full">Done</button>
-					</form>
-				</li>
-			}
-		</ul>
 		if p.MoreTodos > 0 {
 			<a href="/todos" class="text-muted">{ strconv.Itoa(p.MoreTodos) } more on To-dos</a>
 		}

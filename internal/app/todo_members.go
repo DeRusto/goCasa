@@ -28,12 +28,13 @@ func columnMemberField(form map[string][]string) (member int64, keep bool, ok bo
 	return member, false, err == nil && member > 0
 }
 
-// SetColumnMember gives column id to Member member, or to no one when member
-// is 0. Only a Member with a Member page (active, not a pet) can be picked,
-// though a column keeps an Archived Member it already belongs to.
-func (m todos) SetColumnMember(ctx context.Context, id, member int64) error {
+// SaveColumn renames column id and, unless keep, gives it to Member member
+// (0 for no one), in one write. Only a Member with a Member page (active, not
+// a pet) can be picked, though a column keeps an Archived Member it already
+// belongs to.
+func (m todos) SaveColumn(ctx context.Context, id int64, name string, member int64, keep bool) error {
 	return m.inTx(ctx, func(tx *sql.Tx) error {
-		if member != 0 {
+		if !keep && member != 0 {
 			var pickable bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM members WHERE id = ? AND NOT pet
 				AND (NOT archived OR id = (SELECT member_id FROM todo_columns WHERE id = ?)))`, member, id).Scan(&pickable); err != nil {
@@ -42,7 +43,8 @@ func (m todos) SetColumnMember(ctx context.Context, id, member int64) error {
 				return errNotPickable
 			}
 		}
-		res, err := tx.ExecContext(ctx, "UPDATE todo_columns SET member_id = ? WHERE id = ?", sql.NullInt64{Int64: member, Valid: member != 0}, id)
+		res, err := tx.ExecContext(ctx, "UPDATE todo_columns SET name = ?, member_id = CASE WHEN ? THEN member_id ELSE ? END WHERE id = ?",
+			name, keep, sql.NullInt64{Int64: member, Valid: member != 0}, id)
 		return columnChanged(res, err)
 	}, web.KindTodo)
 }
