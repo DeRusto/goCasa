@@ -3,6 +3,8 @@ package app_test
 import (
 	"net/http"
 	"net/url"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -266,5 +268,155 @@ func TestNoPageLinksToAMemberPage(t *testing.T) {
 				t.Errorf("%s links to %s", path, link)
 			}
 		}
+	}
+}
+
+var choreGroup = regexp.MustCompile(`<div data-group="(\w+)"([^>]*)>`)
+
+// groups is the Member page's Chore groups in page order, each its own markup
+// up to the next group.
+func groups(t *testing.T, page string) (order []string, by map[string]string) {
+	t.Helper()
+	cs := section(t, page, "member-chores")
+	by = map[string]string{}
+	locs := choreGroup.FindAllStringSubmatchIndex(cs, -1)
+	for i, l := range locs {
+		end := len(cs)
+		if i+1 < len(locs) {
+			end = locs[i+1][0]
+		}
+		name := cs[l[2]:l[3]]
+		order = append(order, name)
+		by[name] = cs[l[0]:end]
+	}
+	return order, by
+}
+
+// inOrder reports whether each of names appears in s, in this order.
+func inOrder(s string, names ...string) bool {
+	at := 0
+	for _, n := range names {
+		i := strings.Index(s[at:], n)
+		if i < 0 {
+			return false
+		}
+		at += i + len(n)
+	}
+	return true
+}
+
+// The Member's Chores go under Morning, Afternoon, Evening (each in its
+// Routine's order, only theirs) and Other chores, with each group's progress
+// counting its claimable Rounds, Late ones too.
+func TestMemberPageFilesChoresUnderTheRoutinesInOrder(t *testing.T) {
+	t.Parallel()
+	h := choreHousehold(t)                                                    // Sunday 15 March 2026, 09:00
+	post(t, h, "/chores", chore("Teeth", "daily", "each", "1", "2", "3"))     // 1
+	post(t, h, "/chores", chore("Get dressed", "daily", "each", "1", "2"))    // 2
+	post(t, h, "/chores", chore("Homework", "daily", "each", "2", "2"))       // 3
+	post(t, h, "/chores", chore("Bath", "daily", "each", "1", "2", "3"))      // 4
+	post(t, h, "/chores", chore("Bins", "weekly", "each", "3", "2"))          // 5
+	post(t, h, "/chores", chore("Feed fish", "daily", "anyone", "1", "2"))    // 6
+	post(t, h, "/chores", chore("Tidy room", "daily", "each", "1", "2"))      // 7, in no Routine
+	post(t, h, "/chores", chore("Piano practice", "daily", "each", "1", "3")) // 8, Carol's
+	post(t, h, "/chores/routines", routines([]string{"8", "2", "1"}, []string{"3"}, []string{"4"}))
+
+	order, g := groups(t, memberPage(t, h, "2"))
+	if want := []string{"morning", "afternoon", "evening", "other"}; !slices.Equal(order, want) {
+		t.Fatalf("Bob's Chore groups = %v, want %v", order, want)
+	}
+	for rt, name := range map[string]string{"morning": "Morning", "afternoon": "Afternoon", "evening": "Evening", "other": "Other chores"} {
+		if !strings.Contains(g[rt], ">"+name+"<") {
+			t.Errorf("the %s group isn't headed %s: %q", rt, name, g[rt])
+		}
+	}
+	if !inOrder(g["morning"], "Get dressed", "Teeth") || strings.Contains(g["morning"], "Piano") {
+		t.Errorf("Bob's Morning isn't Get dressed then Teeth, his alone: %q", g["morning"])
+	}
+	if !strings.Contains(g["afternoon"], "Homework") || !strings.Contains(g["evening"], "Bath") {
+		t.Errorf("Bob's Afternoon %q or Evening %q is wrong", g["afternoon"], g["evening"])
+	}
+	for _, c := range []string{"Bins", "Feed fish", "Tidy room"} {
+		if !strings.Contains(g["other"], c) {
+			t.Errorf("Bob's Other chores lack %s: %q", c, g["other"])
+		}
+	}
+	for _, c := range []string{"Teeth", "Homework", "Bath", "Piano"} {
+		if strings.Contains(g["other"], c) {
+			t.Errorf("Bob's Other chores show %s: %q", c, g["other"])
+		}
+	}
+	for rt, want := range map[string]string{"morning": "0 of 2", "afternoon": "0 of 1", "evening": "0 of 1", "other": "0 of 3"} {
+		if !strings.Contains(g[rt], want) {
+			t.Errorf("Bob's %s progress isn't %s: %q", rt, want, g[rt])
+		}
+	}
+
+	code, page := h.Post(t, "/chores/1/complete", url.Values{"member_id": {"2"}, "round": {"2026-03-15"}, "next": {"/members/2"}})
+	if code != http.StatusOK {
+		t.Fatalf("ticking Teeth = %d", code)
+	}
+	if _, g := groups(t, page); !strings.Contains(g["morning"], "1 of 2") || !strings.Contains(g["morning"], "Bob done") {
+		t.Errorf("ticking Teeth didn't count in Morning: %q", g["morning"])
+	}
+	if _, g := groups(t, memberPage(t, h, "3")); !inOrder(g["morning"], "Piano practice", "Teeth") || !strings.Contains(g["morning"], "0 of 2") || strings.Contains(g["morning"], "Get dressed") {
+		t.Errorf("Carol's Morning = %q", g["morning"])
+	}
+
+	h.Clock.Advance(24 * time.Hour) // Monday: Sunday's undone Rounds are Late
+	unlock(t, h, 1, "1234")
+	_, g = groups(t, memberPage(t, h, "2"))
+	// Get dressed (Late and today's) and Teeth (Sunday's done and today's).
+	if !strings.Contains(g["morning"], "1 of 4") || !strings.Contains(g["morning"], "Late") {
+		t.Errorf("Bob's Morning on Monday doesn't count its Late Round: %q", g["morning"])
+	}
+}
+
+// currentRoutine is the group the page marks as now and its seconds to the next turn.
+func currentRoutine(t *testing.T, page string) (string, string) {
+	t.Helper()
+	var cur []string
+	for _, m := range choreGroup.FindAllStringSubmatch(section(t, page, "member-chores"), -1) {
+		if strings.Contains(m[2], "data-current") {
+			cur = append(cur, m[1])
+		}
+	}
+	if len(cur) != 1 {
+		t.Fatalf("current Routines = %v, want one", cur)
+	}
+	m := regexp.MustCompile(`data-routine-in="(\d+)"`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("no data-routine-in on %q", section(t, page, "member-chores"))
+	}
+	return cur[0], m[1]
+}
+
+// The current Routine follows the slot times, and the page knows when the
+// next one starts so it can move on by itself.
+func TestMemberPageCurrentRoutineFollowsTheSlotTimes(t *testing.T) {
+	t.Parallel()
+	h := household(t)
+	at := func(hour, min int) time.Time { return time.Date(2026, 3, 15, hour, min, 0, 0, time.UTC) }
+	for _, c := range []struct {
+		now         time.Time
+		routine, in string
+	}{
+		{at(0, 0), "morning", "43200"},
+		{at(9, 0), "morning", "10800"},    // to 12:00
+		{at(11, 59), "morning", "60"},     //
+		{at(12, 0), "afternoon", "18000"}, // to 17:00
+		{at(20, 0), "evening", "14400"},   // to midnight
+	} {
+		h.Clock.Set(c.now)
+		if rt, in := currentRoutine(t, memberPage(t, h, "2")); rt != c.routine || in != c.in {
+			t.Errorf("at %s the current Routine is %s, next in %ss; want %s in %ss", c.now.Format("15:04"), rt, in, c.routine, c.in)
+		}
+	}
+
+	h.Clock.Set(at(11, 45))
+	unlock(t, h, 1, "1234") // the setup's unlock has run out by now
+	post(t, h, "/settings/household", url.Values{"default_view": {"today"}, "week_start": {"0"}, "morning_end": {"11:30"}, "afternoon_end": {"16:00"}})
+	if rt, in := currentRoutine(t, memberPage(t, h, "2")); rt != "afternoon" || in != "15300" {
+		t.Errorf("at 11:45 after Morning ends at 11:30: %s in %ss, want afternoon in 15300s", rt, in)
 	}
 }

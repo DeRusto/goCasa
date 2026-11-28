@@ -1,15 +1,58 @@
 package web
 
-import "strconv"
+import (
+	"slices"
+	"strconv"
+)
 
 // MemberPage is one Member's today at a glance, in Standard style.
 type MemberPage struct {
 	Member  Member
 	Day     TodayPage    // the clock and weather; Days[0] is today's events, Days[1] tomorrow's
-	Chores  []Chore      // this Member's, with only their taps (and an Anyone chore's completer)
+	Groups  []ChoreGroup // Morning, Afternoon, Evening and Other chores, in that order
+	// RoutineIn is the seconds until the next Routine starts (Morning at
+	// midnight), when the page refetches to move the current one on.
+	RoutineIn int
 	Balance int          // this Member's points
 	Rewards []Reward     // not archived, cheapest first
 	Waiting []Redemption // this Member's pending Redemptions, oldest first
+}
+
+// ChoreGroup is one Routine's share of a Member's Chores today, in the
+// Routine's order, or under "other" the rest of their Chores. Each Chore has
+// its claimable Rounds with only this Member's taps (and an Anyone chore's
+// completer).
+type ChoreGroup struct {
+	Routine string // morning, afternoon, evening or other
+	Current bool   // the slot times put now in this Routine
+	Chores  []Chore
+}
+
+// Progress is how many of the group's Rounds are done, of all of them.
+func (g ChoreGroup) Progress() (done, total int) {
+	for _, c := range g.Chores {
+		for _, rd := range c.Rounds {
+			total++
+			if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.CompletionID != 0 }) {
+				done++
+			}
+		}
+	}
+	return done, total
+}
+
+// progressText is a group's progress as people read it, "2 of 4".
+func progressText(g ChoreGroup) string {
+	done, total := g.Progress()
+	return strconv.Itoa(done) + " of " + strconv.Itoa(total)
+}
+
+// groupStyle tints the current Routine's group in the Member's colour.
+func groupStyle(g ChoreGroup, color string) string {
+	if g.Current {
+		return "background:" + pastel(color)
+	}
+	return ""
 }
 
 // path is the Member page's own URL, where its actions return.
@@ -44,13 +87,10 @@ templ MemberPageView(p MemberPage) {
 				</section>
 			</main>
 			<div class="flex flex-col content-start gap-4">
-				<section id="member-chores" class="card flex flex-col gap-3">
+				<section id="member-chores" data-routine-in={ strconv.Itoa(p.RoutineIn) } class="card flex flex-col gap-3">
 					<h2 class="text-muted">Chores today</h2>
-					if len(p.Chores) == 0 {
-						<p class="text-muted">No chores today.</p>
-					}
-					for _, c := range p.Chores {
-						@choreRow(c, p.path())
+					for _, g := range p.Groups {
+						@choreGroup(g, p)
 					}
 				</section>
 				<section id="member-points" class="card flex flex-col gap-3">
@@ -90,6 +130,30 @@ templ MemberPageView(p MemberPage) {
 		@liveDrafts()
 		@ticker()
 	}
+}
+
+// choreGroup is one Routine's Chores, or Other chores, with its progress; the
+// current Routine is tinted in the Member's colour.
+templ choreGroup(g ChoreGroup, p MemberPage) {
+	<div data-group={ g.Routine } data-current?={ g.Current } class="flex flex-col gap-3 rounded-[10px] border border-line p-2.5" style={ groupStyle(g, p.Member.Color) }>
+		<h3 class="flex items-baseline justify-between gap-2">
+			<span class="flex items-baseline gap-2">
+				<b>{ routineName(g.Routine) }</b>
+				if g.Current {
+					<span class="text-sm text-muted">now</span>
+				}
+			</span>
+			if len(g.Chores) > 0 {
+				<span class="text-sm tabular-nums text-muted">{ progressText(g) }</span>
+			}
+		</h3>
+		if len(g.Chores) == 0 {
+			<p class="text-muted">No chores.</p>
+		}
+		for _, c := range g.Chores {
+			@choreRow(c, p.path())
+		}
+	</div>
 }
 
 // MemberUnavailable is the plain page for a Member with no Member page:

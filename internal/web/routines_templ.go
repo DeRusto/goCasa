@@ -25,6 +25,8 @@ func routineName(r string) string {
 		return "Afternoon"
 	case "evening":
 		return "Evening"
+	case "other":
+		return "Other chores"
 	}
 	return "Not in a Routine"
 }
@@ -82,7 +84,7 @@ func slotTag(c Chore) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Routine)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 50, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 52, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 			if templ_7745c5c3_Err != nil {
@@ -95,7 +97,7 @@ func slotTag(c Chore) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(routineName(c.Routine))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 50, Col: 107}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 52, Col: 107}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -211,7 +213,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(routineName(rt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 90, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 92, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -224,7 +226,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(rt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 91, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 93, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 			if templ_7745c5c3_Err != nil {
@@ -242,7 +244,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(c.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 93, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 95, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 				if templ_7745c5c3_Err != nil {
@@ -260,7 +262,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(rt)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 95, Col: 37}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 97, Col: 37}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 					if templ_7745c5c3_Err != nil {
@@ -273,7 +275,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(id(c.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 95, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 97, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 					if templ_7745c5c3_Err != nil {
@@ -291,7 +293,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 98, Col: 35}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 100, Col: 35}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -309,7 +311,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 					var templ_7745c5c3_Var12 string
 					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue("Move " + c.Name + " up")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 100, Col: 81}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 102, Col: 81}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 					if templ_7745c5c3_Err != nil {
@@ -322,7 +324,7 @@ func routineListsView(chores []Chore, editable bool) templ.Component {
 					var templ_7745c5c3_Var13 string
 					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue("Move " + c.Name + " down")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 101, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/routines.templ`, Line: 103, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 					if templ_7745c5c3_Err != nil {
