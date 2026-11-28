@@ -161,7 +161,7 @@ templ choreGroup(g ChoreGroup, p MemberPage) {
 			}
 		</h3>
 		if g.Pending() {
-			<a class="btn" href={ templ.SafeURL(p.path() + "/routines/" + g.Routine + "/confirm") }>Confirm</a>
+			<a href={ templ.SafeURL(p.path() + "/routines/" + g.Routine + "/confirm") }>Confirm</a>
 		}
 		if len(g.Chores) == 0 {
 			<p class="text-muted">No chores.</p>
