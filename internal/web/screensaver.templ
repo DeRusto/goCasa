@@ -300,10 +300,11 @@ templ motionWake() {
 // its status in This device's #wake-lock, and, with idleSeconds > 0, opens the
 // screensaver after that long with no touch, pointer or key input. In the
 // Display app (window.gocasaDisplay) the app keeps the screen on instead, but the page still goes
-// to the screensaver when idle: the app has no idle timer of its own.
+// to the screensaver when idle. A Member display stays on its Member page.
 templ wallDisplay(idleSeconds int) {
 	<script data-idle-seconds={ strconv.Itoa(idleSeconds) }>
 	(() => {
+		if (window.gocasaDisplay && document.querySelector("[data-member-page]")) return;
 		const idle = Number(document.currentScript.dataset.idleSeconds);
 		const status = s => { const el = document.getElementById("wake-lock"); if (el) el.textContent = s; };
 		let lock;
