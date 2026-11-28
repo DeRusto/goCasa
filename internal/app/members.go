@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/a-h/templ"
 	"golang.org/x/crypto/bcrypt"
@@ -278,57 +277,22 @@ func (a *App) lockPage(w http.ResponseWriter, r *http.Request, status int, errMs
 	a.render(w, r, status, web.PINPad(admins, errMsg, safeNext(r.FormValue("next"))))
 }
 
-// Wrong PINs (spec §9): pinTries in a row block that Admin's PIN for pinBlock.
-const (
-	pinTries = 5
-	pinBlock = 5 * time.Minute
-)
-
-var errPINBlocked = fmt.Sprintf("Too many wrong PINs: that Admin's PIN is blocked for %v minutes.", int(pinBlock.Minutes()))
-
 func (a *App) postLock(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PostFormValue("member_id"), 10, 64)
-	now := a.Now().Unix()
-	// Count the try before the slow bcrypt check, so parallel guesses can't get
-	// past the limit; the try that reaches it starts the block, which ends when
-	// pinBlock passes or the PIN is reset. A crash mid-check counts as a wrong try.
-	var hash []byte
-	var nowBlocked bool
-	err := a.DB.QueryRowContext(r.Context(), `UPDATE members SET
-			pin_failures = CASE WHEN pin_failures + 1 >= ?2 THEN 0 ELSE pin_failures + 1 END,
-			pin_blocked_until = CASE WHEN pin_failures + 1 >= ?2 THEN ?3 + ?4 ELSE pin_blocked_until END
-		WHERE id = ?1 AND role = 'admin' AND NOT archived AND coalesce(pin_blocked_until, 0) <= ?3
-		RETURNING pin_hash, coalesce(pin_blocked_until > ?3, 0)`,
-		id, pinTries, now, int64(pinBlock/time.Second)).Scan(&hash, &nowBlocked)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = a.DB.QueryRowContext(r.Context(), "SELECT 1 FROM members WHERE id = ? AND role = 'admin' AND NOT archived", id).Scan(new(int))
-		if err == nil {
-			a.lockPage(w, r, http.StatusTooManyRequests, errPINBlocked)
-			return
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			a.lockPage(w, r, http.StatusUnauthorized, "That PIN didn't match. Try again.")
-			return
-		}
-	}
+	res, err := a.checkPIN(r.Context(), id, r.PostFormValue("pin"))
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	if bcrypt.CompareHashAndPassword(hash, []byte(r.PostFormValue("pin"))) != nil {
-		if nowBlocked {
-			a.lockPage(w, r, http.StatusTooManyRequests, errPINBlocked)
-			return
-		}
+	switch res {
+	case pinBlocked:
+		a.lockPage(w, r, http.StatusTooManyRequests, errPINBlocked)
+	case pinYes:
+		a.setUnlock(w, id)
+		http.Redirect(w, r, cmp.Or(safeNext(r.PostFormValue("next")), "/settings"), http.StatusSeeOther)
+	default:
 		a.lockPage(w, r, http.StatusUnauthorized, "That PIN didn't match. Try again.")
-		return
 	}
-	if _, err := a.DB.ExecContext(r.Context(), "UPDATE members SET pin_failures = 0, pin_blocked_until = NULL WHERE id = ?", id); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	a.setUnlock(w, id)
-	http.Redirect(w, r, cmp.Or(safeNext(r.PostFormValue("next")), "/settings"), http.StatusSeeOther)
 }
 
 func (a *App) postLockNow(w http.ResponseWriter, r *http.Request) {
