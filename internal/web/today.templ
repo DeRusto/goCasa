@@ -123,12 +123,27 @@ templ clock(p TodayPage) {
 
 // ticker runs a page's day in the browser, with no request: it ticks #clock
 // each second, greys each event once its data-end has passed, and when #clock's
-// data-midnight-in seconds are up dispatches refresh-live, so the page refetches
-// and turns the day. A refetched #clock is a new element and starts its own count.
+// data-midnight-in seconds are up, or a Member page's data-routine-in, dispatches
+// refresh-live, so the page refetches and turns the day or the Routine. A
+// refetched element is a new one and starts its own count.
 templ ticker() {
 	<script>
 	(() => {
-		let seen, due;
+		// countdown is due once el's data-<key> seconds have passed since it first appeared.
+		const countdown = key => {
+			let seen, due;
+			return (el, now) => {
+				if (el !== seen) {
+					seen = el;
+					due = el && Number(el.dataset[key]) > 0 ? now + Number(el.dataset[key]) * 1000 : 0;
+				} else if (due && now >= due) {
+					due = 0;
+					return true;
+				}
+				return false;
+			};
+		};
+		const midnight = countdown("midnightIn"), routine = countdown("routineIn");
 		setInterval(() => {
 			const clock = document.getElementById("clock");
 			if (!clock) return;
@@ -144,13 +159,8 @@ templ ticker() {
 			// en-US with plain spaces matches the server's clockLayout (15:04 or 3:04 PM).
 			clock.textContent = at.toLocaleTimeString("en-US", opts).replace(/\s/g, " ");
 			const now = Date.now();
-			if (clock !== seen) {
-				seen = clock;
-				due = Number(clock.dataset.midnightIn) > 0 ? now + Number(clock.dataset.midnightIn) * 1000 : 0;
-			} else if (due && now >= due) {
-				due = 0;
-				document.dispatchEvent(new Event("refresh-live"));
-			}
+			const dayTurned = midnight(clock, now), routineTurned = routine(document.querySelector("[data-routine-in]"), now);
+			if (dayTurned || routineTurned) document.dispatchEvent(new Event("refresh-live"));
 			for (const li of document.querySelectorAll("[data-end]")) {
 				if (Number(li.dataset.end) <= now) {
 					li.classList.add("past");

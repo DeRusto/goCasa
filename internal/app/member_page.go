@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -57,7 +58,8 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	p.Chores = memberChores(cs, p.Member.ID)
+	p.Groups = choreGroups(memberChores(cs, p.Member.ID), hh.Routine(now))
+	p.RoutineIn = secondsTo(now, hh.RoutineEnd(now))
 
 	if p.Todos, p.MoreTodos, err = (todos{a}).ForMember(ctx, p.Member.ID, today.Format(dateLayout)); err != nil {
 		a.serverError(w, r, err)
@@ -81,6 +83,24 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.render(w, r, http.StatusOK, web.MemberPageView(p))
+}
+
+// choreGroups files a Member's Chores under the three Routines, each in its
+// Routine's order, then Other chores (the rest, in the order given), marking
+// the current Routine.
+func choreGroups(cs []web.Chore, current string) []web.ChoreGroup {
+	var gs []web.ChoreGroup
+	for _, rt := range append(slices.Clone(web.Routines), "other") {
+		g := web.ChoreGroup{Routine: rt, Current: rt == current}
+		for _, c := range cs {
+			if c.Routine == rt || rt == "other" && c.Routine == "" {
+				g.Chores = append(g.Chores, c)
+			}
+		}
+		slices.SortStableFunc(g.Chores, func(a, b web.Chore) int { return a.RoutinePosition - b.RoutinePosition })
+		gs = append(gs, g)
+	}
+	return gs
 }
 
 // memberChores is Member id's share of today's Chores: the active ones they're
