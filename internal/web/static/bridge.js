@@ -7,22 +7,24 @@
 // version. An app older than minimumVersion gets a notice and no messages.
 (() => {
 	const minimumVersion = [0, 1, 0]; // the oldest Display app GoCasa supports
+	// Set to [major, minor, patch] for gocasa-android's first release with Member display mode.
+	const minimumMemberDisplayVersion = null;
 	const app = window.gocasaDisplay;
 	if (!app) return;
 	const tag = document.currentScript.dataset;
 	const whenLoaded = f => document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", f) : f();
 
-	// supported is whether version, a release's "X.Y.Z" or "X.Y.Z-rc.N", is at least minimumVersion.
-	const supported = version => {
+	// supported compares the app's release or release candidate to a minimum release.
+	const supported = (version, minimum) => {
 		const v = /^(\d+)\.(\d+)\.(\d+)(-rc\.\d+)?$/.exec(typeof version === "string" ? version : "");
 		if (!v) return false;
 		for (let i = 0; i < 3; i++) {
-			const d = Number(v[i + 1]) - minimumVersion[i];
+			const d = Number(v[i + 1]) - minimum[i];
 			if (d) return d > 0;
 		}
 		return !v[4]; // a release candidate comes before its release
 	};
-	if (!supported(app.version)) {
+	if (!supported(app.version, minimumVersion)) {
 		whenLoaded(() => {
 			const notice = document.createElement("p");
 			notice.setAttribute("role", "status");
@@ -37,6 +39,16 @@
 		});
 		return;
 	}
+	whenLoaded(() => {
+		const bedtime = document.getElementById("member-bedtime");
+		if (!bedtime) return;
+		document.getElementById("main-navigation").hidden = true;
+		if (app.build === "apk" && minimumMemberDisplayVersion && supported(app.version, minimumMemberDisplayVersion)) {
+			bedtime.onclick = () => app.send({ type: "startBedtime" });
+			bedtime.hidden = false;
+		}
+	});
+
 	// message is what onmessage is given: the message, or a MessageEvent (whose
 	// own type is "message") with the message or its JSON text as its data.
 	// Anything else is null.

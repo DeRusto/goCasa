@@ -2,6 +2,7 @@ package web_test
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/DeRusto/goCasa/internal/web"
@@ -16,10 +17,16 @@ const fakePage = `
 var window = globalThis;
 var listeners = {}, windowListeners = {}, clicks = 0, appended = [];
 function addEventListener(type, f) { (windowListeners[type] = windowListeners[type] || []).push(f); }
+var nav = { hidden: false }, bedtime = { hidden: true, click() { this.onclick?.(); } };
 var document = {
 	readyState: "loading",
 	currentScript: { dataset: { screen: SCREEN, cameraWake: CAMERA } },
-	getElementById: id => id === "wake" && HAS_WAKE ? { click() { clicks++; } } : null,
+	getElementById: id => {
+		if (id === "wake" && HAS_WAKE) return { click() { clicks++; } };
+		if (id === "main-navigation") return nav;
+		if (id === "member-bedtime" && MEMBER) return bedtime;
+		return null;
+	},
 	addEventListener(type, f) { (listeners[type] = listeners[type] || []).push(f); },
 	createElement: tag => ({ tagName: tag, style: {}, textContent: "", setAttribute(k, v) { this[k] = v; } }),
 	body: { append(...els) { appended.push(...els); } },
@@ -32,15 +39,18 @@ function finished() { document.readyState = "complete"; for (const f of windowLi
 // fakeApp is a Display app's window.gocasaDisplay that keeps what it is sent.
 const fakeApp = `
 var sent = [];
-window.gocasaDisplay = { build: "apk", version: VERSION, send(m) { sent.push(JSON.parse(JSON.stringify(m))); } };
+window.gocasaDisplay = { build: BUILD, version: VERSION, send(m) { sent.push(JSON.parse(JSON.stringify(m))); } };
 `
 
 type pageOpts struct {
-	screen     string
-	cameraWake bool
-	hasWake    bool
-	app        bool   // a Display app's window.gocasaDisplay exists
-	version    string // its version
+	member        bool
+	build         string
+	memberRelease bool
+	screen        string
+	cameraWake    bool
+	hasWake       bool
+	app           bool   // a Display app's window.gocasaDisplay exists
+	version       string // its version
 }
 
 // loadPage runs bridge.js on a fake page as the browser would, then fires
@@ -60,8 +70,16 @@ func startPage(t *testing.T, o pageOpts) *goja.Runtime {
 	if err != nil {
 		t.Fatal(err)
 	}
+	script := string(src)
+	if o.memberRelease {
+		// Exercise the same code with the release minimum set to a test version.
+		script = strings.Replace(script, "const minimumMemberDisplayVersion = null;", "const minimumMemberDisplayVersion = [1, 2, 0];", 1)
+	}
+	if o.build == "" {
+		o.build = "apk"
+	}
 	vm := goja.New()
-	for k, v := range map[string]any{"SCREEN": o.screen, "CAMERA": strconv.FormatBool(o.cameraWake), "HAS_WAKE": o.hasWake, "VERSION": o.version} {
+	for k, v := range map[string]any{"SCREEN": o.screen, "CAMERA": strconv.FormatBool(o.cameraWake), "HAS_WAKE": o.hasWake, "VERSION": o.version, "MEMBER": o.member, "BUILD": o.build} {
 		if err := vm.Set(k, v); err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +88,7 @@ func startPage(t *testing.T, o pageOpts) *goja.Runtime {
 	if o.app {
 		run(t, vm, fakeApp)
 	}
-	run(t, vm, string(src))
+	run(t, vm, script)
 	return vm
 }
 
@@ -200,5 +218,41 @@ func TestWithoutTheDisplayAppTheBridgeDoesNothing(t *testing.T) {
 	vm := loadPage(t, pageOpts{screen: "screensaver", hasWake: true})
 	if got := asJSON(t, vm, "[appended.length, clicks, Object.keys(listeners), Object.keys(windowListeners)]"); got != "[0,0,[],[]]" {
 		t.Errorf("with no Display app the bridge left %s", got)
+	}
+}
+
+func TestMemberPageBridge(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, build, version           string
+		released, hideNav, showBedtime bool
+		notice                         string
+	}{
+		{name: "browser"},
+		{name: "unsupported APK", build: "apk", version: "0.0.9", released: true, notice: "Update the Display app"},
+		{name: "Wall-only APK", build: "apk", version: "1.1.9", released: true, hideNav: true},
+		{name: "extension", build: "extension", version: "1.2.0", released: true, hideNav: true},
+		{name: "before release", build: "apk", version: "1.2.0", hideNav: true},
+		{name: "release candidate", build: "apk", version: "1.2.0-rc.1", released: true, hideNav: true},
+		{name: "Member display APK", build: "apk", version: "1.2.0", released: true, hideNav: true, showBedtime: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			vm := loadPage(t, pageOpts{screen: "awake", member: true, app: c.build != "", build: c.build, version: c.version, memberRelease: c.released})
+			if got := run(t, vm, "nav.hidden").ToBoolean(); got != c.hideNav {
+				t.Errorf("main navigation hidden = %t, want %t", got, c.hideNav)
+			}
+			if got := run(t, vm, "!bedtime.hidden").ToBoolean(); got != c.showBedtime {
+				t.Errorf("Bedtime shown = %t, want %t", got, c.showBedtime)
+			}
+			if got := run(t, vm, noticeText).String(); got != c.notice {
+				t.Errorf("notice = %q, want %q", got, c.notice)
+			}
+			if c.showBedtime {
+				run(t, vm, "sent.length = 0; bedtime.click()")
+				if got, want := asJSON(t, vm, "sent"), `[{"type":"startBedtime"}]`; got != want {
+					t.Errorf("tapping Bedtime sent %s, want %s", got, want)
+				}
+			}
+		})
 	}
 }

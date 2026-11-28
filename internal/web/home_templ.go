@@ -256,7 +256,7 @@ func page(title string, pill bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</head><body><div class=\"min-[760px]:flex\"><nav class=\"fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-line bg-card min-[760px]:sticky min-[760px]:top-0 min-[760px]:h-screen min-[760px]:w-[76px] min-[760px]:flex-none min-[760px]:flex-col min-[760px]:justify-start min-[760px]:gap-1 min-[760px]:border-t-0 min-[760px]:border-r min-[760px]:py-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</head><body><div class=\"min-[760px]:flex\"><nav id=\"main-navigation\" class=\"fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-line bg-card min-[760px]:sticky min-[760px]:top-0 min-[760px]:h-screen min-[760px]:w-[76px] min-[760px]:flex-none min-[760px]:flex-col min-[760px]:justify-start min-[760px]:gap-1 min-[760px]:border-t-0 min-[760px]:border-r min-[760px]:py-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
