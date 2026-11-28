@@ -98,7 +98,9 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if kid {
-		a.render(w, r, http.StatusOK, web.KidMemberPage(p))
+		q := r.URL.Query()
+		celebration := a.takeRoutineCelebration(w, r, p.Groups)
+		a.render(w, r, http.StatusOK, web.KidMemberPage(p, q.Get("carousel"), q["later"], celebration))
 		return
 	}
 	a.render(w, r, http.StatusOK, web.MemberPageView(p))

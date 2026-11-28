@@ -53,7 +53,7 @@ func (a *App) tickRoutineChore(w http.ResponseWriter, r *http.Request) {
 	member, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	chore, _ := strconv.ParseInt(r.PathValue("chore"), 10, 64)
 	round := r.PostFormValue("round")
-	next := fmt.Sprintf("/members/%d", member)
+	path := fmt.Sprintf("/members/%d", member)
 	acc, err := a.access(ctx)
 	if err != nil {
 		a.serverError(w, r, err)
@@ -65,14 +65,32 @@ func (a *App) tickRoutineChore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cs = memberChores(cs, member)
-	i := slices.IndexFunc(cs, func(c web.Chore) bool { return c.ID == chore && c.Routine != "" })
+	i := slices.IndexFunc(cs, func(c web.Chore) bool { return c.ID == chore })
 	if i < 0 {
 		http.NotFound(w, r)
 		return
 	}
 	c := cs[i]
+	group := c.Routine
+	if group == "" {
+		group = "other"
+	}
+	query := carouselQuery(r, group)
+	if query == "" && (c.Routine == "" || r.URL.Query().Has("carousel")) {
+		http.NotFound(w, r)
+		return
+	}
+	next := path + query
 	if acc.CanDo(web.LockChores) {
-		a.completeChoreRound(w, r, chore, member, round, next)
+		var credited func()
+		if c.Routine != "" && query != "" {
+			credited = func() { a.routineCelebration(w, path, c.Routine, 30) }
+		}
+		a.completeChoreRound(w, r, chore, member, round, next, credited)
+		return
+	}
+	if c.Routine == "" {
+		toLock(w, r)
 		return
 	}
 	if !slices.ContainsFunc(c.Rounds, func(rd web.ChoreRound) bool { return rd.Start == round }) {
@@ -113,7 +131,7 @@ func (a *App) tickRoutineChore(w http.ResponseWriter, r *http.Request) {
 		for _, g := range groups {
 			if g.Routine == c.Routine && g.Pending() {
 				if done, total := g.Progress(); done == total {
-					next = routineConfirmPath(next, g.Routine)
+					next = routineConfirmPath(path, g.Routine) + query
 				}
 				break
 			}
@@ -179,7 +197,9 @@ func (a *App) routinePINPage(w http.ResponseWriter, r *http.Request, status int,
 		a.serverError(w, r, err)
 		return
 	}
-	next := fmt.Sprintf("/members/%d", member)
+	path := fmt.Sprintf("/members/%d", member)
+	query := carouselQuery(r, routine)
+	next := path + query
 	if len(ticks) == 0 || offered != nil && !containsRoutineTicks(offered, ticks) {
 		http.Redirect(w, r, next, http.StatusSeeOther)
 		return
@@ -189,7 +209,7 @@ func (a *App) routinePINPage(w http.ResponseWriter, r *http.Request, status int,
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, status, web.RoutinePINPad(admins, message, routineConfirmPath(next, routine), next, strings.Join(ticks, ",")))
+	a.render(w, r, status, web.RoutinePINPad(admins, message, routineConfirmPath(path, routine)+query, next, strings.Join(ticks, ",")))
 }
 
 // containsRoutineTicks accepts a shrinking batch (a Round expired or was
@@ -213,7 +233,8 @@ func (a *App) confirmRoutine(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	next := fmt.Sprintf("/members/%d", member)
+	path := fmt.Sprintf("/members/%d", member)
+	next := path + carouselQuery(r, routine)
 	batch := r.PostFormValue("ticks")
 	if batch == "" {
 		http.Redirect(w, r, next, http.StatusSeeOther)
@@ -266,6 +287,9 @@ func (a *App) confirmRoutine(w http.ResponseWriter, r *http.Request) {
 	if err != nil && !errors.Is(err, errStaleRoutinePIN) {
 		a.serverError(w, r, err)
 		return
+	}
+	if err == nil && changed {
+		a.routineCelebration(w, path, routine, 30)
 	}
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }

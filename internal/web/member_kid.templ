@@ -88,7 +88,7 @@ func kidHours(w *WeatherNow) []WeatherHour {
 // greeting, clock and points on top, four Routine tiles, then a strip of the
 // next event and the Member's to-dos. The star opens the Rewards, the weather
 // its forecast. Nothing in GoCasa links to it.
-templ KidMemberPage(p MemberPage) {
+templ KidMemberPage(p MemberPage, carousel string, later []string, celebration string) {
 	@page(p.Member.Name+" · Member page", false) {
 		<div id="live" data-member-page={ id(p.Member.ID) } data-style="kid" { live(KindEvent, KindChore, KindTodo, KindPoints, KindMember, KindHousehold, KindIntegration)... } class="flex h-[calc(100dvh-4rem)] flex-col gap-3 p-4 font-bold min-[760px]:h-dvh">
 			<header class="grid flex-none grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3">
@@ -119,14 +119,21 @@ templ KidMemberPage(p MemberPage) {
 					}
 				</button>
 			</header>
-			<section id="kid-tiles" data-routine-in={ strconv.Itoa(p.RoutineIn) } class="flex min-h-0 flex-1 gap-3">
-				for _, g := range p.Groups {
-					@kidTile(g, p)
-				}
-			</section>
+			if index := slices.IndexFunc(p.Groups, func(g ChoreGroup) bool { return g.Routine == carousel }); index >= 0 {
+				@kidCarousel(p, p.Groups[index], later)
+			} else {
+				<section id="kid-tiles" data-routine-in={ strconv.Itoa(p.RoutineIn) } class="flex min-h-0 flex-1 gap-3">
+					for _, g := range p.Groups {
+						@kidTile(g, p)
+					}
+				</section>
+			}
 			@kidStrip(p)
 			@kidPanels(p)
 		</div>
+		if celebration != "" {
+			@kidCelebration(p, celebration)
+		}
 		@liveDrafts()
 		@ticker()
 		@keepPanelOpen()
@@ -137,23 +144,25 @@ templ KidMemberPage(p MemberPage) {
 // Round (green when ticked, provisional ticks too) and its progress, with the
 // Confirm Standard style offers while it has provisional ticks.
 templ kidTile(g ChoreGroup, p MemberPage) {
-	<div data-tile={ g.Routine } data-current?={ g.Current } class="flex min-w-0 flex-col items-center justify-center gap-2 rounded-[28px] bg-card p-3 text-center shadow-md" style={ kidTileStyle(g, p.Member.Color) }>
-		<span class={ "leading-none", templ.KV("text-7xl", g.Current), templ.KV("text-5xl", !g.Current) } aria-hidden="true">{ RoutineEmoji(g.Routine) }</span>
-		<span class={ "font-black", templ.KV("text-3xl", g.Current), templ.KV("text-xl", !g.Current) }>{ routineName(g.Routine) }</span>
-		<span class="flex flex-wrap justify-center gap-1.5" aria-hidden="true">
-			for _, c := range g.Chores {
-				for _, rd := range c.Rounds {
-					if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.Ticked() }) {
-						<span data-dot="done" class="size-4 rounded-full bg-[#16a34a]"></span>
-					} else {
-						<span data-dot="todo" class={ "size-4 rounded-full", templ.KV("bg-white/50", g.Current), templ.KV("bg-line", !g.Current) }></span>
+	<div data-tile={ g.Routine } data-current?={ g.Current } class="flex min-w-0 flex-col rounded-[28px] bg-card p-3 text-center shadow-md" style={ kidTileStyle(g, p.Member.Color) }>
+		<a href={ carouselURL(p.path(), g.Routine, nil) } class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-inherit no-underline hover:no-underline">
+			<span class={ "leading-none", templ.KV("text-7xl", g.Current), templ.KV("text-5xl", !g.Current) } aria-hidden="true">{ RoutineEmoji(g.Routine) }</span>
+			<span class={ "font-black", templ.KV("text-3xl", g.Current), templ.KV("text-xl", !g.Current) }>{ routineName(g.Routine) }</span>
+			<span class="flex flex-wrap justify-center gap-1.5" aria-hidden="true">
+				for _, c := range g.Chores {
+					for _, rd := range c.Rounds {
+						if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.Ticked() }) {
+							<span data-dot="done" class="size-4 rounded-full bg-[#16a34a]"></span>
+						} else {
+							<span data-dot="todo" class={ "size-4 rounded-full", templ.KV("bg-white/50", g.Current), templ.KV("bg-line", !g.Current) }></span>
+						}
 					}
 				}
-			}
-		</span>
-		<span class="text-lg opacity-85">{ kidProgress(g) }</span>
+			</span>
+			<span class="text-lg opacity-85">{ kidProgress(g) }</span>
+		</a>
 		if g.Pending() {
-			<a href={ templ.SafeURL(p.path() + "/routines/" + g.Routine + "/confirm") } class="inline-flex min-h-12 items-center rounded-full bg-card px-6 text-lg font-black text-ink no-underline shadow-md hover:no-underline">Confirm</a>
+			<a href={ templ.SafeURL(p.path() + "/routines/" + g.Routine + "/confirm") } class={ kidChip, "self-center" }>Confirm</a>
 		}
 	</div>
 }
