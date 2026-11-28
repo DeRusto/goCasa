@@ -77,7 +77,7 @@ func (a *App) setRewardArchived(archived bool) http.HandlerFunc {
 }
 
 // redeem is a Member asking for a Reward they can afford; nothing is spent
-// until an Admin approves.
+// until an Admin approves. It returns to the Member page it came from.
 func (a *App) redeem(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	member, err := a.person(r)
@@ -108,7 +108,7 @@ func (a *App) redeem(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/chores", http.StatusSeeOther)
+	http.Redirect(w, r, back(r), http.StatusSeeOther)
 }
 
 // decide is an Admin approving or declining a pending Redemption. Approving
