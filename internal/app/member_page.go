@@ -15,8 +15,8 @@ var memberPagePath = regexp.MustCompile(`^/members/[0-9]+$`)
 
 // getMemberPage shows one active Member's today, in Standard style: the
 // weather, their own and Household events with a peek at tomorrow, their
-// Chores and their points. Archived, deleted, unknown and pet Members get a
-// plain page saying it isn't available.
+// Chores, their columns' to-dos and their points. Archived, deleted, unknown
+// and pet Members get a plain page saying it isn't available.
 func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p := web.MemberPage{}
@@ -58,6 +58,11 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Chores = memberChores(cs, p.Member.ID)
+
+	if p.Todos, p.MoreTodos, err = (todos{a}).ForMember(ctx, p.Member.ID, today.Format(dateLayout)); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 
 	pts, err := a.points(ctx)
 	if err != nil {
