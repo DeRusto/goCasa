@@ -1,0 +1,267 @@
+package web
+
+import (
+	"slices"
+	"strconv"
+	"strings"
+)
+
+// kidNextEvent is the event Kid style's strip leads with: the first timed one
+// not over yet, else the first all-day one; ok is false when there is none.
+// rest is the rest of today's events, in order.
+func kidNextEvent(d CalendarDay) (next CalendarEvent, rest []CalendarEvent, ok bool) {
+	at := slices.IndexFunc(d.Events, func(e CalendarEvent) bool { return !e.AllDay && !e.Past })
+	if at < 0 {
+		at = slices.IndexFunc(d.Events, func(e CalendarEvent) bool { return e.AllDay })
+	}
+	if at < 0 {
+		return next, d.Events, false
+	}
+	return d.Events[at], slices.Delete(slices.Clone(d.Events), at, at+1), true
+}
+
+// kidTime is when an event starts, as plain text ("3:30"), or "All day".
+func kidTime(e CalendarEvent) string {
+	from, _, _ := strings.Cut(e.Time, "–")
+	return from
+}
+
+// kidGoal is the progress line under the balance: points to the cheapest
+// Reward still out of reach.
+func kidGoal(p MemberPage) string {
+	for _, rw := range p.Rewards {
+		if rw.Cost > p.Balance {
+			return strconv.Itoa(rw.Cost-p.Balance) + " more to " + rw.Name
+		}
+	}
+	if len(p.Rewards) > 0 {
+		return "You can get any Reward!"
+	}
+	return ""
+}
+
+// kidWaiting reports whether this Member has asked for Reward rw and waits.
+func kidWaiting(p MemberPage, rw Reward) bool {
+	return slices.ContainsFunc(p.Waiting, func(rd Redemption) bool { return rd.Reward.ID == rw.ID })
+}
+
+// kidTileStyle makes the current Routine's tile twice as wide, filled with
+// the Member's colour and text that reads on it.
+func kidTileStyle(g ChoreGroup, color string) string {
+	if g.Current {
+		return "flex:2;background:" + color + ";color:" + inkOn(color)
+	}
+	return "flex:1"
+}
+
+// inkOn is white or near-black, whichever reads better on #rrggbb.
+func inkOn(color string) string {
+	v, err := strconv.ParseUint(strings.TrimPrefix(color, "#"), 16, 32)
+	if err != nil || len(color) != 7 {
+		return "#fff"
+	}
+	r, g, b := float64(v>>16&255), float64(v>>8&255), float64(v&255)
+	if 0.299*r+0.587*g+0.114*b > 170 {
+		return "#1d1d1f"
+	}
+	return "#fff"
+}
+
+// kidProgress is a tile's "2 of 4", "All done!" or, with nothing in it, "No chores".
+func kidProgress(g ChoreGroup) string {
+	done, total := g.Progress()
+	switch {
+	case total == 0:
+		return "No chores"
+	case done == total:
+		return "All done!"
+	}
+	return progressText(g)
+}
+
+// kidHours is the weather view's next few hours.
+func kidHours(w *WeatherNow) []WeatherHour {
+	return w.Hours[:min(len(w.Hours), 5)]
+}
+
+// KidMemberPage is the Member page in Kid style, Variant A "Routine tiles":
+// greeting, clock and points on top, four Routine tiles, then a strip of the
+// next event and the Member's to-dos. The star opens the Rewards, the weather
+// its forecast. Nothing in GoCasa links to it.
+templ KidMemberPage(p MemberPage) {
+	@page(p.Member.Name+" · Member page", false) {
+		<div id="live" data-member-page={ id(p.Member.ID) } data-style="kid" { live(KindEvent, KindChore, KindTodo, KindPoints, KindMember, KindHousehold, KindIntegration)... } class="flex h-[calc(100dvh-4rem)] flex-col gap-3 p-4 font-bold min-[760px]:h-dvh">
+			<header class="grid flex-none grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3">
+				<div class="flex min-w-0 items-center gap-3 [&_.avatar]:size-16 [&_.avatar]:text-2xl">
+					@avatar(p.Member)
+					<div class="min-w-0">
+						<h1 class="truncate text-3xl font-black">Hi { p.Member.Name }!</h1>
+						<p class="flex flex-wrap items-center gap-x-2 text-lg text-muted">
+							{ p.Day.Now.Format("Monday") }
+							if w := p.Day.Weather; w != nil && p.Weather != nil {
+								<button popovertarget="kid-weather" aria-label="Weather" class="inline-flex min-h-11 items-center gap-1.5 rounded-full border-0 bg-card px-3 py-1 text-lg font-bold text-ink shadow-sm">
+									@wxIcon(w.Conditions, w.Day, "size-7 flex-none")
+									<span class="tabular-nums">{ deg(w.Current) }</span>
+									<span class="truncate">{ w.Conditions }</span>
+								</button>
+							}
+						</p>
+					</div>
+				</div>
+				<p class="text-6xl leading-none font-black tabular-nums">@clock(p.Day)</p>
+				<button popovertarget="kid-rewards" aria-label="Points and Rewards" class="flex flex-col items-end gap-1 justify-self-end border-0 bg-transparent p-0 text-right">
+					<span class="flex items-center gap-1.5 rounded-full bg-card px-4 py-1 text-4xl font-black shadow-md">
+						<span class="text-[#facc15]" aria-hidden="true">★</span>
+						<span class="tabular-nums" data-balance={ id(p.Member.ID) }>{ strconv.Itoa(p.Balance) }</span>
+					</span>
+					if goal := kidGoal(p); goal != "" {
+						<span id="kid-goal" class="text-sm text-muted">{ goal }</span>
+					}
+				</button>
+			</header>
+			<section id="kid-tiles" data-routine-in={ strconv.Itoa(p.RoutineIn) } class="flex min-h-0 flex-1 gap-3">
+				for _, g := range p.Groups {
+					@kidTile(g, p)
+				}
+			</section>
+			@kidStrip(p)
+			@kidPanels(p)
+		</div>
+		@liveDrafts()
+		@ticker()
+		@keepPanelOpen()
+	}
+}
+
+// kidTile is one Routine's tile, or Other chores': its emoji, name, a dot per
+// Round (green when ticked, provisional ticks too) and its progress, with the
+// Confirm Standard style offers while it has provisional ticks.
+templ kidTile(g ChoreGroup, p MemberPage) {
+	<div data-tile={ g.Routine } data-current?={ g.Current } class="flex min-w-0 flex-col items-center justify-center gap-2 rounded-[28px] bg-card p-3 text-center shadow-md" style={ kidTileStyle(g, p.Member.Color) }>
+		<span class={ "leading-none", templ.KV("text-7xl", g.Current), templ.KV("text-5xl", !g.Current) } aria-hidden="true">{ RoutineEmoji(g.Routine) }</span>
+		<span class={ "font-black", templ.KV("text-3xl", g.Current), templ.KV("text-xl", !g.Current) }>{ routineName(g.Routine) }</span>
+		<span class="flex flex-wrap justify-center gap-1.5" aria-hidden="true">
+			for _, c := range g.Chores {
+				for _, rd := range c.Rounds {
+					if slices.ContainsFunc(rd.Taps, func(t ChoreTap) bool { return t.Ticked() }) {
+						<span data-dot="done" class="size-4 rounded-full bg-[#16a34a]"></span>
+					} else {
+						<span data-dot="todo" class={ "size-4 rounded-full", templ.KV("bg-white/50", g.Current), templ.KV("bg-line", !g.Current) }></span>
+					}
+				}
+			}
+		</span>
+		<span class="text-lg opacity-85">{ kidProgress(g) }</span>
+		if g.Pending() {
+			<a href={ templ.SafeURL(p.path() + "/routines/" + g.Routine + "/confirm") } class="inline-flex min-h-12 items-center rounded-full bg-card px-6 text-lg font-black text-ink no-underline shadow-md hover:no-underline">Confirm</a>
+		}
+	</div>
+}
+
+// kidStrip is the next event, "+N" for the rest of today's, then the Member's
+// to-dos as chips: tapping one ticks it.
+templ kidStrip(p MemberPage) {
+	<section id="kid-strip" class="flex flex-none flex-wrap items-center gap-2 text-lg">
+		{{ next, rest, ok := kidNextEvent(p.Day.Days[0]) }}
+		if ok {
+			<span data-next-event class="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-card px-4 shadow-sm">
+				<span class="font-black tabular-nums" style={ "color:" + p.Member.Color }>{ kidTime(next) }</span>
+				<span>{ next.Title }</span>
+			</span>
+		} else if len(rest) > 0 {
+			<span class="inline-flex min-h-12 items-center rounded-2xl bg-card px-4 text-muted shadow-sm">No more events today</span>
+		}
+		if len(rest) > 0 {
+			<button popovertarget="kid-events" aria-label="The rest of today's events" class="min-h-12 rounded-2xl border-0 bg-card px-4 text-lg font-black shadow-sm">+{ strconv.Itoa(len(rest)) }</button>
+		}
+		for _, t := range p.Todos {
+			<form method="post" action={ templ.SafeURL("/todos/" + id(t.ID) + "/complete") } class="contents">
+				<input type="hidden" name="next" value={ p.path() }/>
+				<button data-todo={ id(t.ID) } aria-label={ "Done: " + t.Title } class={ "inline-flex min-h-12 items-center gap-2 rounded-2xl border-0 bg-card px-4 text-lg font-bold shadow-sm", templ.KV("text-late", t.Overdue) }>
+					<span aria-hidden="true">⬜</span> { t.Title }
+				</button>
+			</form>
+		}
+		<button id="member-bedtime" type="button" hidden hx-preserve="true" class="ml-auto min-h-12">Bedtime</button>
+	</section>
+}
+
+// kidPanels are the pop-ups: the rest of today's events, the Rewards side
+// panel and the weather view.
+templ kidPanels(p MemberPage) {
+	{{ _, rest, _ := kidNextEvent(p.Day.Days[0]) }}
+	<section id="kid-events" popover class="flyout text-lg">
+		<h2 class="text-2xl font-black tracking-normal normal-case text-ink">Today</h2>
+		<ul class="flex flex-col gap-2">
+			for _, e := range rest {
+				<li data-past?={ e.Past } class={ "flex items-center gap-3 rounded-2xl bg-soft px-4 py-3", templ.KV("opacity-50", e.Past) }>
+					<span class="font-black tabular-nums" style={ "color:" + p.Member.Color }>{ kidTime(e) }</span>
+					<span>{ e.Title }</span>
+				</li>
+			}
+		</ul>
+	</section>
+	<section id="kid-rewards" popover class="flyout inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-[46%] min-w-80 rounded-none text-xl">
+		<h2 class="flex items-center gap-2 text-3xl font-black tracking-normal normal-case text-ink"><span class="text-[#facc15]" aria-hidden="true">★</span> { strconv.Itoa(p.Balance) } points</h2>
+		if len(p.Rewards) == 0 {
+			<p class="text-muted">No Rewards yet.</p>
+		}
+		for _, rw := range p.Rewards {
+			<div data-reward={ id(rw.ID) } data-affordable?={ p.Balance >= rw.Cost } class={ "flex items-center gap-3 rounded-2xl p-3 font-extrabold", templ.KV("bg-[#fef9c3] text-[#1d1d1f]", p.Balance >= rw.Cost), templ.KV("bg-soft", p.Balance < rw.Cost) }>
+				<span class="text-4xl leading-none" aria-hidden="true">{ rw.DisplayEmoji() }</span>
+				<span class="min-w-0 flex-1">{ rw.Name }</span>
+				<span class="tabular-nums"><span class="text-[#facc15]" aria-hidden="true">★</span>{ strconv.Itoa(rw.Cost) }</span>
+				if kidWaiting(p, rw) {
+					<span class="text-base opacity-70">waiting…</span>
+				} else if p.Balance >= rw.Cost {
+					<form method="post" action={ templ.SafeURL("/rewards/" + id(rw.ID) + "/redeem") }>
+						<input type="hidden" name="member_id" value={ id(p.Member.ID) }/>
+						<input type="hidden" name="next" value={ p.path() }/>
+						<button aria-label={ "I want " + rw.Name } class="min-h-12 rounded-xl border-0 px-4 font-black text-white" style={ "background:" + p.Member.Color + ";color:" + inkOn(p.Member.Color) }>I want it</button>
+					</form>
+				}
+			</div>
+		}
+		<p class="text-base text-muted">A grown-up says yes before points are spent.</p>
+	</section>
+	if w := p.Weather; w != nil {
+		<section id="kid-weather" popover class="flyout text-xl">
+			<div class="flex items-center gap-4">
+				@wxIcon(w.Conditions, w.Day, "size-20 flex-none")
+				<div class="flex flex-col">
+					<span class="text-6xl leading-none font-black tabular-nums">{ deg(w.Temp) }</span>
+					<span>{ w.Conditions }</span>
+				</div>
+			</div>
+			if w.HasToday {
+				<p class="tabular-nums">H { deg(w.High) } · L { deg(w.Low) }</p>
+			}
+			<p>Chance of rain <b class="tabular-nums">{ strconv.Itoa(w.Rain) }%</b></p>
+			if hs := kidHours(w); len(hs) > 0 {
+				<ol class="flex gap-2">
+					for _, h := range hs {
+						<li class="flex flex-1 flex-col items-center gap-1 rounded-2xl bg-soft px-2 py-3 tabular-nums">
+							<span class="text-base text-muted">{ h.Time }</span>
+							@wxIcon(h.Conditions, h.Day, "size-8")
+							<span>{ deg(h.Temp) }</span>
+							<span class="text-base text-muted">{ strconv.Itoa(h.Rain) }%</span>
+						</li>
+					}
+				</ol>
+			}
+		</section>
+	}
+}
+
+// keepPanelOpen reopens the pop-up that was open when a live refresh swaps
+// the page, so news from another device doesn't close it under a child.
+templ keepPanelOpen() {
+	<script>
+	(() => {
+		const live = document.getElementById("live");
+		let open;
+		live.addEventListener("htmx:beforeSwap", () => { open = live.querySelector("[popover]:popover-open")?.id; });
+		live.addEventListener("htmx:afterSwap", () => { if (open) document.getElementById(open)?.showPopover(); });
+	})();
+	</script>
+}

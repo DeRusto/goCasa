@@ -36,11 +36,13 @@ const errLastAdmin = "The Household needs at least one Admin."
 // still leaves the Household an active Admin.
 const keepsAnAdmin = "(role != 'admin' OR archived OR (SELECT count(*) FROM members WHERE role = 'admin' AND NOT archived) > 1)"
 
-// memberForm is a validated Member form: name, colour, role and an optional
-// PIN (bcrypt hash, nil when the PIN field was blank).
+// memberForm is a validated Member form: name, colour, role, page style
+// (nil when not sent, as on a pet's form) and an optional PIN (bcrypt hash,
+// nil when the PIN field was blank).
 type memberForm struct {
 	name, color, role string
 	pet               bool
+	style             *string
 	pinHash           []byte
 }
 
@@ -51,6 +53,10 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 		role:  r.PostFormValue("role"),
 		pet:   r.PostFormValue("pet") != "",
 	}
+	if r.PostForm.Has("style") {
+		style := r.PostFormValue("style")
+		f.style = &style
+	}
 	pin := r.PostFormValue("pin")
 	switch {
 	case f.name == "" || len([]rune(f.name)) > 50:
@@ -59,6 +65,8 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 		return f, "Pick a colour."
 	case f.role != "admin" && f.role != "member":
 		return f, "Pick a role."
+	case f.style != nil && *f.style != "standard" && *f.style != "kid":
+		return f, "Pick Standard or Kid style."
 	case f.pet && f.role == "admin":
 		return f, "A pet can't be an Admin."
 	case pin != "" && f.role != "admin":
@@ -77,7 +85,7 @@ func parseMemberForm(r *http.Request) (memberForm, string) {
 }
 
 func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
-	q := "SELECT id, name, color, role, archived, avatar IS NOT NULL, pet FROM members"
+	q := "SELECT id, name, color, role, archived, avatar IS NOT NULL, pet, style FROM members"
 	if adminsOnly {
 		q += " WHERE role = 'admin' AND NOT archived"
 	}
@@ -89,7 +97,7 @@ func (a *App) members(r *http.Request, adminsOnly bool) ([]web.Member, error) {
 	var ms []web.Member
 	for rows.Next() {
 		var m web.Member
-		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.Role, &m.Archived, &m.HasAvatar, &m.Pet); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Color, &m.Role, &m.Archived, &m.HasAvatar, &m.Pet, &m.Style); err != nil {
 			return nil, err
 		}
 		ms = append(ms, m)
@@ -309,8 +317,8 @@ func (a *App) createMember(w http.ResponseWriter, r *http.Request) {
 		a.settingsPage(w, r, http.StatusBadRequest, msg)
 		return
 	}
-	if _, err := a.exec(r.Context(), web.KindMember, "INSERT INTO members (name, color, role, pin_hash, created_at, pet) VALUES (?, ?, ?, ?, ?, ?)",
-		f.name, f.color, f.role, f.pinHash, a.Now().Unix(), f.pet); err != nil {
+	if _, err := a.exec(r.Context(), web.KindMember, "INSERT INTO members (name, color, role, pin_hash, created_at, pet, style) VALUES (?, ?, ?, ?, ?, ?, coalesce(?, 'standard'))",
+		f.name, f.color, f.role, f.pinHash, a.Now().Unix(), f.pet, f.style); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -338,7 +346,7 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 	}
 	// One guarded statement, so another device's change between the read above
 	// and this write can't demote the last Admin or leave an Admin without a PIN.
-	res, err := a.exec(r.Context(), web.KindMember, `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6,
+	res, err := a.exec(r.Context(), web.KindMember, `UPDATE members SET name = ?1, color = ?2, role = ?3, pet = ?6, style = coalesce(?7, style),
 			pin_hash = CASE WHEN ?3 = 'admin' THEN coalesce(?4, pin_hash) END,
 			-- A new PIN clears a wrong-PIN block: this is how an Admin resets another's.
 			pin_failures = CASE WHEN ?4 IS NULL THEN pin_failures ELSE 0 END,
@@ -347,7 +355,7 @@ func (a *App) updateMember(w http.ResponseWriter, r *http.Request) {
 			AND (?3 = 'admin' OR `+keepsAnAdmin+`)
 			AND (?3 != 'admin' OR ?4 IS NOT NULL OR pin_hash IS NOT NULL)
 			AND (NOT ?6 OR NOT EXISTS (SELECT 1 FROM chore_assignees WHERE member_id = ?5))`,
-		f.name, f.color, f.role, f.pinHash, id, f.pet)
+		f.name, f.color, f.role, f.pinHash, id, f.pet, f.style)
 	if err != nil {
 		a.serverError(w, r, err)
 		return

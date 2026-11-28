@@ -14,16 +14,16 @@ import (
 // memberPagePath is a Member page's URL: chore and Reward actions may return there.
 var memberPagePath = regexp.MustCompile(`^/members/[0-9]+$`)
 
-// getMemberPage shows one active Member's today, in Standard style: the
-// weather, their own and Household events with a peek at tomorrow, their
-// Chores, their columns' to-dos and their points. Archived, deleted, unknown
+// getMemberPage shows one active Member's today in their style: the weather,
+// their own and Household events (with a peek at tomorrow in Standard style),
+// their Chores, their columns' to-dos and their points. Archived, deleted, unknown
 // and pet Members get a plain page saying it isn't available.
 func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p := web.MemberPage{}
 	p.Member.ID, _ = strconv.ParseInt(r.PathValue("id"), 10, 64)
-	err := a.DB.QueryRowContext(ctx, "SELECT name, color, avatar IS NOT NULL FROM members WHERE id = ? AND NOT archived AND NOT pet", p.Member.ID).
-		Scan(&p.Member.Name, &p.Member.Color, &p.Member.HasAvatar)
+	err := a.DB.QueryRowContext(ctx, "SELECT name, color, avatar IS NOT NULL, style FROM members WHERE id = ? AND NOT archived AND NOT pet", p.Member.ID).
+		Scan(&p.Member.Name, &p.Member.Color, &p.Member.HasAvatar, &p.Member.Style)
 	if errors.Is(err, sql.ErrNoRows) {
 		a.render(w, r, http.StatusNotFound, web.MemberUnavailable())
 		return
@@ -39,8 +39,12 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	kid := p.Member.Style == "kid"
 	clock := hh.Clock()
-	p.Day = web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, MidnightIn: secondsTo(now, dayAt(today, 1))}
+	if kid {
+		clock = plainClock(hh.Clock24)
+	}
+	p.Day = web.TodayPage{Now: now, Clock: now.Format(clock), Clock24: hh.Clock24, NoAmPm: kid, MidnightIn: secondsTo(now, dayAt(today, 1))}
 	evs, err := a.eventsIn(ctx, today, dayAt(today, 2), []int64{p.Member.ID})
 	if err != nil {
 		a.serverError(w, r, err)
@@ -51,6 +55,13 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Day.Weather, err = a.weatherHeader(ctx); err != nil {
 		a.Log.Error("reading cached weather", "err", err) // the page still renders, without weather
+	}
+	if kid && p.Day.Weather != nil {
+		if _, f, err := a.cachedForecast(ctx); err != nil {
+			a.Log.Error("reading cached weather", "err", err)
+		} else if f != nil {
+			p.Weather = weatherNow(hh, f, today.Format(dateLayout), clock)
+		}
 	}
 
 	cs, err := a.chores(ctx)
@@ -86,7 +97,20 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 			p.Waiting = append(p.Waiting, rd)
 		}
 	}
+	if kid {
+		a.render(w, r, http.StatusOK, web.KidMemberPage(p))
+		return
+	}
 	a.render(w, r, http.StatusOK, web.MemberPageView(p))
+}
+
+// plainClock is Kid style's time layout: the Household's 12/24-hour setting,
+// with no am/pm in 12-hour ("3:30").
+func plainClock(h24 bool) string {
+	if h24 {
+		return "15:04"
+	}
+	return "3:04"
 }
 
 // choreGroups files a Member's Chores under the three Routines, each in its
