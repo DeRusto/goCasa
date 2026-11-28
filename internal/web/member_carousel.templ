@@ -1,0 +1,152 @@
+package web
+
+import (
+	"net/url"
+	"slices"
+	"strconv"
+)
+
+type carouselCard struct {
+	chore Chore
+	round ChoreRound
+}
+
+func (c carouselCard) key() string { return id(c.chore.ID) + "." + c.round.Start }
+
+func carouselCards(g ChoreGroup, later []string) (done, due []carouselCard) {
+	var skipped []carouselCard
+	for _, c := range g.Chores {
+		for _, r := range c.Rounds {
+			card := carouselCard{c, r}
+			switch {
+			case slices.ContainsFunc(r.Taps, ChoreTap.Ticked):
+				done = append(done, card)
+			case slices.Contains(later, card.key()):
+				skipped = append(skipped, card)
+			default:
+				due = append(due, card)
+			}
+		}
+	}
+	slices.SortStableFunc(skipped, func(a, b carouselCard) int {
+		return slices.Index(later, a.key()) - slices.Index(later, b.key())
+	})
+	return done, append(due, skipped...)
+}
+
+func carouselURL(path, group string, later []string) templ.SafeURL {
+	return templ.SafeURL(path + "?" + url.Values{"carousel": {group}, "later": later}.Encode())
+}
+
+// skipCard keeps the existing skip order and moves the current card to its end.
+func skipCard(due []carouselCard, later []string) []string {
+	var keys []string
+	for _, c := range due[1:] {
+		if slices.Contains(later, c.key()) {
+			keys = append(keys, c.key())
+		}
+	}
+	return append(keys, due[0].key())
+}
+
+const kidChip = "inline-flex min-h-12 items-center rounded-full bg-card px-5 text-lg font-black text-ink no-underline shadow-sm hover:no-underline"
+
+templ kidCarousel(p MemberPage, g ChoreGroup, later []string) {
+	{{ done, due := carouselCards(g, later) }}
+	<section id="kid-tiles" aria-label={ routineName(g.Routine) } data-routine-in={ strconv.Itoa(p.RoutineIn) } class="flex min-h-0 flex-1 flex-col gap-2">
+		<div class="flex flex-wrap items-center gap-2">
+			<a href={ templ.SafeURL(p.path()) } aria-label="Back to tiles" class={ kidChip }>← { RoutineEmoji(g.Routine) } { routineName(g.Routine) }</a>
+			if g.Pending() {
+				<a href={ carouselURL(p.path()+"/routines/"+g.Routine+"/confirm", g.Routine, later) } class={ kidChip }>Confirm</a>
+			}
+		</div>
+		<div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] items-center gap-3">
+			<ul aria-label="Done Chores" class="flex max-h-full flex-wrap justify-end gap-2 overflow-auto">
+				for _, card := range done {
+					@kidSideCard(card, true)
+				}
+			</ul>
+			if len(due) > 0 {
+				{{ card := due[0] }}
+				<form method="post" action={ carouselURL(p.path()+"/routine-chores/"+id(card.chore.ID), g.Routine, later) } class="min-h-0 self-stretch">
+					<input type="hidden" name="round" value={ card.round.Start }/>
+					<button type="submit" data-card="current" class="flex h-full min-h-32 w-full flex-col items-center justify-center gap-2 rounded-[32px] border-4 bg-card px-3 py-2 text-center shadow-md" style={ "border-color:" + p.Member.Color }>
+						<span class="text-[clamp(2rem,13dvh,6rem)] leading-none" aria-hidden="true">{ card.chore.DisplayEmoji() }</span>
+						<strong class="line-clamp-2 wrap-anywhere text-[clamp(1.15rem,5dvh,2rem)] leading-tight">{ card.chore.Name }</strong>
+						<span class="text-base font-extrabold text-muted">
+							tap when done · <span class="text-[#facc15]" aria-hidden="true">★</span> { strconv.Itoa(card.chore.Points) } points
+							if card.round.Late {
+								· <span class="text-late">Late</span>
+							}
+						</span>
+					</button>
+				</form>
+				<ul aria-label="Upcoming Chores" class="flex max-h-full flex-wrap gap-2 overflow-auto">
+					for _, next := range due[1:] {
+						@kidSideCard(next, false)
+					}
+				</ul>
+			} else {
+				<p class="text-center text-3xl font-black">{ kidProgress(g) }</p>
+			}
+		</div>
+		if len(due) > 0 {
+			<a href={ carouselURL(p.path(), g.Routine, skipCard(due, later)) } class={ kidChip, "self-center" }>Skip for now</a>
+		}
+	</section>
+}
+
+templ kidSideCard(card carouselCard, done bool) {
+	<li class={ "flex min-w-0 max-w-32 flex-col items-center gap-1 rounded-2xl bg-card p-2 text-center text-sm shadow-sm", templ.KV("opacity-55", done), templ.KV("opacity-75", !done) }
+		if done {
+			data-card="done"
+		} else {
+			data-card="upcoming"
+		}
+	>
+		<span aria-hidden="true" class="text-3xl leading-none">{ card.chore.DisplayEmoji() }</span>
+		<span class="line-clamp-2 wrap-anywhere">{ card.chore.Name }</span>
+		if done {
+			<span aria-hidden="true" class="text-lg leading-none">✓</span>
+		}
+		if card.round.Late {
+			<span class="text-late">Late</span>
+		}
+	</li>
+}
+
+templ kidCelebration(p MemberPage, routine string) {
+	<div id="kid-celebration" class="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-black/30 p-4">
+		<p role="status" class="z-10 rounded-[32px] bg-card px-8 py-5 text-center text-4xl font-black shadow-xl">
+			<span class="mb-2 block text-6xl" aria-hidden="true">{ RoutineEmoji(routine) }🎉</span>
+			{ routineName(routine) } done, { p.Member.Name }!
+		</p>
+	</div>
+	<style>
+		#kid-celebration i {
+			position: absolute;
+			top: -1rem;
+			width: .65rem;
+			height: 1rem;
+			animation: kid-confetti 1.9s linear both;
+		}
+		@keyframes kid-confetti {
+			to { transform: translate3d(3rem, 105dvh, 0) rotate(520deg); }
+		}
+	</style>
+	<script>
+		(() => {
+			const party = document.getElementById("kid-celebration");
+			if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+				for (let i = 0; i < 40; i++) {
+					const piece = document.createElement("i");
+					piece.style.left = Math.random() * 100 + "%";
+					piece.style.background = "hsl(" + (i * 137 % 360) + " 90% 60%)";
+					piece.style.animationDelay = Math.random() * 0.6 + "s";
+					party.appendChild(piece);
+				}
+			}
+			setTimeout(() => party.remove(), 2800);
+		})();
+	</script>
+}

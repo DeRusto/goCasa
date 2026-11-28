@@ -388,10 +388,10 @@ func (a *App) choreExec(w http.ResponseWriter, r *http.Request, kinds []web.Kind
 func (a *App) completeChore(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	member, _ := strconv.ParseInt(r.PostFormValue("member_id"), 10, 64)
-	a.completeChoreRound(w, r, id, member, r.PostFormValue("round"), back(r))
+	a.completeChoreRound(w, r, id, member, r.PostFormValue("round"), back(r), nil)
 }
 
-func (a *App) completeChoreRound(w http.ResponseWriter, r *http.Request, id, member int64, round, next string) {
+func (a *App) completeChoreRound(w http.ResponseWriter, r *http.Request, id, member int64, round, next string, credited func()) {
 	var schedule, days string
 	var at int64
 	err := a.DB.QueryRowContext(r.Context(), "SELECT schedule, days, created_at FROM chores WHERE id = ? AND NOT archived", id).Scan(&schedule, &days, &at)
@@ -433,6 +433,8 @@ func (a *App) completeChoreRound(w http.ResponseWriter, r *http.Request, id, mem
 	} else if err != nil {
 		a.serverError(w, r, err)
 		return
+	} else if credited != nil {
+		credited()
 	}
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
