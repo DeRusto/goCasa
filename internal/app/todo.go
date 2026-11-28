@@ -273,9 +273,9 @@ func (m todos) Reorder(ctx context.Context, col int64, ids []int64) error {
 	}, web.KindTodo)
 }
 
-// Columns is the board's columns in order, without their to-dos.
+// Columns is the board's columns in order, with their Member but without their to-dos.
 func (m todos) Columns(ctx context.Context) ([]web.TodoColumn, error) {
-	rows, err := m.DB.QueryContext(ctx, "SELECT id, name FROM todo_columns ORDER BY position, id")
+	rows, err := m.DB.QueryContext(ctx, "SELECT id, name, coalesce(member_id, 0) FROM todo_columns ORDER BY position, id")
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (m todos) Columns(ctx context.Context) ([]web.TodoColumn, error) {
 	var cols []web.TodoColumn
 	for rows.Next() {
 		var c web.TodoColumn
-		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.MemberID); err != nil {
 			return nil, err
 		}
 		cols = append(cols, c)
@@ -297,11 +297,6 @@ func (m todos) AddColumn(ctx context.Context, name string) (id int64, err error)
 		return tx.QueryRowContext(ctx, "INSERT INTO todo_columns (name, position) VALUES (?, (SELECT coalesce(max(position) + 1, 0) FROM todo_columns)) RETURNING id", name).Scan(&id)
 	}, web.KindTodo)
 	return id, err
-}
-
-// RenameColumn renames column id, or returns errNoColumn.
-func (m todos) RenameColumn(ctx context.Context, id int64, name string) error {
-	return columnChanged(m.exec(ctx, web.KindTodo, "UPDATE todo_columns SET name = ? WHERE id = ?", name, id))
 }
 
 // DeleteColumn deletes column id with its to-dos, or returns errNoColumn.
