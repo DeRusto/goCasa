@@ -76,7 +76,7 @@ func TestAMembersStyleIsChosenInSettingsAndShownOnEveryDevice(t *testing.T) {
 	f.Set("style", "standard")
 	post(t, h, "/settings/members/2", f)
 	if strings.Contains(memberPage(t, h, "2"), `data-style="kid"`) {
-		t.Error("switching Bob back to Standard didn't")
+		t.Error("switching Bob back to Standard didn't put his page back in Standard style")
 	}
 
 	f = member("Dan", "#0ea5e9", "member", "")
@@ -234,6 +234,9 @@ func TestKidStyleStripShowsTheNextEventAndTicksToDos(t *testing.T) {
 	rest := section(t, page, "kid-events")
 	if !inOrder(rest, "7:00", "Breakfast", "3:30", "Swim lesson", "6:00", "Dinner") || strings.Contains(rest, "Football") {
 		t.Errorf("+3 doesn't open the rest of today's events: %q", rest)
+	}
+	if strings.Count(rest, "data-past") != 1 || !inOrder(rest, "data-past", "Breakfast", "Swim lesson") {
+		t.Errorf("only Breakfast, over, should be marked past: %q", rest)
 	}
 
 	if !strings.Contains(strip, "Library book back") || !strings.Contains(strip, `action="/todos/1/complete"`) || !strings.Contains(strip, `name="next" value="/members/2"`) {

@@ -57,7 +57,7 @@ func (a *App) getMemberPage(w http.ResponseWriter, r *http.Request) {
 		a.Log.Error("reading cached weather", "err", err) // the page still renders, without weather
 	}
 	if kid && p.Day.Weather != nil {
-		if hh, f, err := a.cachedForecast(ctx); err != nil {
+		if _, f, err := a.cachedForecast(ctx); err != nil {
 			a.Log.Error("reading cached weather", "err", err)
 		} else if f != nil {
 			p.Weather = weatherNow(hh, f, today.Format(dateLayout), clock)
