@@ -79,7 +79,7 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, schedule, days, kind = 'anyone', points, archived, created_at FROM chores ORDER BY name, id")
+	rows, err := a.DB.QueryContext(ctx, "SELECT id, name, schedule, days, kind = 'anyone', points, archived, created_at, coalesce(routine, ''), coalesce(routine_position, 0) FROM chores ORDER BY name, id")
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (a *App) chores(ctx context.Context) ([]web.Chore, error) {
 	for rows.Next() {
 		var c web.Chore
 		var at int64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Schedule, &c.Days, &c.Anyone, &c.Points, &c.Archived, &at); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Schedule, &c.Days, &c.Anyone, &c.Points, &c.Archived, &at, &c.Routine, &c.RoutinePosition); err != nil {
 			return nil, err
 		}
 		created[c.ID] = at
@@ -219,7 +219,12 @@ func (a *App) getChores(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, web.ChoresBoard(cs, ps, pts))
+	acc, err := a.access(r.Context())
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, http.StatusOK, web.ChoresBoard(cs, ps, pts, acc.Unlocked))
 }
 
 // choreForm reads and checks the Chore form, or returns a message for the person.
@@ -293,8 +298,10 @@ func (a *App) saveChore(w http.ResponseWriter, r *http.Request) {
 			c.Name, c.Schedule, c.Days, kind, c.Points, a.Now().Unix()).Scan(&c.ID)
 	} else {
 		c.ID, _ = strconv.ParseInt(r.PathValue("id"), 10, 64)
-		err = tx.QueryRowContext(r.Context(), "UPDATE chores SET name = ?, schedule = ?, days = ?, kind = ?, points = ? WHERE id = ? RETURNING id",
-			c.Name, c.Schedule, c.Days, kind, c.Points, c.ID).Scan(&c.ID)
+		// A Chore that stops being a daily or chosen-weekdays Each chore leaves its Routine.
+		err = tx.QueryRowContext(r.Context(), `UPDATE chores SET name = ?, schedule = ?, days = ?, kind = ?, points = ?,
+			routine = CASE WHEN ? THEN routine END, routine_position = CASE WHEN ? THEN routine_position END WHERE id = ? RETURNING id`,
+			c.Name, c.Schedule, c.Days, kind, c.Points, inRoutine(c.Schedule, c.Anyone), inRoutine(c.Schedule, c.Anyone), c.ID).Scan(&c.ID)
 		if err == nil {
 			_, err = tx.ExecContext(r.Context(), "DELETE FROM chore_assignees WHERE chore_id = ?", c.ID)
 		}
@@ -347,10 +354,11 @@ func (a *App) getChore(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, http.StatusOK, web.ChorePage(c, ps))
 }
 
-// setChoreArchived archives a Chore (off the board, its completions kept) or restores it.
+// setChoreArchived archives a Chore (off the board and out of its Routine, its
+// completions kept) or restores it, in no Routine.
 func (a *App) setChoreArchived(archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a.choreExec(w, r, []web.Kind{web.KindChore}, "UPDATE chores SET archived = ? WHERE id = ?", archived)
+		a.choreExec(w, r, []web.Kind{web.KindChore}, "UPDATE chores SET archived = ?, routine = NULL, routine_position = NULL WHERE id = ?", archived)
 	}
 }
 

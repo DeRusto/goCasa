@@ -31,6 +31,8 @@ type Household struct {
 	NightStart      int    // hour 0-23
 	NightEnd        int    // hour 0-23
 	Timezone        string // IANA name; "" is the server's
+	MorningEnd      int    // the Morning Routine ends, in minutes after midnight
+	AfternoonEnd    int    // the Afternoon Routine ends and Evening begins
 }
 
 type deviceKey struct{}
@@ -236,6 +238,17 @@ templ householdSection(h Household) {
 					to hour
 					<input type="number" name="night_end" value={ strconv.Itoa(h.NightEnd) } min="0" max="23" required/>
 				</label>
+			</div>
+			<div class="flex flex-wrap items-center gap-3">
+				<label>
+					Morning Routine until
+					<input type="time" name="morning_end" value={ slotTime(h.MorningEnd) } required/>
+				</label>
+				<label>
+					Afternoon until
+					<input type="time" name="afternoon_end" value={ slotTime(h.AfternoonEnd) } required/>
+				</label>
+				<span class="text-sm text-muted">then Evening. Only picks the current Routine; Chores still run all day.</span>
 			</div>
 			<label>
 				Timezone (IANA name, e.g. Europe/London; blank uses the server's)
